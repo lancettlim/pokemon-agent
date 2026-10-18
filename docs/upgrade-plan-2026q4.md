@@ -5,6 +5,22 @@ Written 2026-10-18. This plan sets the next product cycle. It comes ahead of
 of date with the live format. Items move into `docs/todo.md` once accepted,
 per `docs/backlog.md`'s backlog → todo flow.
 
+## Status
+
+| Item | State |
+|---|---|
+| A1 regulation registry + drift test | Done (Sprint 1) |
+| A2 `tournament_event.regulation_code` | Done (Sprint 1); the `pokemon_usage_by_regulation` rebuild moves to Sprint 2 with A3 |
+| A5 M-C legality + new Megas | Done (Sprint 1). PokéAPI already models the Z Megas (`absol-mega-z`, `garchomp-mega-z`, `lucario-mega-z`), so they map like any other form and need no spec change |
+| A6 refresh workflow + staleness banner | Done (Sprint 1) |
+| B1 quick fixes | Done (Sprint 1) |
+| A3, A4, A7, B2–B9 | Not started |
+
+Two upstream breakages turned up during the Sprint 1 refresh, and both are
+fixed: Bulbagarden renamed every sprite file from "Menu CP" to "Menu Champs"
+(the extractor had been writing empty snapshots), and PokéBase redesigned
+its page so legality arrives as `addedIn` rather than `regulationSets`.
+
 ## Why this, why now
 
 An audit of the published dashboard (`docs/dashboard/data.json`) against the
