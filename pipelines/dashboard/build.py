@@ -88,6 +88,8 @@ _CRITICAL_PAYLOAD_KEYS = (
     "pokemon_names",
     "reference_teams",
     "regulations",
+    "kpis_by_scope",
+    "default_scope",
 )
 
 

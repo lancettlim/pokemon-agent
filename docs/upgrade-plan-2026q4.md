@@ -10,11 +10,15 @@ per `docs/backlog.md`'s backlog → todo flow.
 | Item | State |
 |---|---|
 | A1 regulation registry + drift test | Done (Sprint 1) |
-| A2 `tournament_event.regulation_code` | Done (Sprint 1); the `pokemon_usage_by_regulation` rebuild moves to Sprint 2 with A3 |
+| A2 `tournament_event.regulation_code` | Done (Sprint 1); `pokemon_usage_by_regulation` rebuilt as a true per-regulation slice (Sprint 2) |
+| A3 regulation dimension on marts | Done (Sprint 2): `regulation_scope` on usage, win rate, items/abilities/moves, cores, synergy, placement, profile, speed tiers, build concentration, top teams. Head-to-head, triples, country and player marts still cover all regulations |
+| A4 "what changed" mart | Done (Sprint 2): `pokemon_regulation_movers` plus the Overview panel. `pokemon_recent_window` was not needed: the regulation selector covers "the current regulation's events" |
+| B3 global filter + URL state | Done (Sprint 2): header Regulation selector, `?reg=` and `#tab` links. Event-window filter and the type popover are not done |
 | A5 M-C legality + new Megas | Done (Sprint 1). PokéAPI already models the Z Megas (`absol-mega-z`, `garchomp-mega-z`, `lucario-mega-z`), so they map like any other form and need no spec change |
 | A6 refresh workflow + staleness banner | Done (Sprint 1) |
 | B1 quick fixes | Done (Sprint 1) |
-| A3, A4, A7, B2–B9 | Not started |
+| A7 publish 0.4.0 | Deferred: needs re-extraction stamped 0.4.0 and adds ~55MB to git, so it's a separate decision |
+| B2, B4–B9 | Not started |
 
 Two upstream breakages turned up during the Sprint 1 refresh, and both are
 fixed: Bulbagarden renamed every sprite file from "Menu CP" to "Menu Champs"

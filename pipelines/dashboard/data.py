@@ -106,6 +106,27 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("item_hhi", "ability_hhi"),
     ),
     "pokemon_team_synergy": (("pair_team_count", "lift_rank"), ("lift",)),
+    "pokemon_regulation_movers": (
+        (
+            "usage_count",
+            "usage_rank",
+            "previous_usage_count",
+            "previous_usage_rank",
+            "rank_change",
+            "record_count",
+            "previous_record_count",
+            "team_count",
+            "previous_team_count",
+        ),
+        (
+            "usage_share",
+            "previous_usage_share",
+            "usage_share_delta",
+            "win_rate",
+            "previous_win_rate",
+            "win_rate_delta",
+        ),
+    ),
     "pokemon_team_core_triple_usage": (
         (
             "triple_team_count",
@@ -195,6 +216,10 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
 # docs/local-queries.md's ad-hoc querying.
 MIN_SYNERGY_PAIR_TEAMS = 5
 MAX_SYNERGY_PARTNERS_PER_POKEMON = 12
+# The Core Explorer lists at most 24 partners per Pokémon, and the Profile's
+# Team Cores tab fewer. pokemon_team_core_usage is every co-occurring pair
+# in every regulation scope, most of it one-off pairings no view shows.
+MAX_CORE_PARTNERS_PER_POKEMON = 24
 MIN_TRIPLE_CORE_TEAMS = 5
 MAX_DETECTED_ARCHETYPES = 24
 # Deliberately 2, not a larger "established player" number: only three
@@ -208,17 +233,31 @@ MIN_SIGNATURE_PLAYER_TEAMS = 2
 MAX_SIGNATURE_PICKS_PER_PLAYER = 6
 
 
-def _slice_team_synergy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    kept = [r for r in rows if (r.get("pair_team_count") or 0) >= MIN_SYNERGY_PAIR_TEAMS]
-    per_anchor: dict[str, int] = {}
+def _top_per_anchor(rows: list[dict[str, Any]], *, metric: str, limit: int) -> list[dict[str, Any]]:
+    """The `limit` highest-`metric` rows per (regulation_scope, pokemon_key)."""
+    per_anchor: dict[tuple[str, str], int] = {}
     out = []
-    for row in sorted(kept, key=lambda r: (r["pokemon_key"], -(r.get("lift") or 0))):
-        seen = per_anchor.get(row["pokemon_key"], 0)
-        if seen >= MAX_SYNERGY_PARTNERS_PER_POKEMON:
+    ordered = sorted(
+        rows,
+        key=lambda r: (r.get("regulation_scope", ""), r["pokemon_key"], -(r.get(metric) or 0)),
+    )
+    for row in ordered:
+        anchor = (row.get("regulation_scope", ""), row["pokemon_key"])
+        seen = per_anchor.get(anchor, 0)
+        if seen >= limit:
             continue
-        per_anchor[row["pokemon_key"]] = seen + 1
+        per_anchor[anchor] = seen + 1
         out.append(row)
     return out
+
+
+def _slice_team_synergy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kept = [r for r in rows if (r.get("pair_team_count") or 0) >= MIN_SYNERGY_PAIR_TEAMS]
+    return _top_per_anchor(kept, metric="lift", limit=MAX_SYNERGY_PARTNERS_PER_POKEMON)
+
+
+def _slice_team_core_usage(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _top_per_anchor(rows, metric="co_occurrence_count", limit=MAX_CORE_PARTNERS_PER_POKEMON)
 
 
 def _slice_player_signature(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -248,6 +287,7 @@ def _slice_detected_archetypes(rows: list[dict[str, Any]]) -> list[dict[str, Any
 
 MART_SLICERS = {
     "pokemon_team_synergy": _slice_team_synergy,
+    "pokemon_team_core_usage": _slice_team_core_usage,
     "pokemon_team_core_triple_usage": _slice_team_core_triples,
     "detected_archetype_summary": _slice_detected_archetypes,
     "player_signature_pokemon": _slice_player_signature,
@@ -524,13 +564,96 @@ def _join_pokemon_names(
     return joined
 
 
-def _current_regulation_kpi(
-    legal_pool_by_regulation: list[dict[str, Any]], today: date | None
+ALL_SCOPE = "all"
+
+# Below this many teams on either side, a regulation-to-regulation delta is
+# mostly noise, so the "What changed" panel shows counts but no deltas.
+MIN_MOVER_TEAMS = 100
+MAX_MOVERS_PER_LIST = 6
+
+
+def marts_for_scope(
+    marts: dict[str, list[dict[str, Any]]], scope: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Marts cut down to one regulation_scope ("m-c" or "all"). Marts with
+    no regulation_scope column (head-to-head, cores, legality, ...) pass
+    through unchanged."""
+    scoped = {}
+    for name, rows in marts.items():
+        if rows and "regulation_scope" in rows[0]:
+            scoped[name] = [r for r in rows if r.get("regulation_scope") == scope]
+        else:
+            scoped[name] = rows
+    return scoped
+
+
+def _mover_row(row: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "pokemon_key",
+        "pokemon_name",
+        "usage_share",
+        "previous_usage_share",
+        "usage_share_delta",
+        "usage_rank",
+        "previous_usage_rank",
+        "win_rate",
+    )
+    return {key: row.get(key) for key in keys}
+
+
+def summarize_movers(
+    movers_rows: list[dict[str, Any]], regulation_code: str
 ) -> dict[str, Any] | None:
-    """The regulation in force today (dbt/seeds/champions_regulations.csv)
-    and its legal-pool size. This is what the header and the legal-pool KPI
-    lead with, so the page always says which format it's describing."""
-    regulation = current_regulation(today)
+    """Risers, fallers and new arrivals for one regulation against the one
+    before it (pokemon_regulation_movers). `reliable` is false when either
+    side has fewer than MIN_MOVER_TEAMS teams; the UI then shows the sample
+    sizes and new arrivals but holds back the deltas."""
+    rows = [r for r in movers_rows if r.get("regulation_code") == regulation_code]
+    if not rows:
+        return None
+    team_count = rows[0].get("team_count") or 0
+    previous_team_count = rows[0].get("previous_team_count") or 0
+    is_new = [r for r in rows if str(r.get("is_new_to_format")).lower() == "true"]
+    carried = [r for r in rows if str(r.get("is_new_to_format")).lower() != "true"]
+    risers = sorted(
+        (r for r in carried if (r.get("usage_share_delta") or 0) > 0),
+        key=lambda r: -(r.get("usage_share_delta") or 0),
+    )
+    fallers = sorted(
+        (r for r in carried if (r.get("usage_share_delta") or 0) < 0),
+        key=lambda r: r.get("usage_share_delta") or 0,
+    )
+    arrivals = sorted(
+        (r for r in is_new if (r.get("usage_count") or 0) > 0),
+        key=lambda r: -(r.get("usage_share") or 0),
+    )
+    return {
+        "regulation_code": regulation_code,
+        "previous_regulation_code": rows[0].get("previous_regulation_code"),
+        "team_count": team_count,
+        "previous_team_count": previous_team_count,
+        "reliable": min(team_count, previous_team_count) >= MIN_MOVER_TEAMS,
+        "risers": [_mover_row(r) for r in risers[:MAX_MOVERS_PER_LIST]],
+        "fallers": [_mover_row(r) for r in fallers[:MAX_MOVERS_PER_LIST]],
+        "new_arrivals": [_mover_row(r) for r in arrivals[:MAX_MOVERS_PER_LIST]],
+    }
+
+
+def _current_regulation_kpi(
+    legal_pool_by_regulation: list[dict[str, Any]],
+    today: date | None,
+    regulation_code: str | None = None,
+) -> dict[str, Any] | None:
+    """A regulation from dbt/seeds/champions_regulations.csv and its
+    legal-pool size: `regulation_code` if given, otherwise the one in force
+    today. This is what the header and the legal-pool KPI lead with, so the
+    page always says which format it's describing."""
+    if regulation_code is not None:
+        regulation = next(
+            (r for r in load_regulations() if r.regulation_code == regulation_code), None
+        )
+    else:
+        regulation = current_regulation(today)
     if regulation is None:
         return None
     legal_count = next(
@@ -551,8 +674,13 @@ def _current_regulation_kpi(
 
 
 def compute_kpis(
-    marts: dict[str, list[dict[str, Any]]], today: date | None = None
+    marts: dict[str, list[dict[str, Any]]],
+    today: date | None = None,
+    scope: str = ALL_SCOPE,
 ) -> dict[str, Any]:
+    """KPIs for one regulation scope. `marts` is expected to be cut down to
+    that scope already (marts_for_scope); `scope` picks which regulation the
+    legal-pool card describes and which movers summary is attached."""
     usage_rows = [r for r in marts["pokemon_usage_summary"] if not r.get("event_tier")]
     legality_rows = marts["legality_summary_by_regulation"]
     win_rate_rows = marts["pokemon_win_rate_summary"]
@@ -609,7 +737,15 @@ def compute_kpis(
     return {
         "latest_snapshot_date": latest_snapshot_date,
         "legal_pool_by_regulation": legal_pool_by_regulation,
-        "current_regulation": _current_regulation_kpi(legal_pool_by_regulation, today),
+        "scope": scope,
+        "current_regulation": _current_regulation_kpi(
+            legal_pool_by_regulation, today, None if scope == ALL_SCOPE else scope
+        ),
+        "movers": (
+            None
+            if scope == ALL_SCOPE
+            else summarize_movers(marts.get("pokemon_regulation_movers", []), scope)
+        ),
         # Newest tournament the marts cover. The staleness banner compares
         # this against the viewer's own clock (static/app.js), so a site
         # nobody has rebuilt still says it's out of date.
@@ -626,6 +762,28 @@ def compute_kpis(
         "top_win_rate_pokemon": top_win_rate,
         "top_12_pokemon": top_12_pokemon,
     }
+
+
+def compute_kpis_by_scope(
+    marts: dict[str, list[dict[str, Any]]], today: date | None = None
+) -> tuple[dict[str, dict[str, Any]], str]:
+    """KPIs for every regulation with usage data plus "all", and the scope
+    the page should open on: the regulation in force today if it has data,
+    otherwise the newest regulation that does, otherwise "all"."""
+    usage_scopes = {r.get("regulation_scope") for r in marts.get("pokemon_usage_summary", [])}
+    regulations = [r for r in load_regulations() if r.regulation_code in usage_scopes]
+    scopes = [r.regulation_code for r in regulations] + [ALL_SCOPE]
+    by_scope = {
+        scope: compute_kpis(marts_for_scope(marts, scope), today, scope) for scope in scopes
+    }
+    in_force = current_regulation(today)
+    if in_force is not None and in_force.regulation_code in by_scope:
+        default_scope = in_force.regulation_code
+    elif regulations:
+        default_scope = regulations[-1].regulation_code
+    else:
+        default_scope = ALL_SCOPE
+    return by_scope, default_scope
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -734,9 +892,16 @@ def build_payload(
     marts = load_marts(marts_dir)
     pokemon_names = load_pokemon_names(normalized_dir)
     marts = _join_pokemon_names(marts, pokemon_names)
+    kpis_by_scope, default_scope = compute_kpis_by_scope(marts)
     return {
         "generated_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "kpis": compute_kpis(marts),
+        # The page swaps DATA.kpis for kpis_by_scope[<selected scope>] on
+        # load (static/app.js); kpis is the default scope's, so anything
+        # reading it directly (the template's first paint, tests) still
+        # gets a coherent single-scope view.
+        "kpis": kpis_by_scope[default_scope],
+        "kpis_by_scope": kpis_by_scope,
+        "default_scope": default_scope,
         "provenance": load_provenance(reports_dir, staging_dir, manifests_dir),
         "marts": marts,
         # Full pokemon_key -> display name map, needed client-side wherever

@@ -116,6 +116,33 @@
   }
   header p { margin: 4px 0 0; color: #b8bdd1; font-size: 0.9rem; }
   main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  /* Components that set their own display (grid/flex) would otherwise
+     override the hidden attribute app.js toggles. */
+  .kpi-row[hidden], .movers-panel[hidden] { display: none; }
+  .regulation-picker { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .regulation-picker select {
+    font: inherit;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    border: 1px solid #b8bdd1;
+    padding: 2px 6px;
+  }
+  .movers-panel {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-5);
+  }
+  .movers-panel h3 { margin: 0 0 var(--space-1); }
+  .movers-panel h4 { margin: var(--space-3) 0 var(--space-2); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  .mover-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
+  .mover-list { list-style: none; margin: 0; padding: 0; }
+  .mover-list li { display: flex; align-items: center; gap: var(--space-2); padding: 2px 0; }
+  .mover-name { flex: 1; font-weight: 600; min-width: 0; }
+  .mover-share { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mover-delta { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 5.5em; text-align: right; }
+  .mover-delta.is-up { color: var(--positive); }
+  .mover-delta.is-down { color: var(--danger); }
   .staleness-banner {
     background: var(--warning-bg);
     color: var(--warning);
@@ -682,8 +709,19 @@
      page was built from, and whether its release gates passed — visible
      without opening the Data & Sources tab. #}
   <div class="header-meta">
-    {% if payload.kpis.current_regulation %}
-      <span class="header-chip">{{ payload.kpis.current_regulation.regulation_name }} (current)</span>
+    {% if payload.kpis_by_scope %}
+      {# Which regulation every figure on the page describes. static/app.js
+         sets the selected option from ?reg= and reloads on change. #}
+      <label class="header-chip regulation-picker">Regulation
+        <select id="regulation-scope" aria-label="Regulation shown on this page">
+          {% for scope in payload.kpis_by_scope %}
+            {% set reg = payload.regulations | selectattr("regulation_code", "equalto", scope) | first %}
+            <option value="{{ scope }}"{% if scope == payload.default_scope %} selected{% endif %}>
+              {%- if reg %}{{ reg.regulation_name }}{% if scope == payload.default_scope %} (current){% endif %}{% else %}All Champions regulations{% endif -%}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
     {% endif %}
     {% if payload.provenance.dataset_version %}
       <span class="header-chip">dataset {{ payload.provenance.dataset_version }}</span>
@@ -701,15 +739,17 @@
    was played under the regulation in force today. #}
 <div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
 <main>
-  <div class="kpi-row">
+  {# One KPI row per regulation scope; app.js shows the selected one. #}
+  {% for scope, scope_kpis in (payload.kpis_by_scope or {"all": payload.kpis}).items() %}
+  <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
       <div class="kpi-body">
         <div class="label">Distinct Pokémon Used</div>
-        <div class="value">{{ payload.kpis.distinct_pokemon_used }}</div>
+        <div class="value">{{ scope_kpis.distinct_pokemon_used }}</div>
       </div>
     </div>
     <div class="kpi-card">
-      {% set top_used = payload.kpis.top_used_pokemon %}
+      {% set top_used = scope_kpis.top_used_pokemon %}
       {% set top_used_art = payload.hero_art.get(top_used.pokemon_key) or payload.sprites.get(top_used.pokemon_key) if top_used %}
       {% if top_used_art %}
         <img class="kpi-sprite" src="{{ top_used_art }}" alt="" width="96" height="96" decoding="async">
@@ -721,7 +761,7 @@
       </div>
     </div>
     <div class="kpi-card">
-      {% set top_win = payload.kpis.top_win_rate_pokemon %}
+      {% set top_win = scope_kpis.top_win_rate_pokemon %}
       {% set top_win_art = payload.hero_art.get(top_win.pokemon_key) or payload.sprites.get(top_win.pokemon_key) if top_win %}
       {% if top_win_art %}
         <img class="kpi-sprite" src="{{ top_win_art }}" alt="" width="96" height="96" decoding="async">
@@ -733,17 +773,18 @@
       </div>
     </div>
     <div class="kpi-card">
-      {% set current_reg = payload.kpis.current_regulation %}
+      {% set current_reg = scope_kpis.current_regulation %}
       <div class="kpi-body">
         <div class="label">Legal Pool{% if current_reg %} · {{ current_reg.regulation_code | upper }}{% endif %}</div>
         <div class="value">{% if current_reg and current_reg.legal_pokemon_count is not none %}{{ current_reg.legal_pokemon_count }} Pokémon{% else %}—{% endif %}</div>
         <div class="sub">
-          {% for r in payload.kpis.legal_pool_by_regulation %}{{ r.regulation_code | upper }} {{ r.legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
-          {% if payload.kpis.latest_snapshot_date %}<br>as of {{ payload.kpis.latest_snapshot_date }}{% endif %}
+          {% for r in scope_kpis.legal_pool_by_regulation %}{{ r.regulation_code | upper }} {{ r.legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
+          {% if scope_kpis.latest_snapshot_date %}<br>as of {{ scope_kpis.latest_snapshot_date }}{% endif %}
         </div>
       </div>
     </div>
   </div>
+  {% endfor %}
 
   <nav class="tabs" role="tablist">
     <button class="tab-btn" role="tab" data-tab="overview" aria-selected="true">Overview</button>
@@ -763,7 +804,8 @@
 
   <section class="tab-panel" data-panel="overview">
     <h2>Overview</h2>
-    <p class="sub">Top 12 most-used Pokémon this dataset version, ranked by share of the meta.</p>
+    <section class="movers-panel" id="movers-panel" hidden></section>
+    <p class="sub" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
     <div class="grid-6xn" id="overview-top-12"></div>
   </section>
 
@@ -773,9 +815,6 @@
     <div class="controls">
       <label>Tier
         <select id="usage-tier-filter"></select>
-      </label>
-      <label>Regulation
-        <select id="usage-regulation-filter"></select>
       </label>
       <label>Type
         <div class="type-filter-row" id="usage-type-filter"></div>
@@ -803,7 +842,6 @@
         </div>
       </label>
     </div>
-    <p class="sub" id="usage-regulation-note" hidden></p>
     <div class="grid-6xn" id="usage-grid"></div>
 
     <h3>Leaderboards</h3>

@@ -459,6 +459,25 @@ published site went four months without a rebuild while its data aged out
 of the current regulation. The repo needs "Allow GitHub Actions to create
 and approve pull requests" enabled (Settings → Actions → General).
 
+**Regulation selector**: every regulation-sensitive mart is partitioned
+by `regulation_scope` (each regulation plus `all`). The header's Regulation
+dropdown chooses one scope for the whole page. It opens on the regulation
+in force on the visitor's date (falling back to the newest one with data),
+or whatever `?reg=` names, and changing it reloads the page with the new
+`?reg=` so links are shareable. The open tab lives in the URL hash
+(`#usage`). `static/app.js` narrows each scoped mart to the selected scope
+once, as `data.json` loads (`applyRegulationScope`), so the tab code reads
+`marts.<name>` exactly as before. KPIs are precomputed per scope
+(`kpis_by_scope`) and the template renders one KPI row per scope. Marts
+without the column (head-to-head, triple cores, country, players) still
+cover all Champions regulations.
+
+**What changed panel**: the top of Overview compares the selected
+regulation with the one before it (`pokemon_regulation_movers`, summarised
+server-side by `summarize_movers` into risers, fallers and new arrivals).
+If either side has fewer than 100 teams it shows only new arrivals and the
+sample sizes.
+
 **Staleness banner**: the page compares the newest tournament date in its
 data (`kpis.latest_event_date`) with the visitor's own clock and the
 regulation registry (`payload.regulations`). It shows a warning strip under

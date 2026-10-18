@@ -905,3 +905,109 @@ def test_load_release_history_reads_compact_manifest_metadata(tmp_path):
             "known_limitation_count": 1,
         }
     ]
+
+
+def test_marts_for_scope_filters_only_scoped_marts():
+    marts = {
+        "pokemon_usage_summary": [
+            {"regulation_scope": "m-c", "pokemon_key": "rillaboom"},
+            {"regulation_scope": "all", "pokemon_key": "sneasler"},
+        ],
+        "pokemon_head_to_head": [{"pokemon_key": "a", "opponent_pokemon_key": "b"}],
+    }
+    scoped = data.marts_for_scope(marts, "m-c")
+    assert scoped["pokemon_usage_summary"] == [
+        {"regulation_scope": "m-c", "pokemon_key": "rillaboom"}
+    ]
+    assert scoped["pokemon_head_to_head"] == marts["pokemon_head_to_head"]
+
+
+def _mover(key, delta, share, *, new=False, teams=500, prev_teams=400):
+    return {
+        "regulation_code": "m-c",
+        "previous_regulation_code": "m-b",
+        "pokemon_key": key,
+        "pokemon_name": key.title(),
+        "usage_count": 10 if share else 0,
+        "usage_share": share,
+        "previous_usage_share": share - delta,
+        "usage_share_delta": delta,
+        "usage_rank": 1,
+        "previous_usage_rank": 2,
+        "win_rate": 0.5,
+        "is_new_to_format": "true" if new else "false",
+        "team_count": teams,
+        "previous_team_count": prev_teams,
+    }
+
+
+def test_summarize_movers_splits_risers_fallers_and_arrivals():
+    rows = [
+        _mover("gholdengo", 0.036, 0.046),
+        _mover("charizard-mega-y", -0.052, 0.024),
+        _mover("rillaboom", 0.087, 0.087, new=True),
+        _mover("unused-newcomer", 0.0, 0.0, new=True),
+    ]
+    summary = data.summarize_movers(rows, "m-c")
+    assert summary["reliable"] is True
+    assert [r["pokemon_key"] for r in summary["risers"]] == ["gholdengo"]
+    assert [r["pokemon_key"] for r in summary["fallers"]] == ["charizard-mega-y"]
+    # New arrivals are not risers, and one never brought isn't an arrival.
+    assert [r["pokemon_key"] for r in summary["new_arrivals"]] == ["rillaboom"]
+    assert data.summarize_movers(rows, "m-a") is None
+
+
+def test_summarize_movers_flags_a_thin_sample_as_unreliable():
+    rows = [_mover("gholdengo", 0.03, 0.05, teams=40, prev_teams=400)]
+    assert data.summarize_movers(rows, "m-c")["reliable"] is False
+
+
+def test_compute_kpis_by_scope_defaults_to_the_regulation_in_force():
+    from datetime import date
+
+    def usage(scope, key):
+        return {
+            "regulation_scope": scope,
+            "pokemon_key": key,
+            "event_tier": None,
+            "usage_count": 5,
+            "usage_share": 0.1,
+            "usage_rank": 1,
+            "pokemon_name": key,
+        }
+
+    marts = {
+        "pokemon_usage_summary": [
+            usage("m-b", "kingambit"),
+            usage("m-c", "rillaboom"),
+            usage("all", "sneasler"),
+        ],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+    }
+    by_scope, default = data.compute_kpis_by_scope(marts, today=date(2026, 10, 18))
+    assert list(by_scope) == ["m-b", "m-c", "all"]
+    assert default == "m-c"
+    assert by_scope["m-c"]["top_used_pokemon"]["pokemon_key"] == "rillaboom"
+    assert by_scope["all"]["top_used_pokemon"]["pokemon_key"] == "sneasler"
+    # After M-C ends with no newer data, the newest regulation with data wins.
+    _, later_default = data.compute_kpis_by_scope(marts, today=date(2027, 3, 1))
+    assert later_default == "m-c"
+
+
+def test_team_core_slicer_caps_partners_per_scope_and_pokemon():
+    rows = [
+        {
+            "regulation_scope": scope,
+            "pokemon_key": "a",
+            "partner_pokemon_key": f"p{i}",
+            "co_occurrence_count": i,
+        }
+        for scope in ("m-c", "all")
+        for i in range(data.MAX_CORE_PARTNERS_PER_POKEMON + 5)
+    ]
+    kept = data._slice_team_core_usage(rows)
+    for scope in ("m-c", "all"):
+        scoped = [r for r in kept if r["regulation_scope"] == scope]
+        assert len(scoped) == data.MAX_CORE_PARTNERS_PER_POKEMON
+        assert min(r["co_occurrence_count"] for r in scoped) == 5

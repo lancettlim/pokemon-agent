@@ -30,6 +30,52 @@
     reference_teams: [],
     pokemon_names: {},
   };
+  // ---------- regulation scope ----------
+  // Every regulation-sensitive mart carries a regulation_scope column with
+  // one partition per regulation plus "all" (docs/upgrade-plan-2026q4.md,
+  // A3). The page shows exactly one scope, chosen once at load from ?reg=
+  // (so a link can point at "M-B"), else the regulation in force on the
+  // viewer's date, else the build's default. Changing it reloads the page
+  // (see setupRegulationSelector) rather than re-rendering live tabs.
+  var SCOPE_PARAM = "reg";
+  var ALL_SCOPE = "all";
+
+  function resolveRegulationScope() {
+    var byScope = DATA.kpis_by_scope || {};
+    var requested = null;
+    try {
+      requested = new URLSearchParams(window.location.search).get(SCOPE_PARAM);
+    } catch (e) {
+      requested = null;
+    }
+    if (requested && byScope[requested]) return requested;
+    var inForce = regulationInForce(DATA.regulations, new Date().toISOString().slice(0, 10));
+    if (inForce && byScope[inForce.regulation_code]) return inForce.regulation_code;
+    return DATA.default_scope || ALL_SCOPE;
+  }
+
+  var regulationScope = resolveRegulationScope();
+  if (DATA.kpis_by_scope && DATA.kpis_by_scope[regulationScope]) {
+    DATA.kpis = DATA.kpis_by_scope[regulationScope];
+  }
+
+  // Rows of a scoped mart narrowed to the page's scope; unscoped marts
+  // (no regulation_scope column) pass through untouched.
+  function applyRegulationScope(rows) {
+    if (!rows || !rows.length || !("regulation_scope" in rows[0])) return rows;
+    return rows.filter(function (r) {
+      return r.regulation_scope === regulationScope;
+    });
+  }
+
+  function scopeLabel(scope) {
+    if (scope === ALL_SCOPE) return "All Champions regulations";
+    var match = (DATA.regulations || []).filter(function (r) {
+      return r.regulation_code === scope;
+    })[0];
+    return match ? match.regulation_name : scope;
+  }
+
   var marts = DATA.marts || {};
   var sprites = DATA.sprites || {};
   var heroArt = DATA.hero_art || {};
@@ -608,7 +654,7 @@
         // a reference to this same object via window.DashboardApp.marts.
         var loaded = (full && full.marts) || {};
         Object.keys(loaded).forEach(function (name) {
-          marts[name] = loaded[name];
+          marts[name] = applyRegulationScope(loaded[name]);
         });
         return marts;
       });
@@ -645,12 +691,22 @@
       });
       if (onActivate) onActivate(tabId);
     }
+    // The open tab lives in the URL hash (#usage), so a link opens the same
+    // view and the regulation selector's reload keeps it.
+    var tabIds = Array.prototype.map.call(buttons, function (btn) {
+      return btn.getAttribute("data-tab");
+    });
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        activate(btn.getAttribute("data-tab"));
+        var tabId = btn.getAttribute("data-tab");
+        activate(tabId);
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, "", window.location.search + "#" + tabId);
+        }
       });
     });
-    activate("overview");
+    var fromHash = window.location.hash.replace(/^#/, "");
+    activate(tabIds.indexOf(fromHash) >= 0 ? fromHash : "overview");
   }
 
   // ---------- sub-tabs ----------
@@ -683,7 +739,56 @@
 
   // ---------- per-tab setup (each called once, on first activation) ----------
 
+  function moverListHtml(rows, showDelta) {
+    if (!rows.length) return '<p class="empty-state">None.</p>';
+    return "<ol class=\"mover-list\">" + rows.map(function (r) {
+      var delta = r.usage_share_delta;
+      var deltaHtml = "";
+      if (showDelta && delta != null) {
+        var sign = delta > 0 ? "+" : "";
+        deltaHtml = '<span class="mover-delta ' + (delta > 0 ? "is-up" : "is-down") + '">' +
+          sign + (delta * 100).toFixed(1) + " pts</span>";
+      }
+      return "<li>" + spriteImg(r.pokemon_key, ICON_SIZES.sm) +
+        '<span class="mover-name">' + escapeHtml(r.pokemon_name || r.pokemon_key) + "</span>" +
+        '<span class="mover-share">' + formatPercent(r.usage_share) + "</span>" + deltaHtml + "</li>";
+    }).join("") + "</ol>";
+  }
+
+  // "What changed" (docs/upgrade-plan-2026q4.md, A4/B5): the selected
+  // regulation against the one before it, from pokemon_regulation_movers
+  // summarised server-side (summarize_movers). When either regulation has
+  // too few teams for a delta to mean much, it shows the sample sizes and
+  // new arrivals only.
+  function renderMovers() {
+    var panel = document.getElementById("movers-panel");
+    var movers = DATA.kpis && DATA.kpis.movers;
+    if (!panel || !movers) return;
+    var title = "What changed in " + scopeLabel(movers.regulation_code) + " vs " +
+      scopeLabel(movers.previous_regulation_code);
+    var sample = movers.team_count.toLocaleString() + " teams this regulation · " +
+      movers.previous_team_count.toLocaleString() + " in the previous one. " +
+      "Shares are of all roster slots in each regulation's events.";
+    var columns = [];
+    if (movers.reliable) {
+      columns.push('<div><h4>Rising</h4>' + moverListHtml(movers.risers, true) + "</div>");
+      columns.push('<div><h4>Falling</h4>' + moverListHtml(movers.fallers, true) + "</div>");
+    } else {
+      sample += " Too few teams on one side to compare shares reliably, so only new arrivals are shown.";
+    }
+    columns.push('<div><h4>New this regulation</h4>' + moverListHtml(movers.new_arrivals, false) + "</div>");
+    panel.innerHTML = "<h3>" + escapeHtml(title) + '</h3><p class="sub">' + escapeHtml(sample) +
+      '</p><div class="mover-columns">' + columns.join("") + "</div>";
+    panel.hidden = false;
+  }
+
   function setupOverview() {
+    var overviewSub = document.getElementById("overview-sub");
+    if (overviewSub) {
+      overviewSub.textContent = "Top 12 most-used Pokémon in " + scopeLabel(regulationScope) +
+        ", ranked by share of roster slots.";
+    }
+    renderMovers();
     var top12 = (DATA.kpis && DATA.kpis.top_12_pokemon) || [];
     renderGrid6xn(document.getElementById("overview-top-12"), top12, {
       keyFn: function (r) {
@@ -709,13 +814,10 @@
 
   function setupUsage() {
     var usageRows = marts.pokemon_usage_summary || [];
-    var regulationRows = marts.pokemon_usage_by_regulation || [];
     var profileByKey = championsProfileByKey();
     var roles = roleByKey();
 
     var tierSelect = document.getElementById("usage-tier-filter");
-    var regulationSelect = document.getElementById("usage-regulation-filter");
-    var regulationNote = document.getElementById("usage-regulation-note");
     var roleSelect = document.getElementById("usage-role-filter");
     var typeFilterEl = document.getElementById("usage-type-filter");
     var shareMin = document.getElementById("usage-share-min");
@@ -724,28 +826,13 @@
     var speedMax = document.getElementById("usage-speed-max");
     var selectedTypes = {};
 
-    // Source rows for the usage leaderboard: pokemon_usage_summary's
-    // overall/per-tier rows normally, or pokemon_usage_by_regulation's
-    // regulation-partitioned rows when a regulation is selected (backlog
-    // #12). The two marts can't be combined — tournament_event carries no
-    // regulation_code (no source reports which regulation an event was
-    // played under), so a regulation slice is "usage among the Pokémon
-    // legal under regulation X," with share/rank recomputed inside that
-    // pool. Tier therefore doesn't apply while a regulation is selected,
-    // and the select is disabled to say so rather than silently ignored.
-    function baseRows(tier, regulation) {
-      if (!regulation) {
-        return usageRows.filter(function (r) {
-          return (r.event_tier || "") === tier;
-        });
-      }
-      return regulationRows.filter(function (r) {
-        return r.regulation_code === regulation;
-      });
-    }
-
-    function filteredRows(tier, regulation) {
-      return baseRows(tier, regulation).filter(function (r) {
+    // Rows are already scoped to the page's regulation (the header's
+    // Regulation selector; see applyRegulationScope), so this tab only
+    // filters by tier. It used to carry its own Regulation select, which
+    // could only approximate a regulation by its legal pool.
+    function filteredRows(tier) {
+      return usageRows.filter(function (r) {
+        if ((r.event_tier || "") !== tier) return false;
         var profile = profileByKey[r.pokemon_key];
         if (!passesTypeFilter(selectedTypes, profile && profile.type_1, profile && profile.type_2)) return false;
         if (roleSelect && roleSelect.value && roles[r.pokemon_key] !== roleSelect.value) return false;
@@ -774,20 +861,7 @@
 
     function drawUsage() {
       var tier = tierSelect ? tierSelect.value : "";
-      var regulation = regulationSelect ? regulationSelect.value : "";
-      if (tierSelect) tierSelect.disabled = !!regulation;
-      if (regulationNote) {
-        regulationNote.hidden = !regulation;
-        if (regulation) {
-          regulationNote.textContent =
-            "Scoped to regulation " + regulation + "'s legal pool (" +
-            baseRows(tier, regulation).length +
-            " Pokémon); shares and ranks are recomputed within that pool. " +
-            "Tournament tier doesn't apply here — no source reports which " +
-            "regulation an event was played under.";
-        }
-      }
-      var rows = filteredRows(tier, regulation)
+      var rows = filteredRows(tier)
         .slice()
         .sort(function (a, b) {
           return a.usage_rank - b.usage_rank;
@@ -810,10 +884,6 @@
       var tiers = distinctSorted(usageRows, "event_tier");
       fillSelect(tierSelect, tiers, "Overall");
       tierSelect.addEventListener("change", drawUsage);
-    }
-    if (regulationSelect) {
-      fillSelect(regulationSelect, distinctSorted(regulationRows, "regulation_code"), "All (current pool)");
-      regulationSelect.addEventListener("change", drawUsage);
     }
     renderTypeFilterChips(typeFilterEl, selectedTypes, drawUsage);
     [roleSelect, shareMin, shareMax, speedMin, speedMax].forEach(function (el) {
@@ -1921,6 +1991,23 @@
   }
   renderStalenessBanner();
 
+  // Header Regulation selector and the per-scope KPI rows the template
+  // renders (one .kpi-row[data-scope] per scope; only the selected shows).
+  function setupRegulationSelector() {
+    document.querySelectorAll(".kpi-row[data-scope]").forEach(function (row) {
+      row.hidden = row.getAttribute("data-scope") !== regulationScope;
+    });
+    var select = document.getElementById("regulation-scope");
+    if (!select) return;
+    select.value = regulationScope;
+    select.addEventListener("change", function () {
+      var params = new URLSearchParams(window.location.search);
+      params.set(SCOPE_PARAM, select.value);
+      window.location.assign("?" + params.toString() + window.location.hash);
+    });
+  }
+  setupRegulationSelector();
+
   // Overview reads only DATA.kpis, which is inlined — it renders with no
   // network round-trip, so the landing view is never waiting on data.json.
   registerTab("overview", setupOverview, { needsMarts: false });
@@ -1997,5 +2084,7 @@
     registerTab: registerTab,
     setupSubTabs: setupSubTabs,
     ensureData: ensureData,
+    regulationScope: regulationScope,
+    scopeLabel: scopeLabel,
   };
 })();
