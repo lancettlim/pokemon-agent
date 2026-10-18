@@ -34,7 +34,13 @@
       "name": "event_format",
       "type": "string",
       "required": false,
-      "description": "Competitive format the event was played under, e.g. \"gen9championsvgc2026regma\" (Champions) or \"gen9vgc2026regi\" (standard VGC). MunchStats indexes both; this dimension is what scopes Champions-only analysis (see dbt/models/intermediate/int_champions_roster.sql). Optional: a few indexed events report no format"
+      "description": "Competitive format the event was played under, e.g. \"gen9championsvgc2026regmc\" (Champions, Reg M-C) or \"gen9vgc2026regi\" (standard VGC). MunchStats indexes both; this dimension is what scopes Champions-only analysis (see dbt/models/intermediate/int_champions_roster.sql). Optional: a few indexed events report no format"
+    },
+    {
+      "name": "regulation_code",
+      "type": "string",
+      "required": false,
+      "description": "Champions regulation set the event was played under (\"m-a\", \"m-b\", \"m-c\"), resolved exactly from event_format via dbt/seeds/champions_regulations.csv. Same codes as legality_snapshot.regulation_code. Null only for non-Champions (standard VGC) events; a Champions event with no regulation fails assert_champions_formats_registered"
     },
     {
       "name": "source_name",

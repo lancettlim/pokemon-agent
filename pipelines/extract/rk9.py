@@ -30,8 +30,9 @@ The event list therefore comes from MunchStats' tournaments_index.json --
 the same document munchstats.py already reads -- rather than from a
 separate RK9 crawl.
 
-Scoped to Champions-format events (`format_filter`, default
-gen9championsvgc2026regma). MunchStats indexes 60 events, most of them
+Scoped to Champions-format events (`format_filter`, default: every
+`munchstats_format` in dbt/seeds/champions_regulations.csv, via
+pipelines/regulations.py). MunchStats indexes 60 events, most of them
 standard VGC or same-venue TCG, which are out of this dataset's scope
 (docs/prd.md) -- extracting all of them would mean ~1,300 requests per run
 against a host whose posture is unverified (below) to produce rows nothing
@@ -62,13 +63,14 @@ from __future__ import annotations
 import csv
 import html
 import re
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
 
 from pipelines.extract.http import get_with_retry
+from pipelines.regulations import munchstats_formats
 
 SOURCE_NAME = "RK9.gg"
 BASE_URL = "https://rk9.gg"
@@ -78,8 +80,10 @@ MUNCHSTATS_INDEX_URL = (
 )
 DEFAULT_DATASET_VERSION = "0.0.0-dev"
 
-# The Champions format as MunchStats labels it in tournaments_index.json.
-CHAMPIONS_FORMAT = "gen9championsvgc2026regma"
+# Every Champions format as MunchStats labels it in tournaments_index.json,
+# one per registered regulation set. This used to be the single Reg M-A
+# value, which silently dropped Worlds (M-B) and every M-C event.
+CHAMPIONS_FORMATS = munchstats_formats()
 
 # <a class="nav-link active" id="P2-tab" ... >Masters in Round 17</a>
 _POD_TAB_PATTERN = re.compile(
@@ -330,7 +334,7 @@ def extract(
     dataset_version: str = DEFAULT_DATASET_VERSION,
     session: requests.Session | None = None,
     previous_snapshot_path: Path | None = None,
-    format_filter: str | None = CHAMPIONS_FORMAT,
+    format_filter: Collection[str] | None = CHAMPIONS_FORMATS,
 ) -> None:
     """Fetch RK9 round-by-round pairings and write one row per match to
     output_path as CSV matching data/staging/rk9_pairings.schema.json,
@@ -354,7 +358,7 @@ def extract(
         event_ids = [
             entry["id"]
             for entry in index
-            if format_filter is None or entry.get("format") == format_filter
+            if format_filter is None or entry.get("format") in format_filter
         ]
     extracted_at_utc = datetime.now(UTC).isoformat()
     cached_rows_by_event = _load_cached_rows_by_event(previous_snapshot_path)

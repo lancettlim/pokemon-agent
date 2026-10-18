@@ -145,7 +145,11 @@ from PokéAPI's community sprites GitHub repo instead — see
     `source_url`, `source_record_id`, `extracted_at_utc`, `dataset_version`
   - **Optional fields**: `event_tier` (tournament tier, e.g. International/
     Regional/Special — nullable since MunchStats doesn't report it for
-    every event)
+    every event), `event_format` (MunchStats format string),
+    `regulation_code` (Champions regulation set, e.g. `m-c`, resolved
+    from `event_format` via `dbt/seeds/champions_regulations.csv`; null
+    only for standard-VGC events. Every Champions-format event must
+    resolve, enforced by `assert_champions_formats_registered`)
 - `tournament_team`
   - **Purpose**: team-level tournament metadata
   - **Primary key**: `team_id`

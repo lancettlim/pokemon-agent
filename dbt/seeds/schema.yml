@@ -1,6 +1,40 @@
 version: 2
 
 seeds:
+  - name: champions_regulations
+    description: >
+      The Pokémon Champions regulation registry: one row per regulation
+      set, and the single place the pipeline learns which formats count as
+      Champions. RK9 and Limitless extraction (via
+      pipelines/regulations.py), int_champions_roster and
+      tournament_event.regulation_code all read it. Before this seed
+      existed the format was hardcoded to Reg M-A in three places, so the
+      2026 World Championships (M-B) and every M-C event were silently
+      dropped (docs/upgrade-plan-2026q4.md, A1).
+
+      Adding a regulation is a one-row change here.
+      assert_champions_formats_registered fails the build if MunchStats or
+      Limitless report a Champions format that has no row, so a new
+      regulation can't go missing silently again. Dates come from the
+      official regulation announcements (via victoryroad.pro's
+      champions-regulations page). end_date is exclusive and equals the
+      next set's start_date.
+    columns:
+      - name: regulation_code
+        description: Lowercase regulation slug ("m-c"), the same code PokéBase uses for legality_snapshot.regulation_code.
+        tests: [unique, not_null]
+      - name: regulation_name
+        description: Display name ("Regulation Set M-C").
+      - name: munchstats_format
+        description: The value MunchStats' tournaments_index.json reports in `format` for events played under this set.
+        tests: [unique, not_null]
+      - name: limitless_format
+        description: Limitless VGC's data-format slug for this set (staged as limitless.regulation_set).
+        tests: [unique, not_null]
+      - name: start_date
+        description: First day the set is in force (inclusive, ISO-8601).
+      - name: end_date
+        description: Day the next set takes over (exclusive, ISO-8601).
   - name: opgg_key_to_pokeapi_form
     description: >
       Controlled name/form mapping (dataset-spec.md's OP.GG mapping rule:
@@ -73,13 +107,26 @@ seeds:
       Controlled name/form mapping (docs/dataset-spec.md's Bulbagarden
       Archives mapping rule) from every `bulbagarden_title` in
       stg_bulbagarden to PokéAPI's `form_name` slug. Bulbagarden's own
-      title convention ("Menu CP <4-digit dex number>[-<Form descriptor>]")
+      title convention ("Menu Champs <4-digit dex number>[-<Form descriptor>]",
+      renamed from "Menu CP" upstream by 2026-10)
       is not the same token set as OP.GG's or PokéAPI's own form-suffix
       naming (e.g. Bulbagarden's "Alola"/"Paldea Aqua" vs. PokéAPI's
       "-alola"/"-paldea-aqua-breed"), so this is a dedicated seed rather
       than a reuse of opgg_key_to_pokeapi_form.
 
-      Built by fetching the live 359-title category inventory plus
+      2026-10-18 refresh: Bulbagarden renamed every title from "Menu CP" to
+      "Menu Champs", and the category grew to 393 titles with the Reg M-C
+      additions. The 358 existing rows were re-keyed 1:1 by that rename.
+      34 new rows were resolved the same way as the originals below (the
+      default variety for a bare title; `-mega`, `-mega-z`, `-alola`,
+      `-low-key`, `-female` and `-<color>-plumage` suffixes checked against
+      live PokéAPI). They include the six new M-C Megas: absol-mega-z,
+      salamence-mega, garchomp-mega-z, lucario-mega-z, golisopod-mega and
+      baxcalibur-mega. PokéAPI models the "Z" Megas as ordinary forms, so
+      they need no Champions-only key. Mega Meowstic stays unmapped for
+      the same male/female ambiguity noted below.
+
+      Originally built by fetching the live 359-title category inventory plus
       PokéAPI's full /pokemon list and /pokemon-species data, then: 1) a
       direct match on `<base species slug>-<slugified form descriptor>`
       for the majority of titles; 2) explicit overrides for species whose

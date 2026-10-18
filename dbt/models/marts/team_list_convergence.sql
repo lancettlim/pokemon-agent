@@ -9,8 +9,8 @@
 -- int_champions_roster, and that is not a bypass of the rule in CLAUDE.md.
 -- That gate exists because MunchStats indexes standard VGC events
 -- alongside Champions ones, so a roster mart must filter by
--- event_format. Limitless is a Champions-only source -- every team_list
--- row is regulation_set 'm-a' -- and this mart's grain is
+-- event_format. Limitless is extracted Champions-only (its regulation_set
+-- filter reads the champions_regulations seed) -- and this mart's grain is
 -- team_list_member, a different table with no event_format column to
 -- filter on. Scoping is a property of the source here, not of a filter.
 --

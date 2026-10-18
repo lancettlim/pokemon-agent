@@ -93,7 +93,7 @@ class _FakeSession:
 
 
 _INDEX = [
-    {"id": "CHAMPS1", "format": rk9.CHAMPIONS_FORMAT},
+    {"id": "CHAMPS1", "format": "gen9championsvgc2026regma"},
     {"id": "STANDARD1", "format": "gen9vgc2026regi"},
     {"id": "NOFORMAT", "format": None},
 ]
@@ -152,6 +152,20 @@ def test_extract_defaults_to_champions_format_events_only(tmp_path):
     rk9.extract(output_path, session=session, dataset_version="9.9.9")
     assert {row["event_id"] for row in _read(output_path)} == {"CHAMPS1"}
     assert not any("STANDARD1" in url for url in session.requested_urls)
+
+
+def test_extract_default_covers_every_registered_regulation(tmp_path):
+    # Regression: the filter used to be the single Reg M-A format, which
+    # silently dropped Worlds (M-B) and every M-C event.
+    index = [
+        {"id": "REGMA", "format": "gen9championsvgc2026regma"},
+        {"id": "REGMB", "format": "gen9championsvgc2026regmb"},
+        {"id": "REGMC", "format": "gen9championsvgc2026regmc"},
+        {"id": "STANDARD1", "format": "gen9vgc2026regi"},
+    ]
+    output_path = tmp_path / "rk9.csv"
+    rk9.extract(output_path, session=_FakeSession(index=index), dataset_version="9.9.9")
+    assert {row["event_id"] for row in _read(output_path)} == {"REGMA", "REGMB", "REGMC"}
 
 
 def test_extract_format_filter_none_takes_every_indexed_event(tmp_path):

@@ -147,6 +147,16 @@ before this existed, every usage and win-rate figure blended two different
 games (Incineroar read as the #1 most-used Pokémon at 7,641 appearances
 when its real Champions figure is 1,029, at #5).
 
+**Regulation registry.** Which formats count as Champions lives in exactly
+one place: `dbt/seeds/champions_regulations.csv`, one row per regulation set
+(M-A, M-B, M-C, ...). The RK9 and Limitless extractors read it through
+`pipelines/regulations.py`, `tournament_event.regulation_code` is resolved
+from it, and `int_champions_roster` joins against it. Never hardcode a
+format string or regulation slug: a hardcoded Reg M-A filter once silently
+dropped the 2026 World Championships and every M-C event for four months.
+When a new regulation is announced, add its row to the seed.
+`assert_champions_formats_registered` fails the build until you do.
+
 **Team-vs-team grain.** `tournament_match` and the head-to-head marts
 report which *team* beat which, not which Pokémon beat which — no source
 publishes a per-battle log naming the four of six actually brought. Any new

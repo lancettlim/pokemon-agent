@@ -12,7 +12,8 @@ with the data already in the markup, much of it on `data-` attributes:
   - `GET /tournaments?time=all` lists every tournament as a `<tr>` carrying
     data-date/data-country/data-name/data-format/data-players/data-winner
     plus a `/tournaments/<id>` link. `data-format` is the regulation set
-    ("m-a"), so Champions events are identifiable without fetching them.
+    ("m-a", "m-b", "m-c"), so Champions events are identifiable without
+    fetching them.
   - `GET /tournaments/<id>` is the standings table: one `<tr>` per player
     with data-rank/data-name/data-country, a `/players/<id>` link, and --
     for players whose list was published -- a `/teams/<id>` link.
@@ -30,8 +31,8 @@ cross-validate against (see dbt/models/marts/roster_source_agreement.sql).
 
 What this source is NOT for, despite docs/data-sources.md's original
 framing: extending tournament history. Limitless does not reach further
-back than MunchStats for this format -- only three Champions-format events
-exist anywhere as of this writing, and both sources have all three. Its
+back than MunchStats for this format -- both sources list the same
+Champions-format events (nine across M-A/M-B/M-C as of 2026-10-18). Its
 other tournaments are standard VGC (regulations F/H/I), which is out of
 scope per docs/prd.md. `format_filter` therefore defaults to Champions.
 
@@ -52,22 +53,24 @@ from __future__ import annotations
 import csv
 import html
 import re
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
 
 from pipelines.extract.http import get_with_retry
+from pipelines.regulations import limitless_formats
 
 SOURCE_NAME = "Limitless VGC"
 BASE_URL = "https://limitlessvgc.com"
 TOURNAMENTS_URL = f"{BASE_URL}/tournaments?time=all"
 DEFAULT_DATASET_VERSION = "0.0.0-dev"
 
-# Limitless' own slug for the Champions regulation set, as it appears in
-# each tournament row's data-format attribute.
-CHAMPIONS_FORMAT = "m-a"
+# Limitless' own slugs for the Champions regulation sets, as they appear in
+# each tournament row's data-format attribute. Read from
+# dbt/seeds/champions_regulations.csv; this used to be the single "m-a".
+CHAMPIONS_FORMATS = limitless_formats()
 
 _TOURNAMENT_ROW_PATTERN = re.compile(
     r"<tr\s+data-date=\"([^\"]*)\"\s+data-country=\"([^\"]*)\"\s*"
@@ -228,7 +231,7 @@ def extract(
     *,
     dataset_version: str = DEFAULT_DATASET_VERSION,
     session: requests.Session | None = None,
-    format_filter: str | None = CHAMPIONS_FORMAT,
+    format_filter: Collection[str] | None = CHAMPIONS_FORMATS,
 ) -> None:
     """Fetch Limitless tournaments, standings and team lists, and write one
     row per (team, tournament, player, roster slot) to output_path as CSV
@@ -246,7 +249,7 @@ def extract(
         wanted = set(tournament_ids)
         tournaments = [t for t in tournaments if t["tournament_id"] in wanted]
     elif format_filter is not None:
-        tournaments = [t for t in tournaments if t["regulation_set"] == format_filter]
+        tournaments = [t for t in tournaments if t["regulation_set"] in format_filter]
 
     extracted_at_utc = datetime.now(UTC).isoformat()
 
