@@ -14,40 +14,47 @@
 -- ask): a Pokémon's share of the meta, not just a raw count, so the
 -- Usage tab can rank and label leaders by percentage the same way
 -- pokemon_win_rate_summary already does for win_rate.
+--
+-- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
+-- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
+-- each computed and ranked independently, via int_champions_roster_scoped.
 with overall as (
   select
+    member.regulation_scope,
     member.pokemon_key,
     cast(null as varchar) as event_tier,
     count(*) as usage_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
-  group by member.pokemon_key
+  group by member.regulation_scope, member.pokemon_key
 ),
 by_tier as (
   select
+    member.regulation_scope,
     member.pokemon_key,
     event.event_tier,
     count(*) as usage_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
   inner join {{ ref('tournament_event') }} event
     on event.event_id = member.event_id
   where event.event_tier is not null
-  group by member.pokemon_key, event.event_tier
+  group by member.regulation_scope, member.pokemon_key, event.event_tier
 )
 select
+  regulation_scope,
   pokemon_key,
   event_tier,
   usage_count,
   round(
-    usage_count::double / sum(usage_count) over (partition by event_tier),
+    usage_count::double / sum(usage_count) over (partition by regulation_scope, event_tier),
     4
   ) as usage_share,
-  row_number() over (partition by event_tier order by usage_count desc) as usage_rank
+  row_number() over (partition by regulation_scope, event_tier order by usage_count desc) as usage_rank
 from (
   select * from overall
   union all

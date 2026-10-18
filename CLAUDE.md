@@ -156,6 +156,9 @@ format string or regulation slug: a hardcoded Reg M-A filter once silently
 dropped the 2026 World Championships and every M-C event for four months.
 When a new regulation is announced, add its row to the seed.
 `assert_champions_formats_registered` fails the build until you do.
+Regulation-sensitive marts read `int_champions_roster_scoped` and carry a
+`regulation_scope` column (each regulation plus `'all'`). A new mart of
+that kind should do the same, and any consumer must filter on it.
 
 **Team-vs-team grain.** `tournament_match` and the head-to-head marts
 report which *team* beat which, not which Pokémon beat which — no source

@@ -69,6 +69,7 @@ pair_lifts as (
   select pokemon_key, partner_pokemon_key, lift
   from {{ ref('pokemon_team_synergy') }}
   where pokemon_key < partner_pokemon_key
+    and regulation_scope = 'all'
 ),
 scored as (
   select

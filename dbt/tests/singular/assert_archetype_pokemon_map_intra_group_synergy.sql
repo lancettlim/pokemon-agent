@@ -65,6 +65,7 @@ scored as (
   left join {{ ref('pokemon_team_synergy') }} synergy
     on synergy.pokemon_key = pairs.pokemon_key
     and synergy.partner_pokemon_key = pairs.partner_pokemon_key
+    and synergy.regulation_scope = 'all'
   group by archetypes.archetype_key
 ),
 with_status as (

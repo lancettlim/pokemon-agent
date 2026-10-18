@@ -14,23 +14,29 @@
 -- re-deriving from tournament_team_member directly, so this mart always
 -- agrees with the per-item/per-ability shares the Pokémon Profile tab
 -- already shows.
+--
+-- regulation_scope passes through from pokemon_item_usage and
+-- pokemon_ability_usage: one HHI per Pokémon per scope.
 with item_hhi as (
   select
+    regulation_scope,
     pokemon_key,
     round(sum(item_share * item_share), 4) as item_hhi,
     count(*) as item_count
   from {{ ref('pokemon_item_usage') }}
-  group by pokemon_key
+  group by regulation_scope, pokemon_key
 ),
 ability_hhi as (
   select
+    regulation_scope,
     pokemon_key,
     round(sum(ability_share * ability_share), 4) as ability_hhi,
     count(*) as ability_count
   from {{ ref('pokemon_ability_usage') }}
-  group by pokemon_key
+  group by regulation_scope, pokemon_key
 )
 select
+  coalesce(item_hhi.regulation_scope, ability_hhi.regulation_scope) as regulation_scope,
   coalesce(item_hhi.pokemon_key, ability_hhi.pokemon_key) as pokemon_key,
   item_hhi.item_hhi,
   item_hhi.item_count,
@@ -39,4 +45,5 @@ select
 from item_hhi
 full outer join ability_hhi
   on ability_hhi.pokemon_key = item_hhi.pokemon_key
-order by pokemon_key
+  and ability_hhi.regulation_scope = item_hhi.regulation_scope
+order by regulation_scope, pokemon_key

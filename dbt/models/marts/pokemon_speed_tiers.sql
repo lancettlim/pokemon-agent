@@ -21,7 +21,11 @@
 -- "is my Pokémon fast enough after a Rock Polish" and "is my Pokémon fast
 -- enough scarfed" are different real questions a Team Builder / Speed
 -- Tiers view needs to answer even when the arithmetic happens to match.
+--
+-- regulation_scope passes through from pokemon_champions_profile: speeds
+-- are identical in every scope, usage/win rate are per scope.
 select
+  regulation_scope,
   pokemon_key,
   type_1,
   type_2,
@@ -37,4 +41,4 @@ select
   win_rate,
   record_count
 from {{ ref('pokemon_champions_profile') }}
-order by max_investment_speed desc
+order by regulation_scope, max_investment_speed desc

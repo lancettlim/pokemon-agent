@@ -73,16 +73,36 @@ worth ignoring unless you're debugging the models themselves.
 
 ## Starter queries
 
+Regulation-sensitive marts (usage, win rate, items/abilities/moves, cores,
+synergy, profile, speed tiers, top teams) carry a `regulation_scope`
+column: one partition per regulation (`'m-a'`, `'m-b'`, `'m-c'`, ...) plus
+`'all'` across every Champions regulation. Always filter on it, or each
+Pokémon is counted once per scope. `pokemon_regulation_movers` compares
+each regulation with the one before it.
+
 Each of these was run against a real, freshly-extracted snapshot to
 confirm it returns non-degenerate results — not just checked for syntax.
 
-**Top 10 most-used Pokémon overall:**
+**Top 10 most-used Pokémon in Reg M-C:**
 
 ```sql
 select pokemon_key, usage_count, round(usage_share * 100, 1) as usage_pct, usage_rank
 from pokemon_usage_summary
-where event_tier is null  -- the overall row, not a per-tier breakout
+where event_tier is null        -- the overall row, not a per-tier breakout
+  and regulation_scope = 'm-c'  -- or 'all' for every Champions regulation
 order by usage_rank
+limit 10;
+```
+
+**Biggest risers from M-B to M-C** (team counts are the sample size):
+
+```sql
+select pokemon_key, round(previous_usage_share * 100, 1) as mb_pct,
+       round(usage_share * 100, 1) as mc_pct, is_new_to_format,
+       team_count, previous_team_count
+from pokemon_regulation_movers
+where regulation_code = 'm-c'
+order by usage_share_delta desc
 limit 10;
 ```
 
@@ -96,6 +116,7 @@ select pokemon_key, total_wins, total_losses,
        round(win_rate * 100, 1) as win_rate_pct,
        round(wilson_lower_bound * 100, 1) as wilson_lb_pct
 from pokemon_win_rate_summary
+where regulation_scope = 'all'
 order by wilson_rank
 limit 10;
 ```
@@ -108,7 +129,8 @@ meaningful):
 ```sql
 select pokemon_key, partner_pokemon_key, pair_team_count, round(lift, 2) as lift
 from pokemon_team_synergy
-where pair_team_count >= 20
+where regulation_scope = 'all'
+  and pair_team_count >= 20
 order by lift desc
 limit 10;
 ```
