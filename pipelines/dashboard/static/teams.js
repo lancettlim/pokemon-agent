@@ -64,16 +64,23 @@
       .join("-");
   }
 
+  function normalizeSpeciesName(name) {
+    return name.replace(/[-\s.'\u2019]/g, "").toLowerCase();
+  }
+
+  // Indexes every Pokémon under both its normalized pokemon_key (which is
+  // what Showdown's hyphenated names normalize to: "Charizard-Mega-Y" ->
+  // "charizardmegay") and its normalized display name ("Mega Charizard Y"
+  // -> "megacharizardy"), so either spelling resolves.
   function buildNameLookup() {
     var lookup = {};
     Object.keys(App.pokemonNames).forEach(function (key) {
-      lookup[App.pokemonNames[key].toLowerCase()] = key;
+      lookup[normalizeSpeciesName(App.pokemonNames[key])] = key;
+    });
+    Object.keys(App.pokemonNames).forEach(function (key) {
+      lookup[normalizeSpeciesName(key)] = key;
     });
     return lookup;
-  }
-
-  function normalizeSpeciesName(name) {
-    return name.replace(/[-\s.']/g, "").toLowerCase();
   }
 
   // Parses a Showdown-format team export into per-slot {key, item, ability,

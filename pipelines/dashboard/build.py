@@ -87,6 +87,7 @@ _CRITICAL_PAYLOAD_KEYS = (
     "item_icons",
     "pokemon_names",
     "reference_teams",
+    "regulations",
 )
 
 

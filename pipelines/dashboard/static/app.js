@@ -390,17 +390,14 @@
       return;
     }
     if (large) {
-      // --icon-md, not --icon-xl: on the Profile header these sit beside
-      // the Pokémon's hero art, and at 128px two type emblems were larger
-      // than the Pokémon itself — the subject of the page losing to its
-      // own metadata. They keep a type-colored ring so they still read as
-      // hero-level information at the smaller size.
+      // A type-colored pill with a small icon and the type name. The
+      // earlier 64px ringed emblems competed with the Pokémon's own art on
+      // the Profile header, and the bare icons needed a hover to read.
       container.className = "type-badge-row type-badge-lg";
       container.innerHTML = types
         .map(function (t) {
-          return '<div class="type-pill-lg" role="img" aria-label="' + escapeHtml(t) +
-            ' type" style="--pill-type-color:' + typeColor(t) + '">' +
-            typeIconImg(t, ICON_SIZES.md) + "</div>";
+          return '<span class="type-pill-lg" style="--pill-type-color:' + typeColor(t) + '">' +
+            typeIconImg(t, 20) + "<span>" + escapeHtml(t) + "</span></span>";
         })
         .join("");
     } else {
@@ -1883,6 +1880,46 @@
     var subpanels = document.querySelectorAll('[data-panel="data-sources"] .subtab-panel');
     setupSubTabs(subtabs, subpanels);
   }
+
+  // ---------- staleness banner ----------
+  // Evaluated against the viewer's clock, not the build time: a site that
+  // stops being rebuilt is exactly the case this exists for (the published
+  // dashboard once sat on Reg M-A data for four months after M-C began).
+  var STALE_AFTER_DAYS = 21;
+
+  function regulationInForce(regulations, todayIso) {
+    var inForce = null;
+    (regulations || []).forEach(function (r) {
+      if (r.start_date <= todayIso && todayIso < r.end_date) inForce = r;
+    });
+    return inForce;
+  }
+
+  function renderStalenessBanner() {
+    var banner = document.getElementById("staleness-banner");
+    var latest = (DATA.kpis || {}).latest_event_date;
+    if (!banner || !latest) return;
+    var todayIso = new Date().toISOString().slice(0, 10);
+    var ageDays = Math.floor((Date.parse(todayIso) - Date.parse(latest)) / 86400000);
+    var current = regulationInForce(DATA.regulations, todayIso);
+    var messages = [];
+    if (current && latest < current.start_date) {
+      messages.push(
+        current.regulation_name + " began " + current.start_date +
+        ", but the newest tournament here is from " + latest +
+        ". These figures describe an earlier regulation."
+      );
+    } else if (ageDays > STALE_AFTER_DAYS) {
+      messages.push(
+        "The newest tournament here is from " + latest + " (" + ageDays +
+        " days ago). Results from more recent events are not included yet."
+      );
+    }
+    if (!messages.length) return;
+    banner.textContent = messages.join(" ");
+    banner.hidden = false;
+  }
+  renderStalenessBanner();
 
   // Overview reads only DATA.kpis, which is inlined — it renders with no
   // network round-trip, so the landing view is never waiting on data.json.

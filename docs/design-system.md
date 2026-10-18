@@ -508,42 +508,44 @@ Sprites come from Bulbagarden Archives via `pokemon_asset.csv`
 (`docs/dashboard.md`'s "Icon sources"); a Pokémon with no resolvable sprite
 degrades to text-only, never a broken image.
 
-### Pokémon name formatting: PascalCase
+### Pokémon name formatting: player-facing names
 
-Display names are **PascalCase**, derived from `pokemon_key` (PokéAPI's own
-form slug, e.g. `landorus-therian`, `charizard-mega-x`) via
-`pipelines/dashboard/data.py`'s `to_pascal_case()`:
+Display names are the names players use. They're derived from `pokemon_key`
+(PokéAPI's form slug) by `pipelines/dashboard/data.py`'s `display_name()`:
 
 ```
-landorus-therian    -> LandorusTherian
-charizard-mega-x    -> CharizardMegaX
-great-tusk           -> GreatTusk
-urshifu-rapid-strike -> UrshifuRapidStrike
-porygon-z            -> PorygonZ
+charizard-mega-y          -> Mega Charizard Y
+absol-mega-z              -> Mega Absol Z
+basculegion-male          -> Basculegion ♂
+ninetales-alola           -> Alolan Ninetales
+tauros-paldea-aqua-breed  -> Paldean Tauros (Aqua)
+landorus-therian          -> Landorus (Therian)
+great-tusk                -> Great Tusk
+farfetchd                 -> Farfetch’d
 ```
 
-This is computed once, server-side, when the dashboard payload is built
-(`load_pokemon_names()`), so every consumer — KPI cards, every mart's
-`pokemon_name` field, every `<select>` option — gets the identical string;
+The rules: "Mega"/"Gigantamax" and regional adjectives go before the
+species name; gender becomes ♂/♀; a Mega's X/Y/Z letter goes after it; any
+other form descriptor goes in parentheses. A short override table handles
+species whose slug drops punctuation (Mr. Mime, Porygon-Z, Flabébé).
+
+This is computed once, server-side, when the payload is built
+(`load_pokemon_names()`), so every consumer (KPI cards, every mart's
+`pokemon_name` field, every `<select>` option) gets the same string.
 `app.js` never reformats a name itself.
 
-Two things worth calling out about this choice:
+Two things worth calling out:
 
-- It's deliberately derived from **`pokemon_key`/`form_name`, not the raw
+- The name comes from **`pokemon_key`/`form_name`, not the raw
   `pokemon_name` column** in `data/normalized/pokemon.csv`. That column is
-  the species-only name from PokéAPI (e.g. `landorus` for both
-  Landorus-Incarnate and Landorus-Therian) — using it directly would make
-  every alternate form of a species display identically and collide in
-  any per-Pokémon list, table, or filter. Deriving from the form slug
-  instead is what actually makes every legal Pokémon/form uniquely
-  and correctly named.
-- PascalCase (not Title Case with spaces, e.g. "Landorus Therian") is a
-  deliberate, explicit convention for this dashboard, not an
-  accident of using the raw slug. It keeps names compact in dense table
-  cells and select options and gives every name a single unambiguous
-  rendering with no hyphen/space/case inconsistency to normalize per
-  view — while still reading as a proper noun (capitalized first letter),
-  unlike a strict camelCase rendering would.
+  the species-only slug (`landorus` for both Landorus-Incarnate and
+  Landorus-Therian), so using it directly would make a species' forms
+  collide. `display_name()` uses it only to split species from form, which
+  multi-word species (`great-tusk`) need.
+- This **replaced the earlier PascalCase convention** (`CharizardMegaY`,
+  `BasculegionMale`), as part of the 2026 Q4 upgrade
+  (`docs/upgrade-plan-2026q4.md`, B1). Those names read as internal
+  identifiers, and long ones broke mid-word in KPI cards.
 
 ### Ordering convention
 
@@ -783,9 +785,10 @@ paste, not a URL.
   line (`Species [(Nickname)] [@ Item]`, tolerating a `(M)`/`(F)` gender
   marker) plus its `Ability: ...` line and `- Move` lines, and resolves
   the species name to a `pokemon_key` by normalizing both sides (strip
-  spaces/hyphens/periods, lowercase) and matching against
-  `DATA.pokemon_names`' PascalCase values — e.g. "Landorus-Therian" and
-  "LandorusTherian" both normalize to "landorustherian". The pasted item/
+  spaces/hyphens/periods/apostrophes, lowercase) and matching against both
+  each `pokemon_key` and its display name. For example, Showdown's
+  "Charizard-Mega-Y" matches the key `charizard-mega-y`, and "Mega
+  Charizard Y" matches the display name. The pasted item/
   ability/moves are carried into that slot as-is (not just the species),
   so an imported team keeps its actual build rather than falling back to
   that Pokémon's top-recorded one. Unresolved species names are reported
@@ -793,13 +796,13 @@ paste, not a URL.
   Pokémon loaded.
 - **Export** (`exportTeamAsPokepaste(teamSlots)` in `teams.js`): the
   reverse direction, for Team Builder's export button. Since the
-  dashboard's own PascalCase display names (`LandorusTherian`) aren't
-  real Showdown syntax, export re-derives a hyphenated Title Case name
+  dashboard's display names ("Landorus (Therian)") aren't real Showdown
+  syntax, export re-derives a hyphenated Title Case name
   from `pokemon_key` instead (`keyToShowdownName()`: `landorus-therian` ->
   `Landorus-Therian`) — closer to real pokepaste convention, and a
   deliberately different transform from the dashboard's own display-name
-  convention (see "Pokémon name formatting: PascalCase" above, which is
-  unchanged for every other view). Each exported Pokémon uses that slot's
+  convention (see "Pokémon name formatting: player-facing names" above, which
+  every other view uses). Each exported Pokémon uses that slot's
   actual chosen item/ability/moves (whatever its selects currently hold,
   defaulting to but not fixed at the top-recorded pick — see "Team
   Builder" above), not an EV spread. EVs are omitted because **no source

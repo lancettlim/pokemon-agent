@@ -116,6 +116,14 @@
   }
   header p { margin: 4px 0 0; color: #b8bdd1; font-size: 0.9rem; }
   main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .staleness-banner {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border-bottom: 2px solid var(--warning);
+    padding: var(--space-3) var(--space-5);
+    text-align: center;
+    font-weight: 600;
+  }
 
   .kpi-row {
     display: grid;
@@ -135,12 +143,18 @@
   .kpi-card .kpi-sprite { width: var(--icon-lg); height: var(--icon-lg); object-fit: contain; flex: 0 0 auto; }
   .kpi-card .kpi-body { min-width: 0; }
   .kpi-card .label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-  .kpi-card .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; overflow-wrap: break-word; }
+  /* Names wrap only between words ("Mega Charizard Y"); break-word used to
+     split long single-word names mid-word. */
+  .kpi-card .value { font-size: 1.35rem; line-height: 1.2; font-weight: 700; margin-top: 4px; overflow-wrap: normal; word-break: normal; }
   .kpi-card .sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
 
   /* --- Tabs --- */
+  /* Wraps onto a second row on wide screens, so no tab is ever clipped
+     off the right edge with no hint that it exists. Narrow screens keep
+     the single scrollable row (see the max-width:720px block). */
   .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -409,17 +423,20 @@
   /* Profile header's dual-type display — the one place a type icon uses
      --icon-xl instead of the sm/md/lg scale (see "Icon size scale" above). */
   .type-badge-row.type-badge-lg { gap: var(--space-3); margin: var(--space-2) 0; }
-  /* A --icon-md emblem in a ring of its own type color: enough presence to
-     read as hero-level information without competing with the Pokémon's
-     hero art beside it (see renderTypeBadgeRow in app.js). */
+  /* A labelled pill tinted with the type's own color: an icon plus the
+     type name reads faster than a bare emblem, and stays smaller than the
+     Pokémon's art beside it (see renderTypeBadgeRow in app.js). */
   .type-badge-lg .type-pill-lg {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    padding: var(--space-1);
-    border: 3px solid var(--pill-type-color, var(--type-unknown));
-    background: var(--surface);
+    gap: var(--space-2);
+    border-radius: 999px;
+    padding: 4px 12px 4px 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    color: #fff;
+    background: var(--pill-type-color, var(--type-unknown));
   }
 
   /* Crops static/icons/types/*.png (wide 200x40 "icon + type name" badges,
@@ -617,6 +634,7 @@
   .team-analysis .status-warn { color: var(--warning); font-weight: 700; }
 
   @media (max-width: 720px) {
+    .tabs { flex-wrap: nowrap; }
     .team-builder-grid { grid-template-columns: 1fr; }
     .team-slots { grid-template-columns: repeat(2, 1fr); }
     .team-analysis-grid, .team-analysis-columns { grid-template-columns: 1fr; }
@@ -631,7 +649,8 @@
   .expansion-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
   .link-button { border:0; background:none; color:var(--blue); padding:0; cursor:pointer; text-decoration:underline; }
   .source-note { color:var(--muted); font-size:var(--font-sm); }
-  @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }\n  footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px; }
+  @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }
+  footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px; }
 
   @media (max-width: 720px) {
     main { padding: 16px; }
@@ -663,6 +682,9 @@
      page was built from, and whether its release gates passed — visible
      without opening the Data & Sources tab. #}
   <div class="header-meta">
+    {% if payload.kpis.current_regulation %}
+      <span class="header-chip">{{ payload.kpis.current_regulation.regulation_name }} (current)</span>
+    {% endif %}
     {% if payload.provenance.dataset_version %}
       <span class="header-chip">dataset {{ payload.provenance.dataset_version }}</span>
     {% endif %}
@@ -674,6 +696,10 @@
     {% endif %}
   </div>
 </header>
+{# Filled in by static/app.js (renderStalenessBanner) when the newest
+   tournament is over three weeks old, or when no tournament in the data
+   was played under the regulation in force today. #}
+<div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
 <main>
   <div class="kpi-row">
     <div class="kpi-card">
@@ -707,13 +733,14 @@
       </div>
     </div>
     <div class="kpi-card">
+      {% set current_reg = payload.kpis.current_regulation %}
       <div class="kpi-body">
-        <div class="label">Legal Pool (cumulative)</div>
-        <div class="value">
-          {% for r in payload.kpis.legal_pool_by_regulation %}{{ r.regulation_code }}: {{ r.cumulative_legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
-          {% if not payload.kpis.legal_pool_by_regulation %}—{% endif %}
+        <div class="label">Legal Pool{% if current_reg %} · {{ current_reg.regulation_code | upper }}{% endif %}</div>
+        <div class="value">{% if current_reg and current_reg.legal_pokemon_count is not none %}{{ current_reg.legal_pokemon_count }} Pokémon{% else %}—{% endif %}</div>
+        <div class="sub">
+          {% for r in payload.kpis.legal_pool_by_regulation %}{{ r.regulation_code | upper }} {{ r.legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
+          {% if payload.kpis.latest_snapshot_date %}<br>as of {{ payload.kpis.latest_snapshot_date }}{% endif %}
         </div>
-        <div class="sub">as of {{ payload.kpis.latest_snapshot_date or "—" }}</div>
       </div>
     </div>
   </div>
@@ -730,7 +757,8 @@
     <button class="tab-btn" role="tab" data-tab="players" aria-selected="false">Players &amp; Regions</button>
 
     <button class="tab-btn" role="tab" data-tab="compare" aria-selected="false">Compare</button>
-    <button class="tab-btn" role="tab" data-tab="core-explorer" aria-selected="false">Core Explorer</button>\n    <button class="tab-btn" role="tab" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
+    <button class="tab-btn" role="tab" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
+    <button class="tab-btn" role="tab" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
   </nav>
 
   <section class="tab-panel" data-panel="overview">
@@ -1282,7 +1310,8 @@
       <label>Core size <select id="core-size"><option value="pair">Pairs</option><option value="triple">Triples</option></select></label>
     </div>
     <div id="core-results"></div>
-  </section>\n  <section class="tab-panel" data-panel="data-sources" hidden>
+  </section>
+  <section class="tab-panel" data-panel="data-sources" hidden>
     <h2>Data &amp; Sources</h2>
     <p class="sub">
       Where every number on this dashboard comes from, and whether it passed
@@ -1426,6 +1455,7 @@
 <script>window.DASHBOARD_DATA = {{ data_json | safe }};</script>
 <script src="app.js"></script>
 <script src="matchup.js"></script>
-<script src="teams.js"></script>\n<script src="expansions.js"></script>
+<script src="teams.js"></script>
+<script src="expansions.js"></script>
 </body>
 </html>

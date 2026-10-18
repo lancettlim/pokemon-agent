@@ -444,11 +444,27 @@ Unlike other pipeline output in this repo (`data/normalized/`,
 output), **`docs/dashboard/index.html`, `docs/dashboard/app.js`,
 `docs/dashboard/matchup.js`, `docs/dashboard/teams.js`,
 `docs/dashboard/data.json`, and `docs/dashboard/images/` are committed to
-git.** There is still no CI/
-Actions workflow that *rebuilds* the dashboard (that would require live
-network access to all five extractors' upstream sources, which isn't
-something CI should do unsupervised) — after running `make dashboard`,
-`git add`/commit the regenerated files (including `images/`) as before.
+git.** They can be rebuilt by hand (`make dashboard`, then commit the
+regenerated files including `images/`), and since 2026-10 a weekly
+workflow also rebuilds them.
+
+**Weekly refresh** (`.github/workflows/refresh-dashboard.yml`): every
+Monday, and on demand, it restores the staging cache that
+`scheduled-extraction.yml` fills, re-extracts PokéAPI and Bulbagarden (the
+two sources whose image bytes the site needs), runs `make validate`, builds
+the dashboard, and opens or updates an `automation/dashboard-refresh` pull
+request. Nothing reaches `main` without review, and a failed release gate
+stops the run before any PR is opened. Before this workflow existed the
+published site went four months without a rebuild while its data aged out
+of the current regulation. The repo needs "Allow GitHub Actions to create
+and approve pull requests" enabled (Settings → Actions → General).
+
+**Staleness banner**: the page compares the newest tournament date in its
+data (`kpis.latest_event_date`) with the visitor's own clock and the
+regulation registry (`payload.regulations`). It shows a warning strip under
+the header if the newest event predates the regulation in force today, or
+is more than 21 days old. The check runs in the browser, not at build time,
+so a site that stops being rebuilt still reports that it's stale.
 
 What *is* automated (`.github/workflows/deploy-dashboard.yml`) is
 *publishing* what's committed: a push to `main` touching anything under

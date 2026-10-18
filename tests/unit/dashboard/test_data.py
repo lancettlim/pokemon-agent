@@ -46,11 +46,22 @@ def test_load_mart_coerces_numeric_fields(tmp_path):
     ]
 
 
-def test_to_pascal_case():
-    assert data.to_pascal_case("pikachu") == "Pikachu"
-    assert data.to_pascal_case("landorus-therian") == "LandorusTherian"
-    assert data.to_pascal_case("charizard-mega-x") == "CharizardMegaX"
-    assert data.to_pascal_case("porygon-z") == "PorygonZ"
+def test_display_name():
+    assert data.display_name("pikachu") == "Pikachu"
+    assert data.display_name("landorus-therian", "landorus") == "Landorus (Therian)"
+    assert data.display_name("charizard-mega-x", "charizard") == "Mega Charizard X"
+    assert data.display_name("absol-mega-z", "absol") == "Mega Absol Z"
+    assert data.display_name("basculegion-male", "basculegion") == "Basculegion \u2642"
+    assert data.display_name("meowstic-female-mega", "meowstic") == "Mega Meowstic \u2640"
+    assert data.display_name("ninetales-alola", "ninetales") == "Alolan Ninetales"
+    assert data.display_name("tauros-paldea-blaze-breed", "tauros") == "Paldean Tauros (Blaze)"
+    assert data.display_name("great-tusk", "great-tusk") == "Great Tusk"
+    assert data.display_name("porygon-z", "porygon-z") == "Porygon-Z"
+    assert data.display_name("mr-mime-galar", "mr-mime") == "Galarian Mr. Mime"
+
+
+def test_display_name_without_species_assumes_first_token():
+    assert data.display_name("rotom-wash") == "Rotom (Wash)"
 
 
 def test_load_pokemon_names_returns_empty_dict_when_file_missing(tmp_path):
@@ -71,7 +82,7 @@ def test_load_pokemon_names(tmp_path):
     )
     assert data.load_pokemon_names(tmp_path) == {
         "pikachu": "Pikachu",
-        "landorus-therian": "LandorusTherian",
+        "landorus-therian": "Landorus (Therian)",
     }
 
 
@@ -715,9 +726,9 @@ def test_join_pokemon_names_resolves_matchup_summary_best_and_worst(tmp_path):
 
     assert row["pokemon_name"] == "Incineroar"
     assert row["best_matchup_pokemon_name"] == "Torkoal"
-    # Display names come from pokemon_key via to_pascal_case, so the form
-    # suffix survives — "LycanrocDusk", not the species-only "Lycanroc".
-    assert row["worst_matchup_pokemon_name"] == "LycanrocDusk"
+    # Display names come from pokemon_key via display_name, so the form
+    # survives — "Lycanroc (Dusk)", not the species-only "Lycanroc".
+    assert row["worst_matchup_pokemon_name"] == "Lycanroc (Dusk)"
 
 
 def test_join_pokemon_names_leaves_a_null_best_matchup_alone(tmp_path):

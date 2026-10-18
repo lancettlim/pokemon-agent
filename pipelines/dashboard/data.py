@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+from pipelines.regulations import current_regulation, load_regulations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MARTS_DIR = REPO_ROOT / "data" / "marts"
@@ -252,19 +254,112 @@ MART_SLICERS = {
 }
 
 
-def to_pascal_case(slug: str) -> str:
-    """Converts a hyphen-delimited PokéAPI form slug (e.g.
-    "landorus-therian", "charizard-mega-x") into a PascalCase display name
-    ("LandorusTherian", "CharizardMegaX") per the dashboard design system's
-    Pokémon-naming convention (docs/design-system.md). Applied to
-    pokemon_key/form_name rather than the raw species-only pokemon_name
-    column, since form_name is what's actually unique per row — using the
-    bare species name would collide across forms (e.g. Landorus-Incarnate
-    and Landorus-Therian both reporting as "landorus")."""
-    parts = [part for part in slug.split("-") if part]
-    if not parts:
-        return slug
-    return "".join(part.capitalize() for part in parts)
+# Species whose display name isn't the title-cased slug: punctuation,
+# accents, or letters that the slug folds away.
+_SPECIES_NAME_OVERRIDES = {
+    "mr-mime": "Mr. Mime",
+    "mr-rime": "Mr. Rime",
+    "mime-jr": "Mime Jr.",
+    "farfetchd": "Farfetch\u2019d",
+    "sirfetchd": "Sirfetch\u2019d",
+    "type-null": "Type: Null",
+    "ho-oh": "Ho-Oh",
+    "porygon-z": "Porygon-Z",
+    "jangmo-o": "Jangmo-o",
+    "hakamo-o": "Hakamo-o",
+    "kommo-o": "Kommo-o",
+    "nidoran-f": "Nidoran\u2640",
+    "nidoran-m": "Nidoran\u2642",
+    "flabebe": "Flab\u00e9b\u00e9",
+    "wo-chien": "Wo-Chien",
+    "chien-pao": "Chien-Pao",
+    "ting-lu": "Ting-Lu",
+    "chi-yu": "Chi-Yu",
+}
+
+# Regional form suffix -> adjective that goes before the species name.
+_REGIONAL_PREFIXES = {
+    "alola": "Alolan",
+    "galar": "Galarian",
+    "hisui": "Hisuian",
+    "paldea": "Paldean",
+}
+
+# Gendered forms render as a symbol after the name rather than a word.
+_GENDER_SYMBOLS = {"male": "\u2642", "female": "\u2640"}
+
+
+def _title_words(slug: str) -> str:
+    return " ".join(part.capitalize() for part in slug.split("-") if part)
+
+
+def _infer_species(pokemon_key: str, known_species: set[str]) -> str:
+    """The longest known species slug that prefixes pokemon_key, falling
+    back to the first token when the species list isn't available."""
+    parts = pokemon_key.split("-")
+    for end in range(len(parts), 0, -1):
+        candidate = "-".join(parts[:end])
+        if candidate in known_species:
+            return candidate
+    return parts[0]
+
+
+def display_name(pokemon_key: str, species: str | None = None) -> str:
+    """A player-facing name for a pokemon_key (PokéAPI form slug):
+
+        charizard-mega-y     -> Mega Charizard Y
+        absol-mega-z         -> Mega Absol Z
+        meowstic-male-mega   -> Mega Meowstic \u2642
+        basculegion-male     -> Basculegion \u2642
+        ninetales-alola      -> Alolan Ninetales
+        tauros-paldea-aqua-breed -> Paldean Tauros (Aqua)
+        landorus-therian     -> Landorus (Therian)
+        great-tusk           -> Great Tusk
+        farfetchd            -> Farfetch\u2019d
+
+    `species` is PokéAPI's species slug (data/normalized/pokemon.csv's
+    pokemon_name). It's what separates the species from the form suffix
+    for multi-word species like great-tusk. Without it, the first hyphen
+    token is assumed to be the species.
+
+    This replaced the PascalCase convention ("CharizardMegaY",
+    "BasculegionMale"): those names read as internal identifiers, and long
+    ones broke mid-word in the KPI cards (docs/upgrade-plan-2026q4.md, B1).
+    """
+    if not pokemon_key:
+        return pokemon_key
+    species = species or pokemon_key.split("-")[0]
+    if not pokemon_key.startswith(species):
+        species = pokemon_key.split("-")[0]
+    base = _SPECIES_NAME_OVERRIDES.get(species, _title_words(species))
+    form_parts = [p for p in pokemon_key[len(species) :].split("-") if p]
+    if not form_parts:
+        return base
+
+    prefix = ""
+    suffix_tokens: list[str] = []
+    if "mega" in form_parts:
+        prefix = "Mega "
+        form_parts.remove("mega")
+    elif "gmax" in form_parts:
+        prefix = "Gigantamax "
+        form_parts.remove("gmax")
+    if form_parts and form_parts[0] in _REGIONAL_PREFIXES:
+        prefix += _REGIONAL_PREFIXES[form_parts.pop(0)] + " "
+        if form_parts and form_parts[-1] == "breed":
+            form_parts.pop()
+    gender = ""
+    if form_parts and form_parts[0] in _GENDER_SYMBOLS:
+        gender = " " + _GENDER_SYMBOLS[form_parts.pop(0)]
+    # A lone trailing letter after "mega" is the X/Y/Z variant letter.
+    if prefix.startswith("Mega") and len(form_parts) == 1 and len(form_parts[0]) == 1:
+        suffix_tokens.append(form_parts.pop().upper())
+    name = prefix + base + gender
+    if suffix_tokens:
+        name += " " + " ".join(suffix_tokens)
+    if form_parts:
+        name += f" ({' '.join(p.capitalize() for p in form_parts)})"
+    return name
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -299,14 +394,19 @@ def load_mart(marts_dir: Path, mart_name: str) -> list[dict[str, Any]]:
 
 
 def load_pokemon_names(normalized_dir: Path = DEFAULT_NORMALIZED_DIR) -> dict[str, str]:
-    """pokemon_key -> PascalCase display name, for friendlier labels than
-    raw keys. Derived from pokemon_key itself (== form_name) via
-    to_pascal_case rather than the CSV's own pokemon_name column, which is
-    species-only and collides across a species' multiple forms. Returns {}
-    gracefully if data/normalized/pokemon.csv isn't present."""
+    """pokemon_key -> player-facing display name (see display_name). The
+    name comes from pokemon_key (== form_name), using the CSV's species-only
+    pokemon_name column only to split species from form, so a species'
+    forms never collide. Returns {} gracefully if
+    data/normalized/pokemon.csv isn't present."""
+    rows = _read_csv_rows(normalized_dir / "pokemon.csv")
+    known_species = {row.get("pokemon_name", "") for row in rows}
     return {
-        row["pokemon_key"]: to_pascal_case(row["pokemon_key"])
-        for row in _read_csv_rows(normalized_dir / "pokemon.csv")
+        row["pokemon_key"]: display_name(
+            row["pokemon_key"],
+            row.get("pokemon_name") or _infer_species(row["pokemon_key"], known_species),
+        )
+        for row in rows
     }
 
 
@@ -393,7 +493,7 @@ def load_release_history(manifests_dir: Path = DEFAULT_MANIFESTS_DIR) -> list[di
 
 
 # <key column> -> <display-name column> pairs resolved against the
-# pokemon_key -> PascalCase name map, so every mart row carries a
+# pokemon_key -> display name map (see display_name), so every mart row carries a
 # ready-to-render name rather than each view looking it up client-side.
 _NAME_JOINS = (
     ("pokemon_key", "pokemon_name"),
@@ -424,7 +524,35 @@ def _join_pokemon_names(
     return joined
 
 
-def compute_kpis(marts: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+def _current_regulation_kpi(
+    legal_pool_by_regulation: list[dict[str, Any]], today: date | None
+) -> dict[str, Any] | None:
+    """The regulation in force today (dbt/seeds/champions_regulations.csv)
+    and its legal-pool size. This is what the header and the legal-pool KPI
+    lead with, so the page always says which format it's describing."""
+    regulation = current_regulation(today)
+    if regulation is None:
+        return None
+    legal_count = next(
+        (
+            r["legal_pokemon_count"]
+            for r in legal_pool_by_regulation
+            if r["regulation_code"] == regulation.regulation_code
+        ),
+        None,
+    )
+    return {
+        "regulation_code": regulation.regulation_code,
+        "regulation_name": regulation.regulation_name,
+        "start_date": regulation.start_date.isoformat(),
+        "end_date": regulation.end_date.isoformat(),
+        "legal_pokemon_count": legal_count,
+    }
+
+
+def compute_kpis(
+    marts: dict[str, list[dict[str, Any]]], today: date | None = None
+) -> dict[str, Any]:
     usage_rows = [r for r in marts["pokemon_usage_summary"] if not r.get("event_tier")]
     legality_rows = marts["legality_summary_by_regulation"]
     win_rate_rows = marts["pokemon_win_rate_summary"]
@@ -481,6 +609,18 @@ def compute_kpis(marts: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     return {
         "latest_snapshot_date": latest_snapshot_date,
         "legal_pool_by_regulation": legal_pool_by_regulation,
+        "current_regulation": _current_regulation_kpi(legal_pool_by_regulation, today),
+        # Newest tournament the marts cover. The staleness banner compares
+        # this against the viewer's own clock (static/app.js), so a site
+        # nobody has rebuilt still says it's out of date.
+        "latest_event_date": max(
+            (
+                r["event_date"]
+                for r in marts.get("pokemon_usage_by_event_date", [])
+                if r.get("event_date")
+            ),
+            default=None,
+        ),
         "distinct_pokemon_used": len(usage_rows),
         "top_used_pokemon": top_used,
         "top_win_rate_pokemon": top_win_rate,
@@ -605,4 +745,15 @@ def build_payload(
         # and the pokepaste import/export + Matchup tab's ad-hoc species
         # lookups (docs/design-system.md's Top Teams / Matchup tabs).
         "pokemon_names": pokemon_names,
+        # The regulation registry, so the page can work out which set is in
+        # force on the day it's viewed, not the day it was built.
+        "regulations": [
+            {
+                "regulation_code": r.regulation_code,
+                "regulation_name": r.regulation_name,
+                "start_date": r.start_date.isoformat(),
+                "end_date": r.end_date.isoformat(),
+            }
+            for r in load_regulations()
+        ],
     }
