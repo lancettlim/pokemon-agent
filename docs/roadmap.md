@@ -4,6 +4,11 @@ The original implementation backlog is closed: the ingestion, normalization,
 release, renderer, dashboard, and platform-hardening work is shipped. This
 roadmap captures the next product cycle and keeps data limitations explicit.
 
+> **Next up (2026 Q4):** `docs/upgrade-plan-2026q4.md` comes before the
+> phases below. The published data predates Reg M-C, and a hardcoded M-A
+> format filter drops Worlds and every M-C event. That plan fixes data
+> currency first, then overhauls the dashboard UI.
+
 ## Phase 1 — Team Analyst 1.0
 
 Status: implemented in the Team Builder pass.
