@@ -4,10 +4,11 @@ The original implementation backlog is closed: the ingestion, normalization,
 release, renderer, dashboard, and platform-hardening work is shipped. This
 roadmap captures the next product cycle and keeps data limitations explicit.
 
-> **Next up (2026 Q4):** `docs/upgrade-plan-2026q4.md` comes before the
-> phases below. The published data predates Reg M-C, and a hardcoded M-A
-> format filter drops Worlds and every M-C event. That plan fixes data
-> currency first, then overhauls the dashboard UI.
+> **Next up (2026 Q4 → 2027 Q1):** `docs/upgrade-plan-2027q1.md` comes before
+> the phases below. It covers routing and UI density fixes, real-set analytics,
+> event and player pages, and regulation-rollover safety before M-C ends on
+> 2026-12-02. The previous cycle, `docs/upgrade-plan-2026q4.md`, shipped
+> Sprints 1–4.
 
 ## Phase 1 — Team Analyst 1.0
 

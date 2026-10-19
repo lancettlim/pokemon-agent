@@ -40,6 +40,8 @@ previous:
   notes, including which are in v1 scope vs. deferred to later phases
 - `docs/todo.md` — outstanding work items and the v1 definition-of-done
   checklist
+- `docs/upgrade-plan-2027q1.md` — the current product cycle: UI review
+  findings and feature tracks, sequenced into sprints
 - `docs/backlog.md` — the uncommitted wish list of post-v1 features, sized
   and dependency-tagged. Items graduate one direction only, backlog →
   `todo.md`, once accepted; nothing here is a commitment or a scope change
