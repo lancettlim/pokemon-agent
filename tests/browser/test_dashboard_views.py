@@ -288,3 +288,128 @@ def test_what_changed_names_its_baseline_and_defaults_to_early_vs_recent(site_ur
     assert "(1 event, 395 teams)" in page.locator('[data-movers="previous"]').inner_text()
     page.click('[data-movers="previous"]')
     assert "What changed in Reg M-C vs Reg M-B" in panel.text_content()
+
+
+def test_player_search_opens_the_player_page(site_url, open_page):
+    """C3: search by name, then the player's events, Pokémon and record
+    against archetypes, in the selected regulation."""
+    page = open_page()
+    page.goto(site_url + "#/players")
+    page.wait_for_load_state("networkidle")
+    # No query: the regulation's top-8 finishers.
+    assert page.locator("#player-search-table tbody tr").count() == 8
+    assert "12 players on record" in page.locator("#player-search-note").inner_text()
+    page.fill("#player-search", "player 1")
+    assert page.locator("#player-search-table tbody tr").count() == 4  # 1, 10, 11, 12
+    page.fill("#player-search", "nobody")
+    assert "No player on record" in page.locator("#player-search-table").inner_text()
+    page.fill("#player-search", "")
+    page.locator("#player-search-table tbody tr").first.get_by_text("Player 1").click()
+    page.wait_for_function("location.hash === '#/player/P000'")
+
+    assert "Player 1" in page.locator("#player-header").inner_text()
+    assert "best finish 1st" in page.locator("#player-header").inner_text()
+    # Two M-C events on the page; the M-B one is a link away.
+    cards = page.locator("#player-teams .team-card")
+    assert cards.count() == 2
+    assert "Player 1" not in cards.first.locator(".team-card-who").inner_text()
+    assert cards.first.locator("[data-copy]").count() == 1
+    note = page.locator("#player-events-note")
+    assert "2 events in Reg M-C" in note.inner_text()
+    assert note.locator("a").first.get_attribute("href").endswith("reg=m-b#/player/P000")
+    assert page.locator("#player-pokemon-table tbody tr").count() > 0
+    archetypes = page.locator("#player-archetype-table tbody tr")
+    assert archetypes.count() == 2
+    assert "3–1" in archetypes.first.inner_text()
+    # The Players tab is highlighted while a player page is open.
+    selected = page.locator('.tab-btn[aria-selected="true"]')
+    assert selected.get_attribute("data-tab") == "players"
+    assert not page.errors
+
+
+def test_an_unknown_player_says_so(site_url, open_page):
+    page = open_page()
+    page.goto(site_url + "#/player/NOPE")
+    page.wait_for_load_state("networkidle")
+    assert "No player with id" in page.locator("#player-header").inner_text()
+    assert not page.errors
+
+
+def test_data_section_has_a_glossary_table_cards_and_a_dictionary(site_url, open_page):
+    """U4/D2: How to read, Tables and Dictionary, all generated."""
+    page = open_page()
+    page.goto(site_url + "#/data/how-to-read")
+    page.wait_for_load_state("networkidle")
+    glossary = page.locator("#ds-glossary")
+    assert glossary.locator("dt").count() >= 10
+    assert "Wilson bound" in glossary.inner_text()
+
+    page.click('[data-panel="data-sources"] .subtab-btn[data-route="tables"]')
+    page.wait_for_function("location.hash === '#/data/tables'")
+    assert "Dataset 9.9.0, published 2026-10-15" in page.locator("#ds-tables-lead").inner_text()
+    release = page.locator("#ds-release-cards .data-card")
+    assert release.count() == 2
+    link = release.first.locator("a")
+    assert link.inner_text() == "Download the 9.9.0 package (zip)"
+    assert link.get_attribute("href").endswith("pokemon-champions-data-9.9.0.zip")
+    # Descriptions are for readers: no maintainer pointers into the repo.
+    assert "schema.json" not in page.locator("#ds-release-cards").inner_text()
+    marts = page.locator("#ds-mart-cards .data-card")
+    assert marts.count() > 10
+    assert "data/" in page.locator("#ds-mart-cards").inner_text()
+
+    page.click('[data-panel="data-sources"] .subtab-btn[data-route="dictionary"]')
+    entry = page.locator("#dict-tournament_team_results")
+    entry.locator("summary").click()
+    fields = entry.locator("tbody tr").all_inner_texts()
+    assert any(row.startswith("placement") for row in fields)
+    # Display names the shards drop are not listed as fields.
+    assert not any(row.startswith("pokemon_name") for row in fields)
+    assert not page.errors
+
+
+def test_glossary_terms_explain_themselves_where_they_appear(site_url, open_page):
+    """U4: jargon is a .term with its definition on hover and focus."""
+    page = open_page()
+    page.goto(site_url + "#/tiers")
+    page.wait_for_load_state("networkidle")
+    page.locator("details.method:has(#tiers-method) summary").click()
+    page.locator('#tiers-method .term:has-text("Wilson lower bound")').hover()
+    bubble = page.locator("#tip-bubble")
+    assert bubble.is_visible() and "95% confidence interval" in bubble.inner_text()
+
+    page.goto(site_url + "#/usage")
+    page.wait_for_selector("#usage-table th .term")
+
+    page.goto(site_url + "#/pokemon/garchomp")
+    page.wait_for_load_state("networkidle")
+    hhi = page.locator('#profile-item-concentration .term:has-text("HHI")').first
+    hhi.focus()
+    assert "Herfindahl" in page.locator("#tip-bubble").inner_text()
+
+    page.goto(site_url)
+    page.wait_for_load_state("networkidle")
+    assert page.locator('#movers-panel .term:has-text("pts")').count() == 1
+    assert not page.errors
+
+
+def test_a_tap_shows_a_shares_denominator(site_url, open_page):
+    """U4: every share's "N of M" shows on tap, not only on hover."""
+    page = open_page(390, 844, touch=True)
+    page.goto(site_url + "#/pokemon/garchomp")
+    page.wait_for_load_state("networkidle")
+    cell = page.locator("#profile-item-table td[data-tip]").first
+    cell.tap()
+    bubble = page.locator("#tip-bubble")
+    assert bubble.is_visible() and " of " in bubble.inner_text()
+    # A glossary term opens on tap too, and a second tap closes it.
+    term = page.locator('#profile-item-concentration .term:has-text("HHI")')
+    term.tap()
+    assert bubble.is_visible() and "Herfindahl" in bubble.inner_text()
+    term.tap()
+    assert bubble.is_hidden()
+    cell.tap()
+    # Changing view closes it.
+    page.goto(site_url + "#/usage")
+    page.wait_for_load_state("networkidle")
+    assert bubble.is_hidden()

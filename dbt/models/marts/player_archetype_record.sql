@@ -38,6 +38,11 @@ select
   own.player_id,
   own.regulation_code,
   opponent_archetype.archetype_key as opponent_archetype_key,
+  -- The archetype's anchor core, so a consumer can name it without the
+  -- whole archetype mart.
+  any_value(
+    summary.pokemon_key_a || '|' || summary.pokemon_key_b || '|' || summary.pokemon_key_c
+  ) as opponent_pokemon_keys,
   count(*) as matches_played,
   sum(case when sides.winner_team_id = sides.own_team_id then 1 else 0 end) as wins,
   sum(case when sides.winner_team_id = sides.own_team_id then 0 else 1 end) as losses,
@@ -50,6 +55,8 @@ inner join teams own
   on own.team_id = sides.own_team_id
 inner join archetypes opponent_archetype
   on opponent_archetype.team_id = sides.opponent_team_id
+left join {{ ref('detected_archetype_summary') }} summary
+  on summary.archetype_key = opponent_archetype.archetype_key
 group by own.player_id, own.regulation_code, opponent_archetype.archetype_key
 having count(*) >= 2
 order by own.player_id, own.regulation_code, matches_played desc

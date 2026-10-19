@@ -17,11 +17,11 @@ labelled everywhere it appears, and the site stays static with no backend.
 | U1 Real routing | Done (Sprint 5) |
 | U2 Compact chrome | Done (Sprint 5): content starts at 114px desktop, 110px phone |
 | U3 Regulation rollover | Done (Sprint 5), with unit and browser fixture tests |
-| U4 Copy pass | Repo paths and internal names removed (Sprint 5); glossary and denominators not started |
+| U4 Copy pass | Done (Sprints 5 and 9): copy, glossary terms, tappable denominators |
 | U5 Shared table | Done (Sprint 6): Usage, Profile, Speed Tiers, Core Explorer, Players |
 | U6 Type popover | Done (Sprint 6) |
 | U7 Mobile fixes | Done (Sprint 6) |
-| U8 Browser smoke tests + budget | Done (Sprint 5): core payload 448KB compressed |
+| U8 Browser smoke tests + budget | Done (Sprint 5): core payload 483KB compressed after Sprint 9 (448KB at Sprint 5) |
 | P1 Real sets | Done (Sprint 6) |
 | P2 Pokémon hub v2 | Done (Sprint 8) |
 | P3 Calculator presets | Done (Sprint 8) |
@@ -29,9 +29,10 @@ labelled everywhere it appears, and the site stays static with no backend.
 | P5 Starter teams | Done (Sprint 7) |
 | C1 Event pages | Done (Sprint 7) |
 | C2 Top Teams | Done (Sprint 7) |
-| C3 Player pages | Not started |
+| C3 Player pages | Done (Sprint 9) |
 | C4 Shareable outputs | Done (Sprint 8) |
-| D1–D2 Data access | Not started |
+| D1 Release assets | Built (Sprint 9); publishing 0.4.0 waits on a run of `cut-release.yml` |
+| D2 Data section | Done (Sprint 9): table cards and a generated dictionary |
 | D3 Rollover playbook | Done (Sprint 7), with an end-to-end M-D dry run |
 
 ---

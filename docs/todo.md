@@ -821,7 +821,15 @@ table tracks sprint progress.
   `default_scope_for` and `app.js`'s `resolveRegulationScope` apply the
   same rule). Covered by `tests/unit/dashboard/test_data.py` and
   `tests/browser/test_regulation_rollover.py` against a fixture M-D row.
-- [ ] Copy pass, glossary tooltips, denominators on every percentage (U4).
+- [x] Copy pass, glossary tooltips, denominators on every percentage (U4).
+  Repo paths and internal names are gone from the page (the Data section's
+  descriptions strip schema.yml's "See data/…" pointers too). One `GLOSSARY`
+  map in `static/app.js` backs both the inline terms (usage share, roster
+  slot, Wilson bound, HHI, Locked in, synergy lift, pts, top cut and more)
+  and the Data section's "How to read this page". Table cells show their
+  denominator ("487 of 5,644 team sheets") with the same tooltip, which now
+  opens on tap as well as hover: a tap's compatibility mouseover and focus
+  used to open the tip only for the click to close it again.
 - [x] Shared sortable table component, adopted in Usage, Profile, Speed Tiers, Cores, Players (U5).
   `createDataTable` in `static/app.js`: sticky sortable header, sprite +
   name cells, inline share bars, row → route, two-line rows on phones.
@@ -836,7 +844,7 @@ table tracks sprint progress.
   route at 1440px and 390px and fails on a console error or an empty
   panel; it also covers Back/Forward, legacy links and the default view's
   fetch count. The core payload (page, scripts, `core.json` and the default
-  regulation's shard) is held under 500KB compressed (448KB now). CI
+  regulation's shard) is held under 500KB compressed (483KB after Sprint 9, up from 448KB). CI
   installs Chromium for them.
 - [x] `pokemon_set_variants` mart and real-set tabs on the profile (P1).
   Exact (item + ability + nature + 4 moves) and core (item + ability + top
@@ -872,7 +880,15 @@ table tracks sprint progress.
   offer win rate as a sort; `?tier=` and `?sort=` live in the route. Every
   card has Copy for Showdown and Use this team (`#/builder/team/<id>`);
   converged lists load their Limitless sets (`team_list_sheets`).
-- [ ] Player pages (C3)
+- [x] Player pages (C3).
+  The Players tab opens on "Find a player" (`#/players`): a name search
+  over `player_index`, derived at build time from `tournament_team_results`
+  (names as the sources spell them). `#/player/<id>` lists their events in
+  the selected regulation as team cards (with sets where a top-16 sheet
+  exists), links their other regulations, their most-brought Pokémon, and
+  their team-level record against detected archetypes from the new
+  `player_archetype_record` mart (at least two matches, labelled team vs
+  team). Code in `static/players.js`.
 - [x] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4).
   Usage's "Events" filter (latest, last N, since an event) compares the
   window with the regulation's earlier events. `render-share-cards`
@@ -882,8 +898,23 @@ table tracks sprint progress.
   data table has "Copy with citation". The What changed panel names its
   baseline's events and teams and opens on early vs recent events when
   the previous regulation is thin (M-B is one Worlds field).
-- [ ] Publish 0.4.0 as a Release asset; update the release contract (D1)
-- [ ] Data section table cards and a generated data dictionary (D2)
+- [x] Release-asset distribution and the release contract change (D1); **publishing 0.4.0 is a manual step.**
+  `release --package` zips the CSVs, images, manifest and changelog into
+  `releases/packages/` and records `{file_name, sha256, size_bytes,
+  release_tag, url}` as the manifest's `package` block; from 0.4.0 only the
+  manifest and changelog are committed (`docs/dataset-spec.md`'s
+  "Distribution"). The new `cut-release.yml` workflow (manual dispatch)
+  refreshes, validates, packages, creates the GitHub Release with the zip
+  and opens a PR with the manifest and changelog. A local dry run built a
+  62MB package. To publish, run that workflow with version `0.4.0` and the
+  note "Releases before 0.4.0 exclude Reg M-B and M-C events."
+- [x] Data section table cards and a generated data dictionary (D2).
+  `pipelines/dashboard/dictionary.py` builds both at dashboard build time,
+  from `dbt/models/*/schema.yml` and the newest release manifest, into one
+  on-demand `data/data_dictionary.json`. Data → Tables has a card per
+  release table (description, rows, key, download: the release zip from
+  0.4.0, the committed CSV before) and per served mart (rows, grain, JSON
+  file); Data → Dictionary lists every served field with its description.
 - [x] Regulation rollover playbook and M-D dry run (D3).
   `docs/dashboard.md`'s "Regulation rollover playbook". The dry run added a
   fixture M-D row and ran the real pipeline end to end; its one finding

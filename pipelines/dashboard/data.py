@@ -357,6 +357,45 @@ def top_cut_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in team_results if r.get("placement") and r["placement"] <= TOP_CUT_PLACEMENT]
 
 
+def player_index(
+    team_results: list[dict[str, Any]], events: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """One row per player for the Players search and player pages
+    (docs/upgrade-plan-2027q1.md, C3): their name and country as the source
+    spells them, how many teams they have on record (one per event), their
+    best finish, their latest event date and the regulations they played.
+    Nothing is inferred beyond the tournament data."""
+    dates = {e["event_id"]: e.get("event_date") or "" for e in events}
+    players: dict[str, dict[str, Any]] = {}
+    for row in team_results:
+        player_id = row.get("player_id")
+        if not player_id:
+            continue
+        entry = players.setdefault(
+            player_id,
+            {
+                "player_id": player_id,
+                "player_name": row.get("player_name"),
+                "player_country": row.get("player_country"),
+                "team_count": 0,
+                "best_placement": None,
+                "latest_event_date": "",
+                "regulations": set(),
+            },
+        )
+        entry["team_count"] += 1
+        placement = row.get("placement")
+        if placement and (entry["best_placement"] is None or placement < entry["best_placement"]):
+            entry["best_placement"] = placement
+        entry["latest_event_date"] = max(entry["latest_event_date"], dates.get(row["event_id"], ""))
+        if row.get("regulation_code"):
+            entry["regulations"].add(row["regulation_code"])
+    return [
+        {**entry, "regulations": "|".join(sorted(entry["regulations"]))}
+        for entry in sorted(players.values(), key=lambda e: (e["player_name"] or "").lower())
+    ]
+
+
 MART_SLICERS = {
     "pokemon_set_variants": _slice_set_variants,
     "tournament_team_results": _slice_team_results,
@@ -896,7 +935,9 @@ def summarize_event_window_movers(
         for row in event_usage_rows:
             if row.get("event_id") not in ids:
                 continue
-            usage[row["pokemon_key"]] = usage.get(row["pokemon_key"], 0) + (row.get("usage_count") or 0)
+            usage[row["pokemon_key"]] = usage.get(row["pokemon_key"], 0) + (
+                row.get("usage_count") or 0
+            )
             slots[row["event_id"]] = row.get("event_slot_count") or 0
         return usage, sum(slots.values())
 
@@ -923,8 +964,12 @@ def summarize_event_window_movers(
     by_id = {e["event_id"]: e for e in ordered}
     early_teams = sum(by_id[i].get("team_count") or 0 for i in early_ids)
     recent_teams = sum(by_id[i].get("team_count") or 0 for i in recent_ids)
-    risers = sorted((r for r in rows if r["usage_share_delta"] > 0), key=lambda r: -r["usage_share_delta"])
-    fallers = sorted((r for r in rows if r["usage_share_delta"] < 0), key=lambda r: r["usage_share_delta"])
+    risers = sorted(
+        (r for r in rows if r["usage_share_delta"] > 0), key=lambda r: -r["usage_share_delta"]
+    )
+    fallers = sorted(
+        (r for r in rows if r["usage_share_delta"] < 0), key=lambda r: r["usage_share_delta"]
+    )
     return {
         "early_events": [short_event_name(by_id[i].get("event_name")) for i in early_ids],
         "recent_events": [short_event_name(by_id[i].get("event_name")) for i in recent_ids],
@@ -1247,6 +1292,9 @@ def build_payload(
     pokemon_names = load_pokemon_names(normalized_dir)
     marts = _join_pokemon_names(marts, pokemon_names)
     marts["tournament_top_cut_teams"] = top_cut_teams(marts.get("tournament_team_results", []))
+    marts["player_index"] = player_index(
+        marts.get("tournament_team_results", []), marts.get("tournament_event_summary", [])
+    )
     kpis_by_scope, default_scope = compute_kpis_by_scope(marts, today, regulations)
     return {
         "generated_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),

@@ -37,11 +37,16 @@ ROUTES = [
     "#/cores/incineroar",
     "#/cores/incineroar/triple",
     "#/players",
+    "#/players/regions",
     "#/players/signatures",
+    "#/player/P000",
     "#/builder",
     "#/builder/garchomp.0,gholdengo.1",
     "#/builder/add/garchomp.0",
     "#/data",
+    "#/data/how-to-read",
+    "#/data/tables",
+    "#/data/dictionary",
     "#/data/gates",
 ]
 

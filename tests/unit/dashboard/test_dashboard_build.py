@@ -154,12 +154,16 @@ def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_pat
 
     # Reassembling the shards gives back every mart, each scoped mart's
     # rows split across its scope files without loss.
+    # The Data section's dictionary and table cards ride along as one more
+    # on-demand file; they describe the marts rather than being one.
     reassembled: dict = {}
     files = feed["mart_files"]
-    for path in [files["core"], *files["scopes"].values(), *files["on_demand"].values()]:
+    paths = {files["core"], *files["scopes"].values(), *files["on_demand"].values()}
+    for path in sorted(paths):
         for name, rows in json.loads((output_dir / path).read_text(encoding="utf-8")).items():
             reassembled.setdefault(name, []).extend(rows)
-    assert set(reassembled) == set(payload["marts"])
+    assert set(reassembled) == set(payload["marts"]) | {"data_dictionary", "release_tables"}
+    assert {entry["table"] for entry in reassembled["data_dictionary"]} == set(payload["marts"])
     for name, rows in payload["marts"].items():
         assert len(reassembled[name]) == len(rows), name
 

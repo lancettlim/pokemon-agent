@@ -661,7 +661,11 @@
     if (tipOwner) tipOwner.removeAttribute("aria-describedby");
     tipOwner = null;
   }
-  document.addEventListener("mouseover", function (e) {
+  // pointerover rather than mouseover: a tap also fires a compatibility
+  // mouseover just before its click, which would show the tip only for the
+  // click to toggle it straight back off. Taps are handled by the click.
+  document.addEventListener("pointerover", function (e) {
+    if (e.pointerType === "touch") return;
     var owner = e.target.closest && e.target.closest("[data-tip]");
     if (owner) showTip(owner);
     else if (tipOwner && !(e.target.closest && e.target.closest(".tip-bubble"))) hideTip();
@@ -673,19 +677,54 @@
   document.addEventListener("focusout", function (e) {
     if (tipOwner && e.target === tipOwner) hideTip();
   });
+  // A second tap on the same owner closes its tip. Whether it was open is
+  // read when the press starts, since the press itself can open it (a tap
+  // focuses a term, and focusin shows the tip) before the click lands.
+  var pressCloses = false;
+  document.addEventListener("pointerdown", function (e) {
+    var owner = e.target.closest && e.target.closest("[data-tip]");
+    pressCloses = e.pointerType === "touch" && !!owner && tipOwner === owner && !tipBubble.hidden;
+  });
   document.addEventListener("click", function (e) {
     var owner = e.target.closest && e.target.closest("[data-tip]");
     if (owner) {
-      if (tipOwner === owner && !tipBubble.hidden && owner.tagName !== "BUTTON") hideTip();
+      if (pressCloses) hideTip();
       else showTip(owner);
     } else if (tipOwner) {
       hideTip();
     }
+    pressCloses = false;
   });
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") hideTip();
   });
   window.addEventListener("scroll", hideTip, { passive: true });
+
+  // ---------- glossary (docs/upgrade-plan-2027q1.md, U4) ----------
+  // One definition per term, used both by the inline tooltips (termHtml)
+  // and by the Data section's "How to read this page", so the two can't
+  // disagree.
+  var GLOSSARY = {
+    usage: ["Usage share", "A Pokémon's share of every roster slot in the selected events. Each team has six slots, so 8.7% means it was on about half of all teams."],
+    slot: ["Roster slot", "One of the six places on a team. Usage shares are counted over all of them."],
+    wilson: ["Wilson bound", "The low end of a 95% confidence interval on a win rate. A 3–0 record and a 300–200 record both look strong; the Wilson bound tells them apart by sample size."],
+    hhi: ["HHI", "How concentrated a Pokémon's item (or ability) choice is, from 0 to 1: 1 means everyone runs the same one, near 0 means the choice is spread out. The Herfindahl–Hirschman index."],
+    locked: ["Locked in", "An HHI of 0.5 or more: one choice crowds out the rest."],
+    lift: ["Synergy lift", "How much more often two (or three) Pokémon share a team than their popularity alone predicts. ×1.0 is chance; ×2.0 is twice as often."],
+    pts: ["pts", "Percentage points: the plain difference between two percentages. 4.6% to 8.2% is +3.6 pts."],
+    topcut: ["Top cut", "A finish in the top 8 (for usage) or top 16 (for team lists) of an event."],
+    weighted: ["Placement-weighted", "Usage where each team counts 1/placement: a win counts fully, a 10th place a tenth."],
+    realset: ["Real set", "An item, ability, nature and four moves that appeared together on actual team sheets. A core set groups item, ability and the three most common moves."],
+    teamvsteam: ["Team vs team", "Head-to-head records credit the whole team that won. No source says which four Pokémon were brought to a game."],
+    n: ["n", "The sample size behind a figure: teams, team sheets or matches, as labelled."],
+  };
+
+  function termHtml(id, label) {
+    var entry = GLOSSARY[id];
+    if (!entry) return escapeHtml(label);
+    return '<abbr class="term" tabindex="0" data-tip="' + escapeHtml(entry[1]) + '">' +
+      escapeHtml(label || entry[0]) + "</abbr>";
+  }
 
   // ---------- Showdown export and copying ----------
 
@@ -854,7 +893,8 @@
   // event_date, event_team_count, pokemon_keys, sets?}. opts.headline
   // overrides the placement line (a converged list has none);
   // opts.useHref is where "Use this team" goes (null for no button);
-  // opts.hideEvent drops the event link on the event's own page.
+  // opts.hideEvent drops the event link on the event's own page, and
+  // opts.hidePlayer the player link on the player's.
   function teamCardHtml(team, opts) {
     opts = opts || {};
     var sets = team.sets || (team.team_id ? teamSheet(team.team_id) : null);
@@ -871,7 +911,7 @@
       ? '<span class="team-card-wr">' + formatPercent(team.win_rate) + " win rate</span>"
       : "";
     var who = [];
-    if (team.player_name) {
+    if (team.player_name && !opts.hidePlayer) {
       who.push(
         (team.player_id ? '<a href="' + routeHash("player", [team.player_id]) + '">' : "<span>") +
         escapeHtml(team.player_name) + (team.player_id ? "</a>" : "</span>") +
@@ -1134,7 +1174,10 @@
     columns.forEach(function (col) {
       var th = document.createElement("th");
       th.scope = "col";
-      th.textContent = col.label;
+      // col.term names a GLOSSARY entry: the header becomes that term's
+      // tooltip (U4).
+      if (col.term) th.innerHTML = termHtml(col.term, col.label);
+      else th.textContent = col.label;
       if (isNumeric(col)) th.classList.add("num");
       if (isSortable(col)) {
         th.classList.add("sortable");
@@ -1202,9 +1245,12 @@
             if (isNumeric(col)) cls.push("num");
             cls.push(col.main ? "col-main" : "col-detail");
             if (col.hideOnPhone) cls.push("col-phone-hide");
+            // col.title is the cell's denominator or detail ("487 of 5,644
+            // roster slots"), shown with the shared tooltip so a tap shows
+            // it too (docs/upgrade-plan-2027q1.md, U4).
             var title = col.title ? col.title(row) : "";
             return '<td class="' + cls.join(" ") + '" data-label="' + escapeHtml(col.label) + '"' +
-              (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" + cellHtml(col, row, maxByKey) + "</td>";
+              (title ? ' data-tip="' + escapeHtml(title) + '"' : "") + ">" + cellHtml(col, row, maxByKey) + "</td>";
           }).join("") + "</tr>";
       }).join("");
       table.hidden = !rows.length;
@@ -1610,6 +1656,8 @@
   var DEFAULT_TITLE = document.title;
   function applyRoute(route) {
     var tabChanged = route.tab !== currentRoute.tab;
+    // A tip opened by the tap that changed the view would outlive its owner.
+    hideTip();
     // An event or player page titles the tab after itself; everything else
     // keeps the site's title.
     if (tabChanged) document.title = DEFAULT_TITLE;
@@ -1829,7 +1877,6 @@
         plural(movers.previous_team_count, "team") + " from " + plural(movers.previous_event_count, "event") + " in the previous one.";
       if (movers.baseline_thin) sample += " A thin baseline: compare early and recent events instead.";
     }
-    sample += " Shares are of roster slots.";
     var columns = [];
     if (summary.reliable) {
       columns.push('<div><h4>Rising</h4>' + moverListHtml(summary.risers, true) + "</div>");
@@ -1842,7 +1889,9 @@
     }
     var shareCard = ((DATA.share_cards || {}).whats_changed || {})[regulationScope];
     panel.innerHTML = '<div class="movers-head"><h3>' + escapeHtml(title) + "</h3>" + toggle + "</div>" +
-      '<p class="sub">' + escapeHtml(sample) + '</p><div class="mover-columns">' + columns.join("") + "</div>" +
+      '<p class="sub">' + escapeHtml(sample) + " Shares are of " + termHtml("slot", "roster slots") +
+      "; changes are in " + termHtml("pts", "percentage points (pts)") + '.</p><div class="mover-columns">' +
+      columns.join("") + "</div>" +
       (shareCard
         ? '<p class="movers-share"><a class="btn btn-sm" href="' + escapeHtml(shareCard) +
           '" download>Download summary card</a></p>'
@@ -1911,9 +1960,11 @@
       .filter(function (r) { return !r.event_tier; })
       .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
     if (method) {
-      method.textContent = "Bands by share of roster slots in " + scopeLabel(regulationScope) +
-        ": S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%. The chip is win rate: green when its 95% Wilson lower bound " +
-        "is above 50%, red when even its upper bound is below 50%, grey otherwise. Click a Pokémon for its profile.";
+      method.innerHTML = "Bands by " + termHtml("usage", "share of roster slots") + " in " +
+        escapeHtml(scopeLabel(regulationScope)) +
+        ": S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%. The chip is win rate: green when its 95% " +
+        termHtml("wilson", "Wilson lower bound") +
+        " is above 50%, red when even its upper bound is below 50%, grey otherwise. Click a Pokémon for its profile.";
     }
     body.innerHTML = TIERS.map(function (tier, i) {
       var max = i === 0 ? Infinity : TIERS[i - 1].min;
@@ -2024,6 +2075,7 @@
         {
           key: "usage_share",
           label: "Usage",
+          term: "usage",
           type: "share",
           main: true,
           title: function (r) { return slotsTitle(r.usage_count, slotTotals[r.event_tier || ""]); },
@@ -2258,6 +2310,7 @@
         {
           key: "wilson_lower_bound",
           label: "Wilson bound",
+          term: "wilson",
           type: "percent",
           title: function () { return "95% confidence: the true win rate is at least this"; },
         },
@@ -2328,10 +2381,11 @@
       columns: [
         { key: "rank", label: "#", type: "rank", main: true },
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
-        { key: "weighted_usage_share", label: "Weighted", type: "share", main: true },
+        { key: "weighted_usage_share", label: "Weighted", term: "weighted", type: "share", main: true },
         {
           key: "top_cut_usage_share",
           label: "Top cut",
+          term: "topcut",
           type: "percent",
           title: function (r) {
             return r.top_cut_usage_count != null ? r.top_cut_usage_count + " top-8 roster slots" : "";
@@ -2412,7 +2466,13 @@
       columns: [
         { key: "usage_rank", label: "#", type: "rank", main: true },
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
-        { key: "usage_share", label: "Usage", type: "share", main: true },
+        {
+          key: "usage_share",
+          label: "Usage",
+          type: "share",
+          main: true,
+          title: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " roster slots on this date" : ""; },
+        },
         {
           key: "usage_share_delta",
           label: "Change",
@@ -2450,6 +2510,7 @@
             pokemon_name: r.pokemon_name,
             usage_rank: r.usage_rank,
             usage_share: r.usage_share,
+            usage_count: r.usage_count,
             previous_usage_share: prev ? prev.usage_share : null,
             usage_share_delta: prev ? r.usage_share - prev.usage_share : null,
             is_new: !!prevDate && !prev,
@@ -2606,7 +2667,6 @@
     function liftCell(value) {
       return value == null ? "—" : "×" + Number(value).toFixed(1);
     }
-    var LIFT_TITLE = "How much more often the two appear together than their popularity alone predicts";
     var pairTable = createDataTable(document.getElementById("profile-pair-table"), {
       caption: "Teammates",
       sort: { key: "lift", dir: "desc" },
@@ -2615,8 +2675,8 @@
       empty: "No recorded teammates.",
       columns: [
         { key: "pokemon_name", label: "Teammate", type: "pokemon", keyField: "partner_pokemon_key", main: true, sortable: true },
-        { key: "lift", label: "Lift", numeric: true, sortable: true, main: true,
-          render: function (r) { return liftCell(r.lift); }, title: function () { return LIFT_TITLE; } },
+        { key: "lift", label: "Lift", term: "lift", numeric: true, sortable: true, main: true,
+          render: function (r) { return liftCell(r.lift); } },
         { key: "partner_share", label: "Partner share", type: "share",
           title: function (r) { return r.co_occurrence_count != null ? "On " + r.co_occurrence_count.toLocaleString() + " teams together" : ""; } },
         { key: "co_occurrence_count", label: "Teams together", type: "int" },
@@ -2640,7 +2700,7 @@
               }).join(" + ") + "</span>";
           },
         },
-        { key: "triple_lift", label: "Lift", numeric: true, sortable: true, main: true,
+        { key: "triple_lift", label: "Lift", term: "lift", numeric: true, sortable: true, main: true,
           render: function (r) { return liftCell(r.triple_lift); } },
         { key: "triple_team_count", label: "Teams", type: "int" },
         { key: "event_count", label: "Events", type: "int", hideOnPhone: true },
@@ -2908,11 +2968,11 @@
     function concentrationLabel(hhi, count) {
       if (hhi === null || hhi === undefined || !count) return "";
       if (count === 1) return '<span class="badge badge-rank">Only one recorded</span>';
-      var label = hhi >= 0.5 ? "Locked in" : hhi >= 0.25 ? "Semi-contested" : "Contested";
+      var label = hhi >= 0.5 ? termHtml("locked", "Locked in") : hhi >= 0.25 ? "Semi-contested" : "Contested";
       var cls = hhi >= 0.5 ? "badge-new" : hhi >= 0.25 ? "badge-rank" : "badge-positive";
       return (
         '<span class="badge ' + cls + '">' + label + "</span> " +
-        '<span class="ranked-value">HHI ' + hhi.toFixed(2) + " across " + count + " recorded</span>"
+        '<span class="ranked-value">' + termHtml("hhi", "HHI") + " " + hhi.toFixed(2) + " across " + count + " recorded</span>"
       );
     }
 
@@ -3362,6 +3422,10 @@
   // floored at 2 recorded teams in pipelines/dashboard/data.py — see
   // MART_SLICERS there for why that floor is analytical, not cosmetic.
   function setupPlayers() {
+    // "Find a player" (C3) lives in players.js, loaded after this file.
+    if (window.DashboardApp && window.DashboardApp.setupPlayerSearch) {
+      window.DashboardApp.setupPlayerSearch();
+    }
     setupPlayerRegions();
     setupPlayerSignatures();
     playersSubTabs = setupSubTabs(
@@ -3594,8 +3658,7 @@
     if (statusEl) {
       if (!prov.validation_available) {
         statusEl.textContent =
-          "Gate results are not available in this build — reports/validation/" +
-          "validation_report.json is regenerated by `make validate` and is not committed.";
+          "Gate results aren't available in this build: it was made without running the release gates first.";
       } else {
         var blocking = prov.release_blocking_findings || [];
         statusEl.textContent = blocking.length
@@ -3702,6 +3765,64 @@
           "<td>" + (row.known_limitation_count == null ? "—" : row.known_limitation_count) + "</td>"
         );
       }, { defaultKey: "published_at_utc", defaultDir: "desc" });
+    }
+
+    // How to read this page (U4): the glossary, from GLOSSARY itself.
+    var glossaryEl = document.getElementById("ds-glossary");
+    if (glossaryEl) {
+      glossaryEl.innerHTML = Object.keys(GLOSSARY).map(function (id) {
+        return "<dt>" + escapeHtml(GLOSSARY[id][0]) + "</dt><dd>" + escapeHtml(GLOSSARY[id][1]) + "</dd>";
+      }).join("");
+    }
+
+    // Table cards (D2): the newest release's tables, and the marts this
+    // page loads, both generated at build time (pipelines/dashboard/
+    // dictionary.py).
+    var releaseRows = marts.release_tables || [];
+    var releaseCards = document.getElementById("ds-release-cards");
+    var tablesLead = document.getElementById("ds-tables-lead");
+    if (tablesLead && releaseRows.length) {
+      tablesLead.textContent = "Dataset " + releaseRows[0].dataset_version + ", published " +
+        String(releaseRows[0].published_at_utc || "").slice(0, 10) + ", and the data behind this site.";
+    }
+    if (releaseCards) {
+      releaseCards.innerHTML = releaseRows.length ? releaseRows.map(function (t) {
+        return '<article class="data-card"><h4>' + escapeHtml(t.table_name) + "</h4>" +
+          "<p>" + escapeHtml(t.description || "") + "</p>" +
+          '<p class="data-card-meta">' + Number(t.row_count || 0).toLocaleString() + " rows · key <code>" +
+          escapeHtml(t.primary_key || "—") + "</code></p>" +
+          '<p><a href="' + escapeHtml(t.download_url) + '" rel="noopener">Download ' +
+          escapeHtml(t.download_kind === "CSV" ? t.file_name : "the " + t.dataset_version + " package (zip)") +
+          "</a></p></article>";
+      }).join("") : '<p class="empty-state">No release has been published yet.</p>';
+    }
+    var dictionaryRows = marts.data_dictionary || [];
+    var martCards = document.getElementById("ds-mart-cards");
+    if (martCards) {
+      martCards.innerHTML = dictionaryRows.map(function (t) {
+        var shard = t.shard && t.shard.indexOf("<") === -1
+          ? '<a href="' + escapeHtml(t.shard) + '"><code>' + escapeHtml(t.shard) + "</code></a>"
+          : "<code>" + escapeHtml(t.shard || "—") + "</code>";
+        return '<article class="data-card"><h4>' + escapeHtml(t.table) + "</h4>" +
+          "<p>" + escapeHtml(t.description || "") + "</p>" +
+          '<p class="data-card-meta">' + Number(t.row_count || 0).toLocaleString() + " rows" +
+          (t.grain ? " · one per <code>" + escapeHtml(t.grain.split("|").join(", ")) + "</code>" : "") +
+          "</p><p class=\"data-card-meta\">" + shard + "</p></article>";
+      }).join("");
+    }
+
+    // Dictionary (D2): every served field, described from schema.yml.
+    var dictionaryEl = document.getElementById("ds-dictionary");
+    if (dictionaryEl) {
+      dictionaryEl.innerHTML = dictionaryRows.map(function (t) {
+        return '<details class="dictionary-entry" id="dict-' + escapeHtml(t.table) + '"><summary>' + escapeHtml(t.table) +
+          ' <span class="set-share">' + t.columns.length + " fields · " + escapeHtml(t.source) + "</span></summary>" +
+          "<p>" + escapeHtml(t.description || "No description in schema.yml.") + "</p>" +
+          '<div class="table-scroll"><table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody>' +
+          t.columns.map(function (c) {
+            return "<tr><td><code>" + escapeHtml(c.name) + "</code></td><td>" + escapeHtml(c.description || "—") + "</td></tr>";
+          }).join("") + "</tbody></table></div></details>";
+      }).join("") || '<p class="empty-state">The dictionary is generated at build time and is missing from this build.</p>';
     }
 
     var subtabs = document.querySelectorAll('[data-panel="data-sources"] .subtab-btn');
@@ -4065,6 +4186,7 @@
   // network round-trip, so the landing view is never waiting on data.json.
   registerTab("overview", setupOverview, { needsMarts: false });
   registerTab("data-sources", setupDataSources, {
+    extraMarts: ["data_dictionary", "release_tables"],
     onRoute: function (route) {
       if (dataSubTabs) dataSubTabs.fromRoute(route);
     },
@@ -4086,7 +4208,7 @@
   registerTab("archetypes", setupDetectedArchetypes);
   registerTab("speed-tiers", setupSpeedTiers);
   registerTab("players", setupPlayers, {
-    extraMarts: ["player_signature_pokemon"],
+    extraMarts: ["player_signature_pokemon", "player_index"],
     onRoute: function (route) {
       if (playersSubTabs) playersSubTabs.fromRoute(route);
     },

@@ -44,7 +44,7 @@ from typing import Any
 import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from pipelines.dashboard import data, sprites
+from pipelines.dashboard import data, dictionary, sprites
 from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
@@ -109,7 +109,7 @@ _CRITICAL_PAYLOAD_KEYS = (
 #                             extraMarts in static/app.js)
 # The page's scripts, in load order (templates/index.html.jinja's <script>
 # tags). Each is copied verbatim next to index.html.
-SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js", "events.js")
+SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js", "events.js", "players.js")
 
 SHARD_DIR = "data"
 ON_DEMAND_MARTS = (
@@ -125,6 +125,7 @@ ON_DEMAND_MARTS = (
     "tournament_team_sheets",
     "team_list_sheets",
     "player_archetype_record",
+    "player_index",
 )
 
 
@@ -418,6 +419,7 @@ def build(
     fetch_icons: bool = True,
     regulations: list[Regulation] | None = None,
     today: date | None = None,
+    manifests_dir: Path = dictionary.DEFAULT_MANIFESTS_DIR,
 ) -> dict[str, Any]:
     """Renders templates/index.html.jinja with the marts payload baked in,
     copies static/app.js alongside it, and populates output_dir/images/
@@ -427,7 +429,8 @@ def build(
     fetch_icons controls whether item icons are fetched over the network
     (see _resolve_item_icons); pass False for offline/test builds.
     regulations/today override the regulation registry and build date, for
-    tests that exercise a regulation rollover.
+    tests that exercise a regulation rollover; manifests_dir, where the
+    Data section's release table cards are read from.
     """
     payload = data.build_payload(marts_dir, normalized_dir, regulations=regulations, today=today)
 
@@ -464,6 +467,21 @@ def build(
     payload["mart_files"] = _write_mart_shards(
         payload["marts"], payload["kpis_by_scope"], output_dir
     )
+    # The Data section's dictionary and table cards (docs/upgrade-plan-
+    # 2027q1.md, D2): generated here, from schema.yml and the newest
+    # manifest, so they can't drift. One on-demand shard holds both.
+    reference = {
+        "data_dictionary": dictionary.mart_dictionary(
+            payload["marts"],
+            payload["mart_files"],
+            hidden_columns=tuple(name for _key, name in data.NAME_JOINS),
+        ),
+        "release_tables": dictionary.release_tables(manifests_dir),
+    }
+    reference_path = f"{SHARD_DIR}/data_dictionary.json"
+    (output_dir / reference_path).write_text(json.dumps(reference, default=str), encoding="utf-8")
+    for name in reference:
+        payload["mart_files"]["on_demand"][name] = reference_path
 
     env = _make_environment()
     template = env.get_template("index.html.jinja")

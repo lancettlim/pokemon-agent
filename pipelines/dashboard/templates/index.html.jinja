@@ -480,6 +480,25 @@
   .saved-teams-list .saved-name { font-weight: 700; flex: 1 1 140px; min-width: 0; }
   .saved-teams-list .saved-meta { display: block; font-weight: 400; font-size: var(--font-xs); color: var(--muted); }
   .saved-teams-list .team-comp { gap: 0; }
+  /* Glossary terms (app.js termHtml, U4): a dotted underline marks a term
+     with a tooltip. */
+  .term { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+  .reading-guide { margin: 0 0 var(--space-4); padding-left: var(--space-5); display: grid; gap: var(--space-2); }
+  .glossary { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: var(--space-2) var(--space-4); }
+  .glossary dt { font-weight: 700; }
+  .glossary dd { margin: 0; color: var(--muted); }
+  /* Data section table cards and dictionary (D2). */
+  .data-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+  .data-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); display: flex; flex-direction: column; gap: 6px; }
+  .data-card h4 { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--font-sm); }
+  .data-card p { margin: 0; font-size: var(--font-sm); color: var(--muted); overflow-wrap: anywhere; }
+  .data-card .data-card-meta { font-size: var(--font-xs); }
+  .data-card code { font-size: var(--font-xs); }
+  .dictionary-entry { border-bottom: 1px solid var(--light-blue); padding: var(--space-2) 0; }
+  .dictionary-entry summary { cursor: pointer; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .dictionary-entry p { margin: var(--space-2) 0; color: var(--muted); }
+  .dictionary-entry table { font-size: var(--font-sm); }
+  .dictionary-entry td { white-space: normal; }
   .builder-notice { background: var(--positive-bg); color: var(--positive); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-weight: 600; }
   .builder-notice[hidden] { display: none; }
   /* Team Builder suggested partners (teams.js renderSuggestions). */
@@ -1801,11 +1820,23 @@
       <p>Country codes are the two-letter codes the source publishes, and a team only counts toward a country if its player reported one.</p>
     </details>
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="players-regions" data-route="regions" aria-selected="true">By region</button>
-      <button class="subtab-btn" role="tab" data-subtab="players-signature" data-route="signatures" aria-selected="false">By player</button>
+      <button class="subtab-btn" role="tab" data-subtab="players-find" data-route="find" aria-selected="true">Find a player</button>
+      <button class="subtab-btn" role="tab" data-subtab="players-regions" data-route="regions" aria-selected="false">By region</button>
+      <button class="subtab-btn" role="tab" data-subtab="players-signature" data-route="signatures" aria-selected="false">Signature Pokémon</button>
     </div>
 
-    <div class="subtab-panel" data-subpanel="players-regions">
+    {# Player search (docs/upgrade-plan-2027q1.md, C3), for opponent prep. #}
+    <div class="subtab-panel" data-subpanel="players-find">
+      <div class="controls">
+        <label>Player name
+          <input type="search" id="player-search" autocomplete="off" placeholder="Search players…">
+        </label>
+      </div>
+      <p class="sub" id="player-search-note"></p>
+      <div id="player-search-table"></div>
+    </div>
+
+    <div class="subtab-panel" data-subpanel="players-regions" hidden>
       <div class="controls">
         <label>Country
           <select id="players-country-filter"></select>
@@ -1833,6 +1864,22 @@
     </div>
   </section>
 
+
+  {# One player (docs/upgrade-plan-2027q1.md, C3): #/player/<player_id>.
+     Only what the source events published: names as the sources spell
+     them, nothing inferred or joined from elsewhere. #}
+  <section class="tab-panel" data-panel="player" data-section="teams" hidden>
+    <div id="player-header"></div>
+    <h3>Events in this regulation</h3>
+    <p class="sub" id="player-events-note"></p>
+    <div class="team-card-grid" id="player-teams"></div>
+    <h3>Most-brought Pokémon</h3>
+    <div id="player-pokemon-table"></div>
+    <h3>Against archetypes</h3>
+    <p class="sub">Matches this player's teams played against teams of each detected archetype. Team vs team: no source names the four Pokémon brought to a game. Only archetypes faced at least twice are listed.</p>
+    <div id="player-archetype-table"></div>
+    <p class="source-note">Everything here is from published tournament standings, team sheets and pairings, with names as the sources spell them. Nothing is inferred or matched across sources.</p>
+  </section>
 
   <section class="tab-panel" data-panel="compare" data-section="pokemon" hidden>
     <h2 class="panel-title">Compare Pokémon</h2>
@@ -1864,7 +1911,10 @@
     </details>
 
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="ds-sources" data-route="sources" aria-selected="true">Sources</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-how-to-read" data-route="how-to-read" aria-selected="true">How to read this page</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-tables" data-route="tables" aria-selected="false">Tables</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-dictionary" data-route="dictionary" aria-selected="false">Dictionary</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-sources" data-route="sources" aria-selected="false">Sources</button>
       <button class="subtab-btn" role="tab" data-subtab="ds-gates" data-route="gates" aria-selected="false">Release gates</button>
       <button class="subtab-btn" role="tab" data-subtab="ds-assets" data-route="images" aria-selected="false">Image coverage</button>
       <button class="subtab-btn" role="tab" data-subtab="ds-agreement" data-route="agreement" aria-selected="false">Source agreement</button>
@@ -1872,7 +1922,39 @@
       <button class="subtab-btn" role="tab" data-subtab="ds-caveats" data-route="caveats" aria-selected="false">Caveats</button>
     </div>
 
-    <div class="subtab-panel" data-subpanel="ds-sources">
+    {# docs/upgrade-plan-2027q1.md, U4: the glossary every tooltip draws
+       from, rendered from the same GLOSSARY map in static/app.js. #}
+    <div class="subtab-panel" data-subpanel="ds-how-to-read">
+      <p class="lead">What the site's numbers mean, and how much to trust each one.</p>
+      <ul class="reading-guide">
+        <li><strong>Everything is scoped to one regulation</strong>, the one in the header. Switch it there; links keep it as <code>?reg=</code>.</li>
+        <li><strong>Every percentage has a denominator.</strong> Hover a figure (or see its row) for "N of M"; sample sizes appear as <em>n</em>.</li>
+        <li><strong>Small samples say so.</strong> Win rates rank by their Wilson bound, deltas are withheld below 100 teams, and thin sets are marked.</li>
+        <li><strong>Matchups are team vs team.</strong> No source says which four Pokémon were brought to a game.</li>
+        <li><strong>There are no EVs.</strong> Team sheets publish ability, item, nature and moves only; anything that needs stats assumes full investment.</li>
+      </ul>
+      <h3>Glossary</h3>
+      <dl class="glossary" id="ds-glossary"></dl>
+    </div>
+
+    {# Per-table cards (D2): the newest release's tables and the marts this
+       site serves, generated at build time. #}
+    <div class="subtab-panel" data-subpanel="ds-tables" hidden>
+      <p class="lead" id="ds-tables-lead">The newest release's tables, and the data behind this site.</p>
+      <h3>Release tables</h3>
+      <div class="data-card-grid" id="ds-release-cards"></div>
+      <h3>Site data</h3>
+      <p class="sub">The marts this page loads, as JSON files you can fetch yourself (<code>data.json</code> indexes them).</p>
+      <div class="data-card-grid" id="ds-mart-cards"></div>
+    </div>
+
+    {# Generated from dbt/models/marts/schema.yml at build time (D2). #}
+    <div class="subtab-panel" data-subpanel="ds-dictionary" hidden>
+      <p class="lead">Every field of every table this site serves, described from the models that build them.</p>
+      <div id="ds-dictionary"></div>
+    </div>
+
+    <div class="subtab-panel" data-subpanel="ds-sources" hidden>
       <div class="table-scroll">
         <table id="ds-sources-table">
           <thead><tr><th>Source</th><th>Endpoint</th><th>Availability</th><th class="sortable" data-sort-key="request_success_rate">Request success</th><th class="sortable" data-sort-key="rows_written">Rows</th><th class="sortable" data-sort-key="required_field_null_rate">Null rate</th><th>Checked</th></tr></thead>
@@ -2010,5 +2092,6 @@
 <script src="teams.js"></script>
 <script src="expansions.js"></script>
 <script src="events.js"></script>
+<script src="players.js"></script>
 </body>
 </html>

@@ -1254,3 +1254,46 @@ def test_movers_flag_a_one_event_previous_regulation_as_a_thin_baseline():
     assert movers["previous_event_count"] == 1
     assert movers["event_count"] == 2
     assert movers["baseline_thin"] is True
+
+
+def test_player_index_has_one_row_per_player_with_their_record():
+    events = [
+        {"event_id": "E1", "event_date": "2026-08-01"},
+        {"event_id": "E2", "event_date": "2026-09-01"},
+    ]
+    teams = [
+        {
+            "event_id": "E1",
+            "player_id": "P1",
+            "player_name": "zoe",
+            "player_country": "US",
+            "placement": 12,
+            "regulation_code": "m-b",
+        },
+        {
+            "event_id": "E2",
+            "player_id": "P1",
+            "player_name": "zoe",
+            "player_country": "US",
+            "placement": 3,
+            "regulation_code": "m-c",
+        },
+        {
+            "event_id": "E2",
+            "player_id": "P2",
+            "player_name": "Ash",
+            "player_country": None,
+            "placement": None,
+            "regulation_code": "m-c",
+        },
+        {"event_id": "E2", "player_id": None, "player_name": "Unknown"},
+    ]
+    index = data.player_index(teams, events)
+    # Sorted by name, case-insensitively; rows with no player_id are skipped.
+    assert [row["player_id"] for row in index] == ["P2", "P1"]
+    zoe = index[1]
+    assert zoe["team_count"] == 2
+    assert zoe["best_placement"] == 3
+    assert zoe["latest_event_date"] == "2026-09-01"
+    assert zoe["regulations"] == "m-b|m-c"
+    assert index[0]["best_placement"] is None

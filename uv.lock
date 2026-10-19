@@ -727,6 +727,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pillow" },
     { name = "playwright" },
+    { name = "pyyaml" },
     { name = "requests" },
 ]
 
@@ -745,6 +746,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", specifier = ">=1.45" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.32" },
 ]
 

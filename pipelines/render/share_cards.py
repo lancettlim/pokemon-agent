@@ -101,7 +101,10 @@ def whats_changed_context(
             for entry in entries[:MAX_MOVERS_ON_CARD]
         ]
 
-    footer_bits = [f"dataset {dataset_version}" if dataset_version else None, "shares of roster slots"]
+    footer_bits = [
+        f"dataset {dataset_version}" if dataset_version else None,
+        "shares of roster slots",
+    ]
     return {
         "title": title,
         "subtitle": subtitle,
@@ -194,7 +197,9 @@ def render_share_cards(
             jobs.append((card_template.render_html(card), cards_dir / name))
             manifest["teams"][team["team_id"]] = (CARDS_SUBDIR / name).as_posix()
 
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"])
+    )
     whats_changed = env.get_template("whats_changed.html.jinja")
     version = payload.get("provenance", {}).get("dataset_version")
     for scope, kpis in payload.get("kpis_by_scope", {}).items():

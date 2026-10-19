@@ -2,6 +2,14 @@
 docs/dataset-spec.md's "Release package" section: one CSV per core entity
 plus manifest.json and CHANGELOG.md.
 
+From 0.4.0 the package is distributed only as a GitHub Release asset
+(docs/upgrade-plan-2027q1.md, D1): `package=True` zips it into
+releases/packages/ with a sha256 checksum and records both in the
+manifest's `package` block, and .github/workflows/cut-release.yml uploads
+the zip. Only the manifest and changelog are committed;
+releases/data/<version>/ and releases/packages/ are gitignored for new
+versions, so a release no longer adds ~50MB to git.
+
 Gated on reports/validation/validation_report.json: a release is refused
 (ReleaseBlockedError) unless that report exists and reports zero
 release_blocking_findings, per CLAUDE.md's "Don't ship ungated data" and
@@ -14,9 +22,11 @@ before publishing.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import shutil
 import sys
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +39,11 @@ STAGING_DIR = REPO_ROOT / "data" / "staging"
 RELEASES_DATA_DIR = REPO_ROOT / "releases" / "data"
 MANIFESTS_DIR = REPO_ROOT / "releases" / "manifests"
 CHANGELOGS_DIR = REPO_ROOT / "releases" / "changelogs"
+PACKAGES_DIR = REPO_ROOT / "releases" / "packages"
+# Where cut-release.yml publishes a version's package: the GitHub Release
+# tagged data-v<version>.
+RELEASE_DOWNLOAD_BASE = "https://github.com/lancettlim/pokemon-agent/releases/download"
+PACKAGE_PREFIX = "pokemon-champions-dataset"
 DEFAULT_ASSET_CACHE_DIR = REPO_ROOT / "data" / "assets" / "bulbagarden"
 DEFAULT_ARTWORK_CACHE_DIR = REPO_ROOT / "data" / "assets" / "pokeapi_artwork"
 IMAGES_SUBDIR = "images"
@@ -264,6 +279,41 @@ def _build_quality_checks(validation_report: dict[str, Any]) -> list[dict[str, A
     return checks
 
 
+def package_release(
+    dataset_version: str,
+    *,
+    release_dir: Path,
+    manifest_path: Path,
+    changelog_path: Path,
+    packages_dir: Path = PACKAGES_DIR,
+) -> dict[str, Any]:
+    """Zip a built release (its CSVs and images, plus manifest.json and
+    CHANGELOG.md) into packages_dir/<prefix>-<version>.zip under a
+    <prefix>-<version>/ folder, write a sha256sum-style checksum file next
+    to it, and return the manifest's `package` block. The same layout
+    publish-release.yml has always produced."""
+    name = f"{PACKAGE_PREFIX}-{dataset_version}"
+    packages_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = packages_dir / f"{name}.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(release_dir.rglob("*")):
+            if path.is_file():
+                archive.write(path, f"{name}/{path.relative_to(release_dir).as_posix()}")
+        archive.write(manifest_path, f"{name}/manifest.json")
+        if changelog_path.exists():
+            archive.write(changelog_path, f"{name}/CHANGELOG.md")
+    digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (packages_dir / f"{name}.sha256").write_text(f"{digest}  {zip_path.name}\n")
+    tag = f"data-v{dataset_version}"
+    return {
+        "file_name": zip_path.name,
+        "sha256": digest,
+        "size_bytes": zip_path.stat().st_size,
+        "release_tag": tag,
+        "url": f"{RELEASE_DOWNLOAD_BASE}/{tag}/{zip_path.name}",
+    }
+
+
 def _write_changelog(
     path: Path,
     *,
@@ -271,6 +321,7 @@ def _write_changelog(
     published_at_utc: str,
     sources: list[dict[str, Any]],
     known_limitations: list[str],
+    notes: list[str] | None = None,
 ) -> None:
     source_by_name = {s["source_name"]: s for s in sources}
     text = (
@@ -297,6 +348,8 @@ def _write_changelog(
         "### New\n\n- {describe any newly identified coverage gaps or low-confidence mappings}",
         f"### New\n\n{limitations_block}",
     )
+    if notes:
+        text = text.rstrip("\n") + "\n\n## Notes\n\n" + "\n".join(f"- {n}" for n in notes) + "\n"
     path.write_text(text)
 
 
@@ -312,6 +365,9 @@ def build(
     changelogs_dir: Path = CHANGELOGS_DIR,
     asset_cache_dir: Path = DEFAULT_ASSET_CACHE_DIR,
     artwork_cache_dir: Path = DEFAULT_ARTWORK_CACHE_DIR,
+    notes: list[str] | None = None,
+    package: bool = False,
+    packages_dir: Path = PACKAGES_DIR,
 ) -> dict[str, Any]:
     """Build a versioned release package: copies data/normalized/*.csv to
     releases/data/<dataset_version>/, copies the images pokemon_asset.csv
@@ -321,6 +377,11 @@ def build(
 
     Raises ReleaseBlockedError if reports/validation/validation_report.json
     is missing or reports any release_blocking_findings.
+
+    package=True also zips the package for a GitHub Release (see
+    package_release) and adds its `package` block to the committed
+    manifest. The copy of manifest.json inside the zip is written before
+    the zip exists, so it carries no `package` block of its own.
     """
     validation_report = _load_validation_report(validation_report_path)
 
@@ -355,6 +416,17 @@ def build(
         published_at_utc=published_at_utc,
         sources=sources,
         known_limitations=known_limitations or [],
+        notes=notes,
     )
+
+    if package:
+        manifest["package"] = package_release(
+            dataset_version,
+            release_dir=release_dir,
+            manifest_path=manifest_path,
+            changelog_path=changelog_path,
+            packages_dir=packages_dir,
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
     return manifest

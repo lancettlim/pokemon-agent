@@ -391,13 +391,24 @@ def _run_validate() -> int:
     return 0
 
 
-def _run_release(dataset_version: str, known_limitations: list[str]) -> int:
+def _run_release(
+    dataset_version: str,
+    known_limitations: list[str],
+    notes: list[str] | None = None,
+    package: bool = False,
+) -> int:
     try:
-        manifest = release_build.build(dataset_version, known_limitations=known_limitations)
+        manifest = release_build.build(
+            dataset_version, known_limitations=known_limitations, notes=notes, package=package
+        )
     except release_build.ReleaseBlockedError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print(f"Published dataset_version {dataset_version}: {len(manifest['tables'])} tables")
+    if manifest.get("package"):
+        print(
+            f"Packaged {manifest['package']['file_name']} (sha256 {manifest['package']['sha256']})"
+        )
     return 0
 
 
@@ -466,6 +477,19 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Repeatable; recorded in the manifest and changelog",
     )
+    release_parser.add_argument(
+        "--note",
+        action="append",
+        dest="notes",
+        default=[],
+        help="Repeatable; listed under the changelog's Notes",
+    )
+    release_parser.add_argument(
+        "--package",
+        action="store_true",
+        help="Also zip the package into releases/packages/ with a sha256 checksum for a "
+        "GitHub Release, and record it in the manifest (cut-release.yml does this)",
+    )
 
     render_parser = subparsers.add_parser(
         "render-card", help="Render a team card PNG, from a team_id or an ad-hoc build spec"
@@ -509,7 +533,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "validate":
         return _run_validate()
     if args.command == "release":
-        return _run_release(args.dataset_version, args.known_limitations)
+        return _run_release(args.dataset_version, args.known_limitations, args.notes, args.package)
     if args.command == "render-card":
         return _run_render_card(args.team_id, args.spec_path, args.output_path)
     if args.command == "build-dashboard":

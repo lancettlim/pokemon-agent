@@ -11,6 +11,9 @@ dependencies = [
     "duckdb>=1.0",
     "playwright>=1.45",
     "jinja2>=3.1",
+    # Reads dbt's schema.yml for the dashboard's generated data dictionary
+    # (pipelines/dashboard/dictionary.py). Already a dbt dependency.
+    "pyyaml>=6.0",
     # Only used to downscale PokéAPI HOME renders for the dashboard's hero
     # slots (pipelines/dashboard/sprites.py). Extraction deliberately does
     # not depend on it — image dimensions there come straight off the PNG

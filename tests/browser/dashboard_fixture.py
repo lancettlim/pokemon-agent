@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import itertools
+import json
 from pathlib import Path
 
 POKEMON = {
@@ -809,6 +810,10 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "player_id": f"P{p:03d}",
                 "regulation_code": "m-c",
                 "opponent_archetype_key": f"arch-{a}",
+                "opponent_pokemon_keys": (
+                    "garchomp|incineroar|rillaboom",
+                    "gholdengo|kingambit|sneasler",
+                )[a],
                 "matches_played": 4,
                 "wins": 3 - a,
                 "losses": 1 + a,
@@ -818,3 +823,35 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
             for a in range(2)
         ],
     )
+
+
+def write_fixture_manifest(manifests_dir: Path) -> None:
+    """A 0.4.0-style manifest, distributed as a Release asset (its
+    `package` block), for the Data section's table cards (D1/D2)."""
+    manifests_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "dataset_version": "9.9.0",
+        "published_at_utc": "2026-10-15T12:00:00Z",
+        "tables": [
+            {
+                "table_name": "pokemon",
+                "file_name": "pokemon.csv",
+                "primary_key": "pokemon_key",
+                "row_count": 1351,
+            },
+            {
+                "table_name": "tournament_team",
+                "file_name": "tournament_team.csv",
+                "primary_key": "team_id",
+                "row_count": 12000,
+            },
+        ],
+        "package": {
+            "file_name": "pokemon-champions-data-9.9.0.zip",
+            "sha256": "0" * 64,
+            "size_bytes": 1024,
+            "release_tag": "data-9.9.0",
+            "url": "https://example.invalid/data-9.9.0/pokemon-champions-data-9.9.0.zip",
+        },
+    }
+    (manifests_dir / "manifest-9.9.0.json").write_text(json.dumps(manifest), encoding="utf-8")

@@ -356,6 +356,32 @@ Each v1 release must publish a versioned package with:
 - `manifest.json`
 - `CHANGELOG.md`
 
+### Distribution (from 0.4.0)
+
+From `dataset_version 0.4.0` the package is distributed **only as a GitHub
+Release asset**, not as files in the repository (docs/upgrade-plan-2027q1.md,
+D1). `.github/workflows/cut-release.yml` (run by hand with the new version)
+extracts every source stamped with that version, runs the release gates,
+builds the package, zips it as `pokemon-champions-dataset-<version>.zip`
+with a `.sha256` checksum, publishes both as the `data-v<version>` GitHub
+Release, and opens a pull request committing only:
+
+- `releases/manifests/manifest-<version>.json`, whose `package` block
+  names the asset (`file_name`, `url`, `release_tag`, `size_bytes`,
+  `sha256`), so the committed metadata identifies the exact published
+  bytes; and
+- `releases/changelogs/CHANGELOG-<version>.md`.
+
+`releases/data/<version>/` and `releases/packages/` are gitignored for new
+versions. Releases `0.1.0`–`0.3.0` keep their committed
+`releases/data/<version>/` directories, and `publish-release.yml` can still
+re-publish them. The zip's own `manifest.json` is written before the zip
+exists, so it carries every field above except `package`.
+
+**Compatibility note:** releases before `0.4.0` exclude every Reg M-B and
+M-C event (the Champions format was pinned to Reg M-A until 2026-10); their
+usage-derived figures describe M-A only. `0.4.0`'s changelog says so.
+
 ### Manifest contents
 
 `manifest.json` must include:
@@ -366,6 +392,8 @@ Each v1 release must publish a versioned package with:
 - `tables` with row counts, primary key definitions, and file names
 - `quality_checks` with pass/fail status and metric values
 - `known_limitations`
+- `package` (from `0.4.0`): the Release asset's file name, URL, tag, size
+  and sha256
 
 ### Dataset version semantics
 
