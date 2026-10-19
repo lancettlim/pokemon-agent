@@ -25,9 +25,6 @@ Provide a single, trustworthy, and regularly updated data product for Pokémon C
 - Replacing source-of-truth ownership from original platforms.
 
 ## Target users
-See `docs/personas.md` for the working personas (Grinder, Creator, Scout,
-Newcomer, Analyst, Maintainer), their jobs, and which surfaces serve each.
-
 - **Competitive analysts**: need clean, queryable historical and current metagame data.
 - **Content creators**: need reliable trend snapshots and supporting stats.
 - **Team builders/coaches**: need legal pool validation, usage patterns, and matchup context.

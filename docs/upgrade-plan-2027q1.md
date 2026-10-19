@@ -1,9 +1,7 @@
 # Next upgrade plan — "Built for players" (2026 Q4 → 2027 Q1)
 
 Written 2026-10-19. This plan follows `docs/upgrade-plan-2026q4.md`, whose
-Sprints 1–4 shipped. It's organised around the personas in
-`docs/personas.md`: every item names the persona it serves, and the order
-follows persona priority (Grinder and Creator first). Items move into
+Sprints 1–4 shipped. Items move into
 `docs/todo.md` once accepted, per `docs/backlog.md`'s backlog → todo flow.
 
 The Q4 plan made the data current and gave the site a usable shell. This
@@ -19,8 +17,8 @@ labelled everywhere it appears, and the site stays static with no backend.
 | U1–U4 Shell fixes | Not started |
 | U5–U8 Data presentation | Not started |
 | P1–P5 Player features | Not started |
-| C1–C4 Creator and Scout features | Not started |
-| D1–D3 Analyst and Maintainer | Not started |
+| C1–C4 Event, team and player features | Not started |
+| D1–D3 Data access and operations | Not started |
 
 ---
 
@@ -41,27 +39,27 @@ Screenshots of every view at 1440px and 390px, taken against the published
 - The Builder's empty state explains what each panel will do once you add
   Pokémon.
 
-### Problems, ranked by how many personas they hit
+### Problems, ranked by impact
 
-| # | Finding | Evidence | Personas |
-|---|---|---|---|
-| 1 | **The Back button doesn't move between views, and a Pokémon can't be linked.** | `setupTabs` writes the hash with `history.replaceState` and nothing listens for `hashchange`/`popstate`. Changing the hash on an open page does nothing, and the selected Pokémon, sub-tab and filters aren't in the URL. The Q4 plan's `#/pokemon/garchomp?reg=m-c` (B3) was only partly built. | All |
-| 2 | **About 380px of chrome sits above the content on desktop.** | A 136px dark header with the title plus five pills (theme, regulation, dataset version, snapshot, gates), then ~140px of KPI cards, then the section and sub-tab rows. Each view then repeats its own sub-tab name as a black panel header ("Overview" under "OVERVIEW"). | All |
-| 3 | **Ranked data is shown as tall card grids.** | Usage shows 12 Pokémon per desktop screen as 165px cards holding a name and one number. Each item card on the profile is ~270px tall because the PokéAPI effect text is inline. A table row would fit 3–4× as many. B6 (shared table) was deferred as "no visible change". It is the biggest density win left. | Grinder, Analyst |
-| 4 | **The most common set can be a set nobody runs.** | The set card takes the modal item, ability, nature and each move slot independently. "Grassy Glide 24.8% / Fake Out 24.7% / Wood Hammer 22.6% / High Horsepower 16.6%" may describe no real team sheet. | Grinder, Newcomer |
-| 5 | **Jargon has no inline explanation.** | "HHI 0.57", "Locked in", "+3.6 pts", "95% Wilson lower bound", "synergy lift", "roster slots". | Newcomer, Creator |
-| 6 | **The "What changed" baseline is thin and unlabelled.** | It compares 3,770 M-C teams with 395 M-B teams, almost all of them from one event (Worlds). An elite single-event field isn't a normal regulation baseline. | Creator |
-| 7 | **Top Teams shows a bare win rate.** | Cards show "100.0%" in large type with no W–L record, no placement and no copy action. The mart has `record_wins`, `record_losses` and placement. | Scout, Newcomer |
-| 8 | **The 18 type chips still dominate the filters.** | Usage and Builder each give about 140px to 18 chips. The type popover (Q4 B3) isn't done. | Grinder |
-| 9 | **The damage calculator starts blank.** | The attacker and defender start with no item or ability preset, and setup sliders sit at 0. The most common set is already known. | Grinder |
-| 10 | **Internal language leaks into the UI.** | The Matchup intro says *see docs/design-system.md's "Matchup tab"*. | Newcomer |
-| 11 | **Mobile sub-tabs clip with no scroll cue.** | "Speed Ti…" is cut off at 390px. On Teams, the pokepaste import textarea sits above the Top Teams list, though import belongs to the Builder. | Grinder (at the venue) |
-| 12 | **A remembered regulation outranks the one in force.** | `resolveRegulationScope` checks `localStorage` before `regulationInForce`. Anyone who once picked M-C will still land on M-C after the next set starts on 2026-12-02. | All, from December |
-| 13 | **No test loads the page in a browser.** | `tests/unit/dashboard/` covers the Python build and the JS duplication check only, so a runtime JS error ships unnoticed. | Maintainer |
+| # | Finding | Evidence |
+|---|---|---|
+| 1 | **The Back button doesn't move between views, and a Pokémon can't be linked.** | `setupTabs` writes the hash with `history.replaceState` and nothing listens for `hashchange`/`popstate`. Changing the hash on an open page does nothing, and the selected Pokémon, sub-tab and filters aren't in the URL. The Q4 plan's `#/pokemon/garchomp?reg=m-c` (B3) was only partly built. |
+| 2 | **About 380px of chrome sits above the content on desktop.** | A 136px dark header with the title plus five pills (theme, regulation, dataset version, snapshot, gates), then ~140px of KPI cards, then the section and sub-tab rows. Each view then repeats its own sub-tab name as a black panel header ("Overview" under "OVERVIEW"). |
+| 3 | **Ranked data is shown as tall card grids.** | Usage shows 12 Pokémon per desktop screen as 165px cards holding a name and one number. Each item card on the profile is ~270px tall because the PokéAPI effect text is inline. A table row would fit 3–4× as many. B6 (shared table) was deferred as "no visible change". It is the biggest density win left. |
+| 4 | **The most common set can be a set nobody runs.** | The set card takes the modal item, ability, nature and each move slot independently. "Grassy Glide 24.8% / Fake Out 24.7% / Wood Hammer 22.6% / High Horsepower 16.6%" may describe no real team sheet. |
+| 5 | **Jargon has no inline explanation.** | "HHI 0.57", "Locked in", "+3.6 pts", "95% Wilson lower bound", "synergy lift", "roster slots". |
+| 6 | **The "What changed" baseline is thin and unlabelled.** | It compares 3,770 M-C teams with 395 M-B teams, almost all of them from one event (Worlds). An elite single-event field isn't a normal regulation baseline. |
+| 7 | **Top Teams shows a bare win rate.** | Cards show "100.0%" in large type with no W–L record, no placement and no copy action. The mart has `record_wins`, `record_losses` and placement. |
+| 8 | **The 18 type chips still dominate the filters.** | Usage and Builder each give about 140px to 18 chips. The type popover (Q4 B3) isn't done. |
+| 9 | **The damage calculator starts blank.** | The attacker and defender start with no item or ability preset, and setup sliders sit at 0. The most common set is already known. |
+| 10 | **Internal language leaks into the UI.** | The Matchup intro says *see docs/design-system.md's "Matchup tab"*. |
+| 11 | **Mobile sub-tabs clip with no scroll cue.** | "Speed Ti…" is cut off at 390px. On Teams, the pokepaste import textarea sits above the Top Teams list, though import belongs to the Builder. |
+| 12 | **A remembered regulation outranks the one in force.** | `resolveRegulationScope` checks `localStorage` before `regulationInForce`. Anyone who once picked M-C will still land on M-C after the next set starts on 2026-12-02. |
+| 13 | **No test loads the page in a browser.** | `tests/unit/dashboard/` covers the Python build and the JS duplication check only, so a runtime JS error ships unnoticed. |
 
 ---
 
-## Track U — UI shell and presentation (all personas, P0)
+## Track U — UI shell and presentation (P0)
 
 ### U1. Real routing
 
@@ -91,7 +89,7 @@ presses Back twice and lands on the deep link's view with the same Pokémon.
   method/intro line, collapsed to one sentence with a "How this is
   computed" disclosure.
 - Replace the "Distinct Pokémon used" KPI with "Events · Teams in this
-  regulation" (for example "5 events · 3,770 teams"). It tells every persona how
+  regulation" (for example "5 events · 3,770 teams"). It tells every reader how
   much to trust the page.
 
 Target: content starts within 200px of the top on desktop and 120px on
@@ -153,11 +151,12 @@ count. Use it in Usage and the Builder.
 
 ---
 
-## Track P — Player features (Grinder, Newcomer)
+## Track P — Player features
 
 ### P1. Real sets: `pokemon_set_variants` mart
 
-The Grinder's #1 job, and the fix for finding 4.
+The most-asked player question ("what set do people run?"), and the fix
+for finding 4.
 
 - New mart, regulation-scoped through `int_champions_roster_scoped`: one
   row per Pokémon × (item, ability, nature, sorted 4-move set), with
@@ -199,7 +198,7 @@ The Grinder's #1 job, and the fix for finding 4.
 - A share link: the six keys plus their set indices in the hash
   (`#/builder/rillaboom.1,sneasler.0,...`). No server needed.
 
-### P5. Starter teams for Newcomers
+### P5. Starter teams for new players
 
 A "Copy and play" strip on Meta → Overview: the three top-placing,
 fully-reported teams of the current regulation, each with player, event,
@@ -208,7 +207,7 @@ It reuses P4 and C2's data.
 
 ---
 
-## Track C — Creator and Scout features
+## Track C — Events, teams and players
 
 ### C1. Event pages (`#/event/<id>`)
 
@@ -232,7 +231,7 @@ Carries the Q4 plan's "latest event spotlight" and goes further.
   its record) as a sort option.
 - Add Copy for Showdown and Use this team (P4) on every card.
 
-### C3. Player pages (`#/player/<player_id>`), for the Scout
+### C3. Player pages (`#/player/<player_id>`), for opponent prep
 
 - Search by player name (the same combobox as Pokémon search).
 - Show every event in the selected regulation, with placement, record and
@@ -246,7 +245,7 @@ Carries the Q4 plan's "latest event spotlight" and goes further.
 ### C4. Shareable outputs
 
 - Event windows: an "Event window" filter (whole regulation, since event X,
-  last N events), so the Creator can ask "what changed since Frankfurt". It
+  last N events), so a reader can ask "what changed since Frankfurt". It
   was planned in Q4 B3 and not built. It needs per-event-date marts already
   partly present in `pokemon_usage_by_event_date`.
 - Pre-rendered images: at build time, render team-card PNGs for each new
@@ -263,7 +262,7 @@ Carries the Q4 plan's "latest event spotlight" and goes further.
 
 ---
 
-## Track D — Analyst and Maintainer
+## Track D — Data access and operations
 
 ### D1. Publish 0.4.0 without growing git (Q4 A7, unblocked)
 
@@ -273,7 +272,7 @@ under `releases/`. Record that change to the release contract in
 `docs/dataset-spec.md`. The changelog says pre-0.4.0 releases exclude M-B
 and M-C events.
 
-### D2. Data section for Analysts
+### D2. Data section for data consumers
 
 - A per-table card: a description, row count, primary key, download link to
   the release asset, and the JSON shard path.
@@ -292,13 +291,13 @@ run before 2026-12-02 with a fixture M-D row.
 
 ## Sequencing
 
-| Sprint (≈1 wk) | Scope | Personas | Exit criteria |
-|---|---|---|---|
-| **5 — Routable shell** | U1, U2, U3, U4 (copy cleanup), U8 (smoke test) | All | Back/forward and deep links work for every route. Content starts within 200px. The rollover fixture test passes. A browser smoke test runs in CI. |
-| **6 — Real sets** | P1, U5 (Usage + Profile), U6, U7 | Grinder, Newcomer | The profile shows real sets with copy. Usage is a sortable table. No 18-chip filter remains. |
-| **7 — Events and teams** | C1, C2, P5, D3 dry run | Creator, Scout, Newcomer | Every event has a page. Top Teams leads with the record. Starter teams sit on Meta. |
-| **8 — Build and share** | P2, P3, P4, C4 | Grinder, Creator | Calculator presets, saved and shared teams, event-window filter, pre-rendered cards. |
-| **9 — Scout and data** | C3, D1, D2, U4 (glossary) | Scout, Analyst, Newcomer | Player pages, 0.4.0 published, and the data dictionary on the site. |
+| Sprint (≈1 wk) | Scope | Exit criteria |
+|---|---|---|
+| **5 — Routable shell** | U1, U2, U3, U4 (copy cleanup), U8 (smoke test) | Back/forward and deep links work for every route. Content starts within 200px. The rollover fixture test passes. A browser smoke test runs in CI. |
+| **6 — Real sets** | P1, U5 (Usage + Profile), U6, U7 | The profile shows real sets with copy. Usage is a sortable table. No 18-chip filter remains. |
+| **7 — Events and teams** | C1, C2, P5, D3 dry run | Every event has a page. Top Teams leads with the record. Starter teams sit on Meta. |
+| **8 — Build and share** | P2, P3, P4, C4 | Calculator presets, saved and shared teams, event-window filter, pre-rendered cards. |
+| **9 — Players and data** | C3, D1, D2, U4 (glossary) | Player pages, 0.4.0 published, and the data dictionary on the site. |
 
 Sprint 5 lands before 2026-12-02 because U3 has to be in place when M-C
 ends. Sprint 7 should land before the next major event so its event page is
@@ -309,13 +308,13 @@ the first one people see.
 The site is static and has no analytics, so measure what we can and decide
 whether to add more:
 
-| Persona | Signal | How to measure |
+| Area | Signal | How to measure |
 |---|---|---|
-| Grinder | A Pokémon set is copied within two interactions on a phone | Playwright task script in CI (U8) |
-| Creator | Every number on an event page has `n` and a deep link | Lint test over rendered HTML: percentages carry a `title` or `data-n` |
-| Newcomer | No unexplained jargon | Test that each glossary term in rendered text is wrapped in the tooltip component |
-| Analyst | A release exists for the current regulation | `releases/manifests/` has a manifest whose newest event falls in the regulation in force |
-| Maintainer | Rollover needs only a seed row | U3 fixture test plus the D3 dry run |
+| Sets | A Pokémon set is copied within two interactions on a phone | Playwright task script in CI (U8) |
+| Citations | Every number on an event page has `n` and a deep link | Lint test over rendered HTML: percentages carry a `title` or `data-n` |
+| Copy | No unexplained jargon | Test that each glossary term in rendered text is wrapped in the tooltip component |
+| Releases | A release exists for the current regulation | `releases/manifests/` has a manifest whose newest event falls in the regulation in force |
+| Rollover | Rollover needs only a seed row | U3 fixture test plus the D3 dry run |
 
 **Open decision:** whether to add privacy-respecting, cookie-free page
 analytics (e.g. GoatCounter) to measure real use. It's not needed for any
