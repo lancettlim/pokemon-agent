@@ -480,7 +480,8 @@
     border: 1px solid var(--border);
     font-size: 16px;
   }
-  .type-filter-row { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; }
+  /* Nine 40px icon buttons a row, so the 18 types sit in two even rows. */
+  .type-filter-row { display: flex; flex-wrap: wrap; gap: 6px; max-width: 408px; }
 
   .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -672,14 +673,10 @@
     background: var(--pill-type-color, var(--type-unknown));
   }
 
-  /* Crops static/icons/types/*.png (wide 200x40 "icon + type name" badges,
-     not bare square icons) down to just the icon's fixed-width left
-     square, so every type-icon use (compact pills, the large Profile
-     badge, the Matchup effectiveness grid, filter chips) shows a real
-     icon-only emblem instead of a squished text badge — see
-     typeIconImg() in app.js. */
-  .type-icon-crop { display: inline-block; overflow: hidden; border-radius: var(--radius-sm); vertical-align: -3px; }
-  .type-icon-crop img { display: block; }
+  /* static/icons/types/*.png are square, text-free round emblems, so a
+     type icon is just an <img> at the requested size (typeIconImg() in
+     app.js). */
+  .type-icon { display: inline-block; vertical-align: middle; object-fit: contain; flex: 0 0 auto; }
 
   /* --- Descriptive sub-text under a name (Pokémon Profile's Items/
      Ability/Moves sections; Matchup panel move picker) --- */
@@ -724,6 +721,26 @@
     cursor: pointer;
   }
   .toggle-chip[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  /* Type filter (Usage, Pokémon Profile, Team Builder): one bare type icon
+     per button, no pill and no text. A picked type gets a ring in the
+     navy accent; once anything is picked, the unpicked icons fade back so
+     the active filter reads at a glance. */
+  .type-filter-chip {
+    display: inline-flex;
+    padding: 2px;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease, border-color 0.12s ease;
+  }
+  .type-filter-chip:hover { transform: scale(1.12); }
+  .type-filter-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .type-filter-chip[aria-pressed="true"] { border-color: var(--navy); transform: scale(1.08); }
+  .type-filter-row.has-selection .type-filter-chip[aria-pressed="false"] { opacity: 0.35; }
+  .type-filter-row.has-selection .type-filter-chip[aria-pressed="false"]:hover { opacity: 0.8; }
+
 
   /* --- Top Teams tab: leaderboard tiles + pokepaste import/export --- */
   .pokepaste-box { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }

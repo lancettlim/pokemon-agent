@@ -232,18 +232,26 @@
     return true;
   }
 
-  // Multi-select type filter, rendered as a row of toggle chips (one per
-  // ALL_TYPES entry). `selected` is a plain {type_name: true} map the
-  // caller owns; an empty map means "no filter, show everything".
+  // Multi-select type filter, rendered as a row of icon-only toggle
+  // buttons (one per ALL_TYPES entry; the name is the aria-label and the
+  // hover title). `selected` is a plain {type_name: true} map the caller
+  // owns; an empty map means "no filter, show everything". Once anything
+  // is picked, the row dims the unpicked icons so the filter reads at a
+  // glance.
   function renderTypeFilterChips(container, selected, onChange) {
     if (!container) return;
     container.innerHTML = "";
+    function syncRow() {
+      container.classList.toggle("has-selection", hasAnySelectedType(selected));
+    }
     ALL_TYPES.forEach(function (type) {
       var chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "toggle-chip";
+      chip.className = "type-filter-chip";
       chip.setAttribute("aria-pressed", selected[type] ? "true" : "false");
-      chip.innerHTML = typeIconImg(type, 14) + " " + type;
+      chip.setAttribute("aria-label", type);
+      chip.title = type;
+      chip.innerHTML = typeIconImg(type, 32);
       chip.addEventListener("click", function () {
         if (selected[type]) {
           delete selected[type];
@@ -251,10 +259,12 @@
           selected[type] = true;
         }
         chip.setAttribute("aria-pressed", selected[type] ? "true" : "false");
+        syncRow();
         onChange();
       });
       container.appendChild(chip);
     });
+    syncRow();
   }
 
   function hasAnySelectedType(selected) {
@@ -411,24 +421,16 @@
     return "linear-gradient(180deg, " + c1 + " 0%, " + c1 + " 50%, " + c2 + " 50%, " + c2 + " 100%)";
   }
 
-  // The committed type-icon PNGs (static/icons/types/) are wide 200x40
-  // "icon + type name" badges (a PokéAPI/sprites generation-ix asset), not
-  // bare square icons — the symbol always sits in a fixed-width square on
-  // the left edge, with the type name filling the rest. Squishing the
-  // whole 5:1 image into a square (the old approach) stretched the text
-  // into an illegible blob; instead this crops to just that left square
-  // (an overflow:hidden window sized to `size`, holding a height:`size`
-  // image scaled to its natural ~5:1 aspect so only the icon shows) —
-  // a real icon-only emblem, not a squished text badge.
+  // The committed type icons (static/icons/types/) are square, text-free
+  // round emblems (Bulbagarden's Sword/Shield set, 128px), so one plain
+  // <img> at any size is the whole icon. The name rides on alt/title.
   function typeIconImg(typeName, sizePx) {
     var src = typeIcons[typeName];
     if (!src) return "";
     var size = sizePx || 18;
     return (
-      '<span class="type-icon-crop" style="width:' + size + "px;height:" + size +
-      'px" title="' + escapeHtml(typeName) + '">' +
-      '<img src="' + src + '" alt="' + escapeHtml(typeName) + '" style="height:' + size + 'px">' +
-      "</span>"
+      '<img class="type-icon" src="' + src + '" alt="' + escapeHtml(typeName) +
+      '" title="' + escapeHtml(typeName) + '" width="' + size + '" height="' + size + '">'
     );
   }
 

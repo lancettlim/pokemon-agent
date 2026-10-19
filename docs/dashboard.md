@@ -387,15 +387,18 @@ Four distinct assets, four distinct strategies:
   `docs/design-system.md`'s "Hero art vs menu sprite" for which slot gets
   which.
 - **Move-type icons** (18, fixed): bundled as committed static assets under
-  `pipelines/dashboard/static/icons/types/`, bootstrapped once via
-  `pipelines/render/assets.py`'s `ensure_type_icon()` and copied verbatim
+  `pipelines/dashboard/static/icons/types/`: Bulbagarden Archives' 128px
+  round Sword/Shield emblems ("File:&lt;Type&gt; icon SwSh.png", symbol
+  only, no baked-in name), downloaded once and copied verbatim
   into `docs/dashboard/images/icons/types/` on every build. No network
   dependency — types never change.
 - **Item icons** (open-ended, data-dependent): resolved for every distinct
   `item_name` in `pokemon_item_usage`, preferring `pipelines/render/
   bulbagarden_items.py`'s `ensure_item_icon_bulbagarden()` (Bulbagarden
-  Archives held-item sprites, "File:Bag &lt;Item Name&gt; Sprite.png" and a
-  couple of naming-variant fallbacks) and falling back per-item to
+  Archives held-item art: the 160px "File:Bag &lt;Item Name&gt; ZA
+  Sprite.png" render first, then the SV render and the Dream World art,
+  and only then the 24px "Bag &lt;Item Name&gt; Sprite.png" pixel sprite,
+  which looks blocky once a tile scales it up) and falling back per-item to
   `pipelines/render/assets.py`'s `ensure_item_icon()` (PokéAPI community
   sprites) on a Bulbagarden resolution miss, so an item that used to
   resolve via PokéAPI never regresses to no icon. This is the one part of

@@ -56,7 +56,7 @@ def test_resolves_primary_bag_sprite_title(tmp_path):
         "Leftovers", cache_dir=tmp_path, session=session
     )
 
-    assert path == tmp_path / "bulbagarden_items" / "leftovers.png"
+    assert path == tmp_path / "bulbagarden_items_hd" / "leftovers.png"
     assert path.read_bytes() == b"fake-item-bytes"
     assert session.requested_urls[0] == bulbagarden_items.API_BASE_URL
 
@@ -67,14 +67,37 @@ def test_resolves_primary_bag_sprite_title(tmp_path):
 
 
 def test_falls_back_to_a_later_title_variant(tmp_path):
-    # Only the third candidate ("File:<Name>.png") resolves.
+    # Only the last candidate ("File:<Name>.png") resolves.
     session = _FakeSession(api_payload=_payload_resolving("File:Weird Item.png"))
 
     path = bulbagarden_items.ensure_item_icon_bulbagarden(
         "Weird Item", cache_dir=tmp_path, session=session
     )
 
-    assert path == tmp_path / "bulbagarden_items" / "weird-item.png"
+    assert path == tmp_path / "bulbagarden_items_hd" / "weird-item.png"
+
+
+def test_prefers_the_high_res_render_over_the_pixel_sprite(tmp_path):
+    # Both the 160px Z-A render and the 24px bag sprite exist; the render wins.
+    payload = {
+        "query": {
+            "pages": {
+                "1": {
+                    "title": "File:Bag Leftovers Sprite.png",
+                    "imageinfo": [{"url": "https://cdn.example/pixel.png"}],
+                },
+                "2": {
+                    "title": "File:Bag Leftovers ZA Sprite.png",
+                    "imageinfo": [{"url": "https://cdn.example/za.png"}],
+                },
+            }
+        }
+    }
+    session = _FakeSession(api_payload=payload)
+
+    bulbagarden_items.ensure_item_icon_bulbagarden("Leftovers", cache_dir=tmp_path, session=session)
+
+    assert session.requested_urls[-1] == "https://cdn.example/za.png"
 
 
 def test_returns_none_when_no_candidate_resolves(tmp_path):
@@ -108,5 +131,5 @@ def test_uses_a_cache_subdirectory_distinct_from_pokeapi_items(tmp_path):
         "Leftovers", cache_dir=tmp_path, session=session
     )
 
-    assert path.parent.name == "bulbagarden_items"
+    assert path.parent.name == "bulbagarden_items_hd"
     assert path.parent != tmp_path / "items"
