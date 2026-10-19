@@ -38,6 +38,7 @@
   // viewer's date, else the build's default. Changing it reloads the page
   // (see setupRegulationSelector) rather than re-rendering live tabs.
   var SCOPE_PARAM = "reg";
+  var SCOPE_STORAGE_KEY = "dashboard-regulation";
   var ALL_SCOPE = "all";
 
   function resolveRegulationScope() {
@@ -49,6 +50,15 @@
       requested = null;
     }
     if (requested && byScope[requested]) return requested;
+    // Hosts that don't pass the query string through (a Claude artifact
+    // frame) fall back to the viewer's last choice in this browser.
+    var remembered = null;
+    try {
+      remembered = localStorage.getItem(SCOPE_STORAGE_KEY);
+    } catch (e) {
+      remembered = null;
+    }
+    if (remembered && byScope[remembered]) return remembered;
     var inForce = regulationInForce(DATA.regulations, new Date().toISOString().slice(0, 10));
     if (inForce && byScope[inForce.regulation_code]) return inForce.regulation_code;
     return DATA.default_scope || ALL_SCOPE;
@@ -1581,8 +1591,21 @@
               copyBtn.textContent = "Copied";
               setTimeout(function () { copyBtn.textContent = "Copy for Showdown"; }, 1500);
             };
+            // Some hosts refuse clipboard writes; then show the text
+            // selected so the viewer can copy it by hand.
+            var fallback = function () {
+              var box = document.getElementById("common-set-paste");
+              box.classList.remove("visually-hidden");
+              box.removeAttribute("aria-hidden");
+              box.rows = 7;
+              box.focus();
+              box.select();
+              copyBtn.textContent = "Select and copy";
+            };
             if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(text).then(done, function () {});
+              navigator.clipboard.writeText(text).then(done, fallback);
+            } else {
+              fallback();
             }
           });
         }
@@ -2432,6 +2455,11 @@
     if (!select) return;
     select.value = regulationScope;
     select.addEventListener("change", function () {
+      try {
+        localStorage.setItem(SCOPE_STORAGE_KEY, select.value);
+      } catch (e) {
+        // Storage blocked: the ?reg= link below still carries the choice.
+      }
       var params = new URLSearchParams(window.location.search);
       params.set(SCOPE_PARAM, select.value);
       window.location.assign("?" + params.toString() + window.location.hash);
