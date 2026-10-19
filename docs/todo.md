@@ -822,8 +822,15 @@ table tracks sprint progress.
   same rule). Covered by `tests/unit/dashboard/test_data.py` and
   `tests/browser/test_regulation_rollover.py` against a fixture M-D row.
 - [ ] Copy pass, glossary tooltips, denominators on every percentage (U4).
-- [ ] Shared sortable table component, adopted in Usage, Profile, Speed Tiers, Cores, Players (U5)
-- [ ] Type filter popover (U6); mobile sub-tab scroll cues, import moved to Builder (U7)
+- [x] Shared sortable table component, adopted in Usage, Profile, Speed Tiers, Cores, Players (U5).
+  `createDataTable` in `static/app.js`: sticky sortable header, sprite +
+  name cells, inline share bars, row → route, two-line rows on phones.
+  Card grids remain only on Overview and the Tier List.
+- [x] Type filter popover (U6); mobile sub-tab scroll cues, import moved to Builder (U7).
+  One "Any type ▾" button replaces the 18-icon row in Usage, Speed Tiers
+  and the Builder; tab rows fade at the clipped edge and centre the active
+  tab; the pokepaste import is the Builder's "Import team"; phone tap
+  targets are 44px.
 - [x] Playwright route smoke test + payload budget in CI (U8).
   `tests/browser/` builds the dashboard from synthetic marts, opens every
   route at 1440px and 390px and fails on a console error or an empty
@@ -831,7 +838,12 @@ table tracks sprint progress.
   fetch count. The core payload (page, scripts, `core.json` and the default
   regulation's shard) is held under 500KB compressed (448KB now). CI
   installs Chromium for them.
-- [ ] `pokemon_set_variants` mart and real-set tabs on the profile (P1)
+- [x] `pokemon_set_variants` mart and real-set tabs on the profile (P1).
+  Exact (item + ability + nature + 4 moves) and core (item + ability + top
+  3 moves) levels, top 5 per Pokémon and scope with a Wilson-ranked win
+  rate. dbt tests check shares sum to at most 1 and that every exact set
+  appears verbatim on its example team's sheet. The per-slot modal card is
+  gone.
 - [ ] Pokémon hub v2: per-regulation trend, featuring teams, teammates, meta pressure (P2)
 - [ ] Calculator presets from real sets; "vs the meta" mode (P3)
 - [ ] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5)

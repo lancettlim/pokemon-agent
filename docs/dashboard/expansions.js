@@ -73,44 +73,97 @@
       '<p class="source-note">Usage and win rate are for ' + esc(App.scopeLabel(App.regulationScope)) +
       '. Win rate is the combined W-L record of the teams that brought each Pokémon, with its sample size beside it.</p>';
   }
+  // Pairs and triples on the shared table (docs/upgrade-plan-2027q1.md,
+  // U5), one table per core size.
+  var pairTable = null;
+  var tripleTable = null;
+  function setupCoreTables() {
+    pairTable = App.createDataTable(document.getElementById("core-pair-table"), {
+      caption: "Most common partners",
+      sort: { key: "co_occurrence_count", dir: "desc" },
+      limit: 24,
+      rowHref: function (r) { return App.pokemonHref(r.partner_pokemon_key); },
+      empty: "No qualifying pair data for this Pokémon.",
+      columns: [
+        { key: "pokemon_name", label: "Partner", type: "pokemon", keyField: "partner_pokemon_key", main: true, sortable: true },
+        { key: "co_occurrence_count", label: "Shared teams", type: "int", main: true },
+        { key: "partner_share", label: "Partner share", type: "share",
+          title: function (r) { return "On " + percent(r.partner_share) + " of this Pokémon's teams"; } },
+        {
+          key: "compare",
+          label: "",
+          sortable: false,
+          hideOnPhone: true,
+          render: function (r) {
+            return '<a href="' + App.routeHash("compare", [r.anchor + "," + r.partner_pokemon_key]) + '">Compare</a>';
+          },
+        },
+      ],
+    });
+    tripleTable = App.createDataTable(document.getElementById("core-triple-table"), {
+      caption: "Three-Pokémon cores",
+      sort: { key: "triple_team_count", dir: "desc" },
+      limit: 24,
+      empty: "No qualifying three-Pokémon cores for this Pokémon.",
+      columns: [
+        {
+          key: "core",
+          label: "Core",
+          main: true,
+          sortable: false,
+          render: function (r) {
+            return App.teamCompositionHtml([r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c].join("|"), 32) +
+              '<span class="core-names">' + [r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c].map(function (k) {
+                return '<a href="' + App.pokemonHref(k) + '">' + esc(displayName(k)) + "</a>";
+              }).join(" · ") + "</span>";
+          },
+        },
+        { key: "triple_team_count", label: "Teams", type: "int", main: true },
+        { key: "triple_team_share", label: "Share", type: "share" },
+        {
+          key: "triple_lift",
+          label: "Lift",
+          numeric: true,
+          sortable: true,
+          render: function (r) { return "×" + Number(r.triple_lift || 0).toFixed(2); },
+          title: function () { return "How much more often the three appear together than chance predicts"; },
+        },
+        { key: "event_count", label: "Events", type: "int", hideOnPhone: true },
+        { key: "player_count", label: "Players", type: "int", hideOnPhone: true },
+      ],
+    });
+  }
   function renderCore() {
     var anchor = document.getElementById("core-anchor");
     var size = document.getElementById("core-size");
-    var out = document.getElementById("core-results");
-    if (!anchor || !size || !out) return;
+    var title = document.getElementById("core-title");
+    if (!anchor || !size || !pairTable) return;
     var key = anchor.value;
-    var pairRows = (App.marts.pokemon_team_core_usage || []).filter(function (r) {
-      return r.pokemon_key === key;
-    }).sort(function (x, y) { return (y.co_occurrence_count || 0) - (x.co_occurrence_count || 0); });
-    var triples = (App.marts.pokemon_team_core_triple_usage || []).filter(function (r) {
-      return [r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c].indexOf(key) >= 0;
-    }).sort(function (x, y) { return (y.triple_team_count || 0) - (x.triple_team_count || 0); });
-    var rows = size.value === "triple" ? triples : pairRows;
-    if (!rows.length) {
-      out.innerHTML = '<p class="empty-state">No qualifying core data is available for this Pokémon.</p>';
-      return;
+    var triple = size.value === "triple";
+    document.getElementById("core-pair-table").hidden = triple;
+    document.getElementById("core-triple-table").hidden = !triple;
+    if (title) {
+      title.textContent = triple
+        ? "Three-Pokémon cores containing " + displayName(key)
+        : "Most common partners for " + displayName(key);
     }
-    var title = size.value === "triple" ? "Three-Pokémon cores containing " + displayName(key) :
-      "Most common partners for " + displayName(key);
-    var body = rows.slice(0, 24).map(function (r) {
-      if (size.value === "triple") {
-        var members = [r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c];
-        return '<article class="expansion-card"><h3>' + members.map(function (k) {
-          return '<a href="' + App.pokemonHref(k) + '">' + esc(displayName(k)) + "</a>";
-        }).join(" · ") + '</h3><p><strong>' + metric(r.triple_team_count) +
-          '</strong> teams · ' + percent(r.triple_team_share) + ' share · ×' +
-          Number(r.triple_lift || 0).toFixed(2) + ' lift</p><p class="source-note">' +
-          metric(r.event_count) + ' events · ' + metric(r.player_count) + ' players</p></article>';
-      }
-      return '<article class="expansion-card"><h3><a href="' + App.pokemonHref(r.partner_pokemon_key) + '">' +
-        esc(displayName(r.partner_pokemon_key)) +
-        '</a></h3><p><strong>' + metric(r.co_occurrence_count) + '</strong> shared teams · ' +
-        percent(r.partner_share) + ' partner share</p><a class="link-button" href="' +
-        App.routeHash("compare", [key + "," + r.partner_pokemon_key]) + '">Compare with ' +
-        esc(displayName(key)) + '</a></article>';
-    }).join("");
-    out.innerHTML = '<h3>' + esc(title) + '</h3><div class="expansion-grid">' + body + '</div>' +
-      '<p class="source-note">Pair data is co-occurrence on tournament rosters. Triple data is restricted to supported, above-chance Champions cores; association is not proof of a strategic archetype.</p>';
+    if (triple) {
+      tripleTable.setRows((App.marts.pokemon_team_core_triple_usage || []).filter(function (r) {
+        return [r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c].indexOf(key) >= 0;
+      }));
+    } else {
+      pairTable.setRows((App.marts.pokemon_team_core_usage || []).filter(function (r) {
+        return r.pokemon_key === key;
+      }).map(function (r) {
+        return {
+          anchor: key,
+          partner_pokemon_key: r.partner_pokemon_key,
+          pokemon_name: r.partner_pokemon_name,
+          co_occurrence_count: r.co_occurrence_count,
+          partner_share: r.partner_share,
+        };
+      }));
+    }
   }
 
   var compareRoute = function () {};
@@ -154,6 +207,7 @@
     var rows = profileRows();
     var anchor = document.getElementById("core-anchor");
     var size = document.getElementById("core-size");
+    setupCoreTables();
     fillPokemonSelect(anchor, rows[0] && rows[0].pokemon_key);
     function record(push) {
       renderCore();

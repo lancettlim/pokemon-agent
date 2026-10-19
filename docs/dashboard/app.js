@@ -299,17 +299,45 @@
     return true;
   }
 
-  // Multi-select type filter, rendered as a row of icon-only toggle
-  // buttons (one per ALL_TYPES entry; the name is the aria-label and the
-  // hover title). `selected` is a plain {type_name: true} map the caller
-  // owns; an empty map means "no filter, show everything". Once anything
-  // is picked, the row dims the unpicked icons so the filter reads at a
-  // glance.
+  // Multi-select type filter (docs/upgrade-plan-2027q1.md, U6): a "Type ▾"
+  // button showing how many types are picked, opening an 18-type popover.
+  // It replaced a row of 18 icon chips that took ~140px of every filter
+  // panel. `selected` is a plain {type_name: true} map the caller owns; an
+  // empty map means "no filter, show everything".
+  var typePopoverCount = 0;
   function renderTypeFilterChips(container, selected, onChange) {
     if (!container) return;
+    typePopoverCount += 1;
+    var panelId = "type-popover-" + typePopoverCount;
     container.innerHTML = "";
-    function syncRow() {
-      container.classList.toggle("has-selection", hasAnySelectedType(selected));
+    container.classList.add("type-popover");
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "type-popover-btn";
+    toggle.setAttribute("aria-haspopup", "true");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-controls", panelId);
+    var panel = document.createElement("div");
+    panel.className = "type-popover-panel";
+    panel.id = panelId;
+    panel.hidden = true;
+    panel.setAttribute("role", "group");
+    panel.setAttribute("aria-label", "Filter by type");
+    container.appendChild(toggle);
+    container.appendChild(panel);
+
+    function count() {
+      return Object.keys(selected).filter(function (k) { return selected[k]; }).length;
+    }
+    function syncToggle() {
+      var n = count();
+      toggle.innerHTML = (n ? "Type · " + n + " selected" : "Any type") + ' <span aria-hidden="true">▾</span>';
+      toggle.classList.toggle("is-active", n > 0);
+      panel.classList.toggle("has-selection", n > 0);
+    }
+    function setOpen(open) {
+      panel.hidden = !open;
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
     }
     ALL_TYPES.forEach(function (type) {
       var chip = document.createElement("button");
@@ -318,20 +346,44 @@
       chip.setAttribute("aria-pressed", selected[type] ? "true" : "false");
       chip.setAttribute("aria-label", type);
       chip.title = type;
-      chip.innerHTML = typeIconImg(type, 32);
+      chip.innerHTML = typeIconImg(type, 32) + '<span class="type-chip-name">' + escapeHtml(type) + "</span>";
       chip.addEventListener("click", function () {
-        if (selected[type]) {
-          delete selected[type];
-        } else {
-          selected[type] = true;
-        }
+        if (selected[type]) delete selected[type];
+        else selected[type] = true;
         chip.setAttribute("aria-pressed", selected[type] ? "true" : "false");
-        syncRow();
+        syncToggle();
         onChange();
       });
-      container.appendChild(chip);
+      panel.appendChild(chip);
     });
-    syncRow();
+    var clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "btn btn-sm type-popover-clear";
+    clear.textContent = "Clear";
+    clear.addEventListener("click", function () {
+      Object.keys(selected).forEach(function (k) { delete selected[k]; });
+      panel.querySelectorAll(".type-filter-chip").forEach(function (chip) {
+        chip.setAttribute("aria-pressed", "false");
+      });
+      syncToggle();
+      onChange();
+    });
+    panel.appendChild(clear);
+
+    toggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setOpen(panel.hidden);
+    });
+    document.addEventListener("click", function (e) {
+      if (!panel.hidden && !container.contains(e.target)) setOpen(false);
+    });
+    container.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+    syncToggle();
   }
 
   function hasAnySelectedType(selected) {
@@ -398,10 +450,10 @@
 
   // A Pokémon's sprite and name as one link to its profile (U1), so
   // middle-click and long-press work everywhere a Pokémon appears.
-  function pokemonCell(pokemonKey, pokemonName) {
+  function pokemonCell(pokemonKey, pokemonName, sizePx) {
     return (
       '<a class="cell-with-icon pokemon-link" href="' + pokemonHref(pokemonKey) + '">' +
-      spriteImg(pokemonKey) + "<span>" +
+      spriteImg(pokemonKey, sizePx) + "<span>" +
       escapeHtml(pokemonName || pokemonNames[pokemonKey] || pokemonKey) + "</span></a>"
     );
   }
@@ -571,6 +623,150 @@
     return '<div class="cell-with-icon">' + icon + "<span>" + escapeHtml(itemName) + "</span></div>";
   }
 
+  // ---------- tooltips ----------
+  // Any element with data-tip shows that text in a bubble on hover, on
+  // keyboard focus and on tap (a title attribute never shows on a phone).
+  // tipHtml makes a small "i" button for long text that used to sit inline
+  // (an item's effect), and the glossary terms use the same handler.
+  function tipHtml(text, label) {
+    if (!text) return "";
+    return '<button type="button" class="tip" data-tip="' + escapeHtml(text) + '" aria-label="' +
+      escapeHtml(label || "More about this") + ": " + escapeHtml(text) + '">i</button>';
+  }
+
+  var tipBubble = null;
+  var tipOwner = null;
+  function showTip(owner) {
+    if (!tipBubble) {
+      tipBubble = document.createElement("div");
+      tipBubble.className = "tip-bubble";
+      tipBubble.setAttribute("role", "tooltip");
+      tipBubble.id = "tip-bubble";
+      document.body.appendChild(tipBubble);
+    }
+    tipOwner = owner;
+    tipBubble.textContent = owner.getAttribute("data-tip");
+    tipBubble.hidden = false;
+    owner.setAttribute("aria-describedby", "tip-bubble");
+    var rect = owner.getBoundingClientRect();
+    var width = Math.min(320, window.innerWidth - 24);
+    tipBubble.style.maxWidth = width + "px";
+    var left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
+    tipBubble.style.left = left + window.scrollX + "px";
+    var below = rect.bottom + 8;
+    tipBubble.style.top = below + window.scrollY + "px";
+  }
+  function hideTip() {
+    if (tipBubble) tipBubble.hidden = true;
+    if (tipOwner) tipOwner.removeAttribute("aria-describedby");
+    tipOwner = null;
+  }
+  document.addEventListener("mouseover", function (e) {
+    var owner = e.target.closest && e.target.closest("[data-tip]");
+    if (owner) showTip(owner);
+    else if (tipOwner && !(e.target.closest && e.target.closest(".tip-bubble"))) hideTip();
+  });
+  document.addEventListener("focusin", function (e) {
+    var owner = e.target.closest && e.target.closest("[data-tip]");
+    if (owner) showTip(owner);
+  });
+  document.addEventListener("focusout", function (e) {
+    if (tipOwner && e.target === tipOwner) hideTip();
+  });
+  document.addEventListener("click", function (e) {
+    var owner = e.target.closest && e.target.closest("[data-tip]");
+    if (owner) {
+      if (tipOwner === owner && !tipBubble.hidden && owner.tagName !== "BUTTON") hideTip();
+      else showTip(owner);
+    } else if (tipOwner) {
+      hideTip();
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") hideTip();
+  });
+  window.addEventListener("scroll", hideTip, { passive: true });
+
+  // ---------- Showdown export and copying ----------
+
+  // A pokemon_key in Showdown's spelling: charizard-mega-y -> Charizard-Mega-Y.
+  function showdownName(key) {
+    return String(key).split("-").map(function (part) {
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    }).join("-");
+  }
+
+  function splitMoves(moves) {
+    if (Array.isArray(moves)) return moves.filter(Boolean);
+    return String(moves || "").split("|").map(function (m) { return m.trim(); }).filter(Boolean);
+  }
+
+  // One Pokémon's set as Showdown text. set: {pokemon_key, item_name,
+  // ability, nature, moves (array or pipe-delimited)}. No EV line: team
+  // sheets don't publish spreads.
+  function setToShowdown(set) {
+    var lines = [showdownName(set.pokemon_key) + (set.item_name ? " @ " + set.item_name : "")];
+    if (set.ability) lines.push("Ability: " + set.ability);
+    lines.push("Level: 50");
+    if (set.nature) lines.push(set.nature + " Nature");
+    splitMoves(set.moves).forEach(function (move) {
+      lines.push("- " + move);
+    });
+    return lines.join("\n");
+  }
+
+  function teamToShowdown(sets) {
+    return sets.map(setToShowdown).join("\n\n");
+  }
+
+  // Copies text, confirming on the button. Some hosts refuse clipboard
+  // writes; then the text appears selected next to the button so the
+  // reader can copy it by hand.
+  function copyWithFallback(button, text, doneLabel) {
+    var label = button.textContent;
+    function done() {
+      button.textContent = doneLabel || "Copied";
+      setTimeout(function () { button.textContent = label; }, 1500);
+    }
+    function fallback() {
+      var box = button.parentNode.querySelector("textarea.copy-fallback");
+      if (!box) {
+        box = document.createElement("textarea");
+        box.className = "copy-fallback";
+        box.readOnly = true;
+        button.parentNode.appendChild(box);
+      }
+      box.value = text;
+      box.rows = Math.min(14, text.split("\n").length + 1);
+      box.focus();
+      box.select();
+      button.textContent = "Select and copy";
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  // Any [data-copy] button copies the text stored for it in copyPayloads
+  // (a click delegate, so views can render buttons as plain HTML).
+  var copyPayloads = {};
+  var copyCounter = 0;
+  function copyButtonHtml(text, label, cls) {
+    copyCounter += 1;
+    var id = "copy-" + copyCounter;
+    copyPayloads[id] = text;
+    return '<button type="button" class="btn btn-sm' + (cls ? " " + cls : "") + '" data-copy="' + id + '">' +
+      escapeHtml(label || "Copy for Showdown") + "</button>";
+  }
+  document.addEventListener("click", function (e) {
+    var button = e.target.closest && e.target.closest("[data-copy]");
+    if (!button) return;
+    var text = copyPayloads[button.getAttribute("data-copy")];
+    if (text != null) copyWithFallback(button, text);
+  });
+
   // ---------- 6-wide grid (docs/design-system.md's ".grid-6xn component") ----------
 
   // The dashboard's primary visual for any usage/win-rate metric,
@@ -704,6 +900,211 @@
     };
   }
 
+  // ---------- shared data table (docs/upgrade-plan-2027q1.md, U5) ----------
+  // The one component for ranked data: a sortable table with a sticky
+  // header, sprite + name cells, right-aligned numbers, inline share bars
+  // and rows that open the Pokémon (or event, or player) they describe. On
+  // phones it collapses to two-line rows: the "main" columns on the first
+  // line, the rest as labelled details on the second, with a Sort select in
+  // place of the header.
+  //
+  // opts.columns: [{
+  //   key,            the row field the column shows and sorts by
+  //   label,          header text
+  //   type,           "rank" | "pokemon" | "share" | "percent" | "int" | "text"
+  //   render(row),    custom cell HTML (overrides type)
+  //   title(row),     hover/tap text for the cell (a percentage's denominator)
+  //   main: true,     on the first line of a phone row
+  //   sortable,       defaults to true for numeric types
+  //   sortKey,        sort by another field than key
+  //   numeric: true,  right-aligned (default for numeric types)
+  //   hideOnPhone,    dropped from the phone layout
+  // }]
+  // opts.sort: {key, dir}; opts.rowHref(row): where a row click goes;
+  // opts.limit: rows shown before "Show all"; opts.empty: empty-state text;
+  // opts.caption: accessible table caption.
+  var NUMERIC_TYPES = { rank: 1, share: 1, percent: 1, int: 1 };
+  // Table rows use a 32px sprite: dense enough for ~20 rows a screen.
+  var TABLE_SPRITE_PX = 32;
+  var tableCount = 0;
+
+  function cellHtml(col, row, maxByKey) {
+    if (col.render) return col.render(row);
+    var value = row[col.key];
+    switch (col.type) {
+      case "rank":
+        return value == null ? "—" : '<span class="badge badge-rank">#' + value + "</span>";
+      case "pokemon":
+        return pokemonCell(row[col.keyField || "pokemon_key"], value, TABLE_SPRITE_PX);
+      case "share": {
+        if (value == null) return "—";
+        var max = maxByKey[col.key] || 1;
+        return '<span class="share-cell"><span class="share-bar" style="width:' +
+          Math.max(2, Math.round((value / max) * 100)) + '%"></span><span class="share-value">' +
+          formatPercent(value) + "</span></span>";
+      }
+      case "percent":
+        return formatPercent(value);
+      case "int":
+        return value == null ? "—" : Number(value).toLocaleString();
+      default:
+        return value == null || value === "" ? "—" : escapeHtml(value);
+    }
+  }
+
+  function createDataTable(container, opts) {
+    if (!container) return { setRows: function () {} };
+    tableCount += 1;
+    var tableId = "data-table-" + tableCount;
+    var columns = opts.columns;
+    var state = {
+      key: opts.sort ? opts.sort.key : null,
+      dir: opts.sort ? opts.sort.dir || "desc" : "desc",
+      expanded: false,
+    };
+    var rows = [];
+
+    function sortField(col) {
+      return col.sortKey || col.key;
+    }
+    function isSortable(col) {
+      return col.sortable !== undefined ? col.sortable : !!NUMERIC_TYPES[col.type];
+    }
+    function isNumeric(col) {
+      return col.numeric !== undefined ? col.numeric : !!NUMERIC_TYPES[col.type];
+    }
+
+    container.classList.add("data-table-host");
+    container.innerHTML =
+      '<label class="data-table-sort">Sort <select aria-controls="' + tableId + '"></select></label>' +
+      '<table class="data-table" id="' + tableId + '">' +
+      (opts.caption ? '<caption class="visually-hidden">' + escapeHtml(opts.caption) + "</caption>" : "") +
+      "<thead><tr></tr></thead><tbody></tbody></table>" +
+      '<p class="data-table-empty empty-state" hidden></p>' +
+      '<button type="button" class="btn btn-sm data-table-more" hidden></button>';
+    var table = container.querySelector("table");
+    var headRow = table.querySelector("thead tr");
+    var tbody = table.querySelector("tbody");
+    var sortSelect = container.querySelector(".data-table-sort select");
+    var emptyEl = container.querySelector(".data-table-empty");
+    var moreBtn = container.querySelector(".data-table-more");
+
+    columns.forEach(function (col) {
+      var th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = col.label;
+      if (isNumeric(col)) th.classList.add("num");
+      if (isSortable(col)) {
+        th.classList.add("sortable");
+        th.tabIndex = 0;
+        th.setAttribute("data-sort-key", sortField(col));
+        var go = function () {
+          var key = sortField(col);
+          if (state.key === key) state.dir = state.dir === "desc" ? "asc" : "desc";
+          else {
+            state.key = key;
+            state.dir = col.type === "rank" ? "asc" : "desc";
+          }
+          render();
+        };
+        th.addEventListener("click", go);
+        th.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            go();
+          }
+        });
+        var opt = document.createElement("option");
+        opt.value = sortField(col);
+        opt.textContent = col.label;
+        sortSelect.appendChild(opt);
+      }
+      headRow.appendChild(th);
+    });
+    if (!sortSelect.options.length) container.querySelector(".data-table-sort").hidden = true;
+    sortSelect.addEventListener("change", function () {
+      state.key = sortSelect.value;
+      var col = columns.filter(function (c) { return sortField(c) === state.key; })[0];
+      state.dir = col && col.type === "rank" ? "asc" : "desc";
+      render();
+    });
+
+    function sorted() {
+      if (!state.key) return rows;
+      return rows.slice().sort(function (a, b) {
+        var av = a[state.key];
+        var bv = b[state.key];
+        var aMissing = av === null || av === undefined || av === "";
+        var bMissing = bv === null || bv === undefined || bv === "";
+        if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+        var cmp = typeof av === "string" ? av.localeCompare(bv) : av < bv ? -1 : av > bv ? 1 : 0;
+        return state.dir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    function render() {
+      var ordered = sorted();
+      var limit = opts.limit && !state.expanded ? opts.limit : Infinity;
+      var shown = ordered.slice(0, limit);
+      var maxByKey = {};
+      columns.forEach(function (col) {
+        if (col.type === "share") {
+          maxByKey[col.key] = rows.reduce(function (m, r) { return Math.max(m, r[col.key] || 0); }, 0);
+        }
+      });
+      tbody.innerHTML = shown.map(function (row) {
+        var href = opts.rowHref ? opts.rowHref(row) : null;
+        return "<tr" + (href ? ' class="row-link" data-href="' + escapeHtml(href) + '"' : "") + ">" +
+          columns.map(function (col) {
+            var cls = [];
+            if (isNumeric(col)) cls.push("num");
+            cls.push(col.main ? "col-main" : "col-detail");
+            if (col.hideOnPhone) cls.push("col-phone-hide");
+            var title = col.title ? col.title(row) : "";
+            return '<td class="' + cls.join(" ") + '" data-label="' + escapeHtml(col.label) + '"' +
+              (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" + cellHtml(col, row, maxByKey) + "</td>";
+          }).join("") + "</tr>";
+      }).join("");
+      table.hidden = !rows.length;
+      emptyEl.hidden = !!rows.length;
+      emptyEl.textContent = opts.empty || "No rows match.";
+      moreBtn.hidden = ordered.length <= limit;
+      moreBtn.textContent = "Show all " + ordered.length.toLocaleString();
+      headRow.querySelectorAll("th").forEach(function (th) {
+        var active = th.getAttribute("data-sort-key") === state.key;
+        if (active) th.setAttribute("aria-sort", state.dir === "asc" ? "ascending" : "descending");
+        else th.removeAttribute("aria-sort");
+      });
+      if (state.key) sortSelect.value = state.key;
+    }
+
+    moreBtn.addEventListener("click", function () {
+      state.expanded = true;
+      render();
+    });
+    // A row click anywhere but a link or button opens what the row is about.
+    tbody.addEventListener("click", function (e) {
+      if (e.target.closest("a, button, select, input")) return;
+      var tr = e.target.closest("tr[data-href]");
+      if (tr) navigate(tr.getAttribute("data-href"));
+    });
+
+    return {
+      setRows: function (newRows) {
+        rows = newRows || [];
+        state.expanded = false;
+        render();
+      },
+      rows: function () {
+        return sorted();
+      },
+    };
+  }
+
+  function pokemonRowHref(row) {
+    return row.pokemon_key ? pokemonHref(row.pokemon_key) : null;
+  }
+
   // ---------- tab switching ----------
 
   var tabInitializers = {};
@@ -812,6 +1213,29 @@
     box.className = "empty-state data-load-error";
     box.textContent = message;
     panel.insertBefore(box, panel.firstChild);
+  }
+
+  // ---------- scroll cues (docs/upgrade-plan-2027q1.md, U7) ----------
+  // A horizontally scrolling row of tabs fades at whichever edge has more
+  // to show, so "Speed Ti…" reads as cut off on purpose. centerInRow
+  // brings the active tab into view without scrolling the page.
+  function updateScrollCues(row) {
+    var max = row.scrollWidth - row.clientWidth;
+    row.classList.toggle("can-scroll-left", row.scrollLeft > 2);
+    row.classList.toggle("can-scroll-right", max > 2 && row.scrollLeft < max - 2);
+  }
+  function setupScrollCues(row) {
+    if (!row || row.dataset.scrollCues) return;
+    row.dataset.scrollCues = "1";
+    row.classList.add("scroll-cues");
+    row.addEventListener("scroll", function () { updateScrollCues(row); }, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(function () { updateScrollCues(row); }).observe(row);
+    updateScrollCues(row);
+  }
+  function centerInRow(row, item) {
+    if (!row || !item || row.scrollWidth <= row.clientWidth) return;
+    row.scrollLeft = item.offsetLeft - row.offsetLeft - (row.clientWidth - item.offsetWidth) / 2;
+    updateScrollCues(row);
   }
 
   // ---------- routing (docs/upgrade-plan-2027q1.md, U1) ----------
@@ -972,13 +1396,13 @@
       var mine = btn.getAttribute("data-section") === section;
       btn.hidden = !mine;
       if (mine) inSection += 1;
-      var selected = btn.getAttribute("data-tab") === tabId;
-      btn.setAttribute("aria-selected", selected ? "true" : "false");
-      if (selected && btn.scrollIntoView && tabRow && tabRow.scrollWidth > tabRow.clientWidth) {
-        btn.scrollIntoView({ block: "nearest", inline: "nearest" });
-      }
+      btn.setAttribute("aria-selected", btn.getAttribute("data-tab") === tabId ? "true" : "false");
     });
-    if (tabRow) tabRow.hidden = inSection < 2;
+    if (tabRow) {
+      tabRow.hidden = inSection < 2;
+      setupScrollCues(tabRow);
+      centerInRow(tabRow, tabRow.querySelector('.tab-btn[aria-selected="true"]'));
+    }
     sectionButtons.forEach(function (btn) {
       if (btn.getAttribute("data-section") === section) btn.setAttribute("aria-current", "true");
       else btn.removeAttribute("aria-current");
@@ -1110,10 +1534,14 @@
     function slugOf(btn) {
       return btn.getAttribute("data-route") || btn.getAttribute("data-subtab");
     }
+    var row = buttons.length ? buttons[0].parentNode : null;
+    setupScrollCues(row);
     function activate(id) {
       activeId = id;
       buttons.forEach(function (btn) {
-        btn.setAttribute("aria-selected", btn.getAttribute("data-subtab") === id ? "true" : "false");
+        var on = btn.getAttribute("data-subtab") === id;
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+        if (on) centerInRow(row, btn);
       });
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-subpanel") !== id;
@@ -1287,10 +1715,28 @@
     navigate(pokemonHref(pokemonKey));
   }
 
+  // Usage (docs/upgrade-plan-2027q1.md, U5): four ranked tables on the
+  // shared component, replacing the 18-tile grids that showed 12 Pokémon
+  // per screen. Every percentage carries its denominator on hover/tap.
+  function slotsTitle(count, total) {
+    if (count == null || !total) return "";
+    return Number(count).toLocaleString() + " of " + Number(total).toLocaleString() + " roster slots";
+  }
+
+  function recordTitle(row) {
+    if (row.total_wins == null) return row.record_count != null ? row.record_count + " teams with a record" : "";
+    return row.total_wins.toLocaleString() + "–" + row.total_losses.toLocaleString() + " across " +
+      (row.record_count || 0).toLocaleString() + " teams";
+  }
+
   function setupUsage() {
     var usageRows = marts.pokemon_usage_summary || [];
     var profileByKey = championsProfileByKey();
     var roles = roleByKey();
+    var winByKey = {};
+    (marts.pokemon_win_rate_summary || []).forEach(function (r) {
+      winByKey[r.pokemon_key] = r;
+    });
 
     var tierSelect = document.getElementById("usage-tier-filter");
     var roleSelect = document.getElementById("usage-role-filter");
@@ -1299,12 +1745,12 @@
     var shareMax = document.getElementById("usage-share-max");
     var speedMin = document.getElementById("usage-speed-min");
     var speedMax = document.getElementById("usage-speed-max");
+    var noteEl = document.getElementById("usage-table-note");
     var selectedTypes = {};
 
     // Rows are already scoped to the page's regulation (the header's
     // Regulation selector; see applyRegulationScope), so this tab only
-    // filters by tier. It used to carry its own Regulation select, which
-    // could only approximate a regulation by its legal pool.
+    // filters by tier, type, role and ranges.
     function filteredRows(tier) {
       return usageRows.filter(function (r) {
         if ((r.event_tier || "") !== tier) return false;
@@ -1317,42 +1763,75 @@
       });
     }
 
-    var grid = document.getElementById("usage-grid");
-    var usageTable = document.getElementById("usage-leaders-table");
-    var usageTableSortable = usageTable
-      ? makeSortableTable(
-          usageTable,
-          [],
-          function (r) {
-            return (
-              '<td><span class="badge badge-rank">#' + r.usage_rank + "</span></td>" +
-              "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-              "<td>" + formatPercent(r.usage_share) + "</td>"
-            );
+    var slotTotals = {};
+    usageRows.forEach(function (r) {
+      var tier = r.event_tier || "";
+      slotTotals[tier] = (slotTotals[tier] || 0) + (r.usage_count || 0);
+    });
+
+    var usageTable = createDataTable(document.getElementById("usage-table"), {
+      caption: "Usage by Pokémon",
+      sort: { key: "usage_rank", dir: "asc" },
+      limit: 50,
+      rowHref: pokemonRowHref,
+      empty: "No Pokémon match these filters.",
+      columns: [
+        { key: "usage_rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        {
+          key: "types",
+          label: "Type",
+          sortable: false,
+          hideOnPhone: true,
+          render: function (r) {
+            return [r.type_1, r.type_2].filter(Boolean).map(function (t) {
+              return typeIconImg(t, 20);
+            }).join(" ");
           },
-          {}
-        )
-      : null;
+        },
+        {
+          key: "usage_share",
+          label: "Usage",
+          type: "share",
+          main: true,
+          title: function (r) { return slotsTitle(r.usage_count, slotTotals[r.event_tier || ""]); },
+        },
+        {
+          key: "win_rate",
+          label: "Win rate",
+          type: "percent",
+          title: recordTitle,
+        },
+        { key: "usage_count", label: "Teams", type: "int" },
+      ],
+    });
 
     function drawUsage() {
       var tier = tierSelect ? tierSelect.value : "";
-      var rows = filteredRows(tier)
-        .slice()
-        .sort(function (a, b) {
-          return a.usage_rank - b.usage_rank;
-        });
-      renderGrid6xn(grid, rows.slice(0, 18), {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.usage_share);
-        },
+      var rows = filteredRows(tier).map(function (r) {
+        var profile = profileByKey[r.pokemon_key] || {};
+        var win = winByKey[r.pokemon_key] || {};
+        return {
+          pokemon_key: r.pokemon_key,
+          pokemon_name: r.pokemon_name,
+          event_tier: r.event_tier,
+          usage_rank: r.usage_rank,
+          usage_share: r.usage_share,
+          usage_count: r.usage_count,
+          type_1: profile.type_1,
+          type_2: profile.type_2,
+          win_rate: win.win_rate,
+          total_wins: win.total_wins,
+          total_losses: win.total_losses,
+          record_count: win.record_count,
+        };
       });
-      if (usageTableSortable) usageTableSortable.setRows(rows.slice(0, 30));
+      usageTable.setRows(rows);
+      if (noteEl) {
+        noteEl.textContent = rows.length.toLocaleString() + " Pokémon · shares are of " +
+          (slotTotals[tier] || 0).toLocaleString() + " roster slots in " + shortRegulation(regulationScope) +
+          (tier ? " " + tier + " events" : "") + ".";
+      }
     }
 
     if (tierSelect) {
@@ -1369,48 +1848,42 @@
     drawUsage();
 
     var winRows = marts.pokemon_win_rate_summary || [];
-    var winGrid = document.getElementById("win-rate-grid");
-    var winTable = document.getElementById("win-rate-table");
     var minRecordSelect = document.getElementById("win-rate-min-record-count-filter");
-    var winSortable = winTable
-      ? makeSortableTable(
-          winTable,
-          [],
-          function (r, i) {
-            return (
-              '<td><span class="badge badge-rank">#' + (i + 1) + "</span></td>" +
-              "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-              "<td>" + formatPercent(r.win_rate) + ' <span class="ranked-value">(n=' + r.record_count + ")</span></td>"
-            );
-          },
-          { defaultKey: "win_rate" }
-        )
-      : null;
+    var winTable = createDataTable(document.getElementById("win-rate-table"), {
+      caption: "Win rate by Pokémon",
+      sort: { key: "wilson_lower_bound", dir: "desc" },
+      limit: 50,
+      rowHref: pokemonRowHref,
+      columns: [
+        { key: "rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        { key: "win_rate", label: "Win rate", type: "percent", main: true, title: recordTitle },
+        {
+          key: "wilson_lower_bound",
+          label: "Wilson bound",
+          type: "percent",
+          title: function () { return "95% confidence: the true win rate is at least this"; },
+        },
+        { key: "record_count", label: "Teams", type: "int" },
+      ],
+    });
     function updateWinRows() {
-      var floor = minRecordSelect ? parseInt(minRecordSelect.value, 10) : 5;
+      var floor = minRecordSelect ? parseInt(minRecordSelect.value, 10) : 20;
       var filtered = winRows
         .filter(function (r) {
           return r.record_count >= floor;
         })
         .slice()
         .sort(function (a, b) {
-          return b.win_rate - a.win_rate;
+          return (b.wilson_lower_bound || 0) - (a.wilson_lower_bound || 0);
+        })
+        .map(function (r, i) {
+          var row = {};
+          for (var k in r) if (Object.prototype.hasOwnProperty.call(r, k)) row[k] = r[k];
+          row.rank = i + 1;
+          return row;
         });
-      renderGrid6xn(winGrid, filtered.slice(0, 18), {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.win_rate);
-        },
-        subFn: function (r) {
-          return "n=" + r.record_count;
-        },
-      });
-      if (winSortable) winSortable.setRows(filtered.slice(0, 30));
+      winTable.setRows(filtered);
     }
     if (minRecordSelect) minRecordSelect.addEventListener("change", updateWinRows);
     updateWinRows();
@@ -1444,34 +1917,40 @@
   function setupUsageSuccess() {
     var successRows = marts.pokemon_placement_weighted_usage || [];
     var metricSelect = document.getElementById("usage-success-metric");
-    var grid = document.getElementById("usage-success-grid");
-    var table = document.getElementById("usage-success-table");
-    if (!grid && !table) return;
-
     var usageByKey = {};
     (marts.pokemon_usage_summary || []).forEach(function (r) {
       if (!r.event_tier) usageByKey[r.pokemon_key] = r;
     });
 
-    var tableSortable = table
-      ? makeSortableTable(
-          table,
-          [],
-          function (r, i) {
-            return (
-              '<td><span class="badge badge-rank">#' + (i + 1) + "</span></td>" +
-              "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-              "<td>" + formatPercent(r.weighted_usage_share) + "</td>" +
-              "<td>" + formatPercent(r.top_cut_usage_share) + "</td>" +
-              "<td>" + formatPercent(r.usage_share) + "</td>" +
-              "<td>" + rankMovementBadgeHtml(r) + "</td>"
-            );
+    var table = createDataTable(document.getElementById("usage-success-table"), {
+      caption: "Placement-weighted usage",
+      sort: { key: "rank", dir: "asc" },
+      limit: 50,
+      rowHref: pokemonRowHref,
+      columns: [
+        { key: "rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        { key: "weighted_usage_share", label: "Weighted", type: "share", main: true },
+        {
+          key: "top_cut_usage_share",
+          label: "Top cut",
+          type: "percent",
+          title: function (r) {
+            return r.top_cut_usage_count != null ? r.top_cut_usage_count + " top-8 roster slots" : "";
           },
-          { defaultKey: null }
-        )
-      : null;
+        },
+        { key: "usage_share", label: "Raw usage", type: "percent" },
+        {
+          key: "rank_movement",
+          label: "Movement",
+          numeric: true,
+          sortable: true,
+          render: rankMovementBadgeHtml,
+        },
+      ],
+    });
 
-    function rankedRows() {
+    function draw() {
       var byTopCut = metricSelect && metricSelect.value === "top_cut";
       var shareField = byTopCut ? "top_cut_usage_share" : "weighted_usage_share";
       var ranked = successRows
@@ -1482,37 +1961,17 @@
         .map(function (r, i) {
           var usage = usageByKey[r.pokemon_key];
           return {
+            rank: i + 1,
             pokemon_key: r.pokemon_key,
             pokemon_name: r.pokemon_name,
-            weighted_usage_share: r.weighted_usage_share,
+            weighted_usage_share: r[shareField],
             top_cut_usage_share: r.top_cut_usage_share,
+            top_cut_usage_count: r.top_cut_usage_count,
             usage_share: usage ? usage.usage_share : null,
-            success_share: r[shareField],
             rank_movement: usage ? usage.usage_rank - (i + 1) : null,
           };
         });
-      return ranked;
-    }
-
-    function draw() {
-      var rows = rankedRows();
-      renderGrid6xn(grid, rows.slice(0, 18), {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.success_share);
-        },
-        subFn: function (r) {
-          if (r.rank_movement === null || r.rank_movement === undefined) return "";
-          if (r.rank_movement === 0) return "±0 vs. usage rank";
-          return (r.rank_movement > 0 ? "▲ +" : "▼ ") + r.rank_movement + " vs. usage rank";
-        },
-      });
-      if (tableSortable) tableSortable.setRows(rows.slice(0, 30));
+      table.setRows(ranked);
     }
 
     if (metricSelect) metricSelect.addEventListener("change", draw);
@@ -1521,18 +1980,17 @@
 
   // Usage-by-tournament-date subtab (backlog #6's data half; #29/#30's UI
   // half): a date filter (#30) plus a "vs. the previous tournament date"
-  // delta per Pokémon (#29's dependency-free stand-in for a line chart —
-  // this dashboard has no charting library, see the module docstring
-  // above). event_date is a tournament date, not an extraction
-  // snapshot_date, so this trend is real even with only one snapshot's
-  // worth of staging history.
+  // delta per Pokémon (#29's dependency-free stand-in for a line chart).
+  // event_date is a tournament date, not an extraction snapshot_date, so
+  // this trend is real even with only one snapshot's worth of staging
+  // history.
   function trendDeltaLabel(row) {
     if (row.is_new) return "NEW";
     if (row.usage_share_delta === null || row.usage_share_delta === undefined) return "";
     var points = row.usage_share_delta * 100;
     var arrow = points > 0 ? "▲" : points < 0 ? "▼" : "";
     var sign = points > 0 ? "+" : "";
-    return arrow + " " + sign + points.toFixed(1) + "pp";
+    return arrow + " " + sign + points.toFixed(1) + " pts";
   }
 
   function trendDeltaBadgeHtml(row) {
@@ -1546,25 +2004,29 @@
   function setupUsageTrends() {
     var trendRows = marts.pokemon_usage_by_event_date || [];
     var dateSelect = document.getElementById("usage-trend-date-filter");
-    var grid = document.getElementById("usage-trend-grid");
-    var table = document.getElementById("usage-trend-table");
     var dates = distinctSorted(trendRows, "event_date").slice().reverse(); // most recent first
 
-    var tableSortable = table
-      ? makeSortableTable(
-          table,
-          [],
-          function (r) {
-            return (
-              '<td><span class="badge badge-rank">#' + r.usage_rank + "</span></td>" +
-              "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-              "<td>" + formatPercent(r.usage_share) + "</td>" +
-              "<td>" + trendDeltaBadgeHtml(r) + "</td>"
-            );
+    var table = createDataTable(document.getElementById("usage-trend-table"), {
+      caption: "Usage by tournament date",
+      sort: { key: "usage_rank", dir: "asc" },
+      limit: 50,
+      rowHref: pokemonRowHref,
+      columns: [
+        { key: "usage_rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        { key: "usage_share", label: "Usage", type: "share", main: true },
+        {
+          key: "usage_share_delta",
+          label: "Change",
+          numeric: true,
+          sortable: true,
+          render: trendDeltaBadgeHtml,
+          title: function (r) {
+            return r.previous_usage_share != null ? "Was " + formatPercent(r.previous_usage_share) : "";
           },
-          { defaultKey: "usage_rank", defaultDir: "asc" }
-        )
-      : null;
+        },
+      ],
+    });
 
     function rowsForDate(date) {
       var dateIndex = dates.indexOf(date);
@@ -1590,31 +2052,15 @@
             pokemon_name: r.pokemon_name,
             usage_rank: r.usage_rank,
             usage_share: r.usage_share,
+            previous_usage_share: prev ? prev.usage_share : null,
             usage_share_delta: prev ? r.usage_share - prev.usage_share : null,
             is_new: !!prevDate && !prev,
           };
-        })
-        .sort(function (a, b) {
-          return a.usage_rank - b.usage_rank;
         });
     }
 
     function drawTrend() {
-      var date = dateSelect ? dateSelect.value : dates[0];
-      var rows = rowsForDate(date);
-      renderGrid6xn(grid, rows.slice(0, 18), {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.usage_share);
-        },
-        subFn: trendDeltaLabel,
-      });
-      if (tableSortable) tableSortable.setRows(rows.slice(0, 30));
+      table.setRows(rowsForDate(dateSelect ? dateSelect.value : dates[0]));
     }
 
     if (dateSelect) {
@@ -1639,7 +2085,6 @@
     var itemRows = marts.pokemon_item_usage || [];
     var abilityRows = marts.pokemon_ability_usage || [];
     var moveRows = marts.pokemon_move_usage || [];
-    var natureRows = marts.pokemon_nature_usage || [];
     var coreRows = marts.pokemon_team_core_usage || [];
     var synergyRows = marts.pokemon_team_synergy || [];
     var tripleRows = marts.pokemon_team_core_triple_usage || [];
@@ -1665,28 +2110,86 @@
     );
 
     var statsEl = document.getElementById("pokemon-profile-stats");
-    var itemGrid = document.getElementById("profile-item-grid");
-    var abilityGrid = document.getElementById("profile-ability-grid");
-    var moveTable = document.getElementById("profile-move-table");
-    var moveTableSortable = moveTable
-      ? makeSortableTable(
-          moveTable,
-          [],
-          function (r) {
-            return (
-              "<td>" + typeIconImg(r.move_type, 18) + " " + escapeHtml(r.move_name) + "</td>" +
-              "<td>" + formatPercent(r.move_share) + "</td>" +
-              "<td>" + escapeHtml(r.category || "—") + "</td>" +
-              "<td>" + (r.power != null ? r.power : "—") + "</td>" +
-              "<td>" + (r.accuracy != null ? r.accuracy + "%" : "—") + "</td>" +
-              "<td>" + (r.pp != null ? r.pp : "—") + "</td>" +
-              "<td>" + (r.priority || 0) + "</td>" +
-              "<td>" + escapeHtml(r.short_effect || "") + "</td>"
-            );
+    // Items, abilities and moves on the shared table (U5); effect text sits
+    // behind an "i" tooltip instead of making every row ~270px tall.
+    function nameWithTip(name, effect, iconHtml) {
+      return '<span class="cell-with-icon">' + (iconHtml || "") + "<span>" + escapeHtml(name) + "</span>" +
+        tipHtml(effect, name) + "</span>";
+    }
+    function shareOfTitle(r) {
+      return r.total ? r.usage_count.toLocaleString() + " of " + r.total.toLocaleString() + " team sheets" : "";
+    }
+    var itemTable = createDataTable(document.getElementById("profile-item-table"), {
+      caption: "Held items",
+      sort: { key: "usage_rank", dir: "asc" },
+      limit: 10,
+      empty: "No recorded held items.",
+      columns: [
+        { key: "usage_rank", label: "#", type: "rank", main: true },
+        {
+          key: "item_name",
+          label: "Item",
+          main: true,
+          sortable: true,
+          render: function (r) {
+            var src = itemIcons[r.item_name];
+            return nameWithTip(r.item_name, r.short_effect, src ? '<img class="cell-icon" src="' + src + '" alt="">' : "");
           },
-          { defaultKey: "usage_rank", defaultDir: "asc" }
-        )
-      : null;
+        },
+        { key: "item_share", label: "Share", type: "share", main: true, title: shareOfTitle },
+        { key: "usage_count", label: "Teams", type: "int" },
+      ],
+    });
+    var abilityTable = createDataTable(document.getElementById("profile-ability-table"), {
+      caption: "Abilities",
+      sort: { key: "usage_rank", dir: "asc" },
+      empty: "No recorded abilities.",
+      columns: [
+        { key: "usage_rank", label: "#", type: "rank", main: true },
+        {
+          key: "ability",
+          label: "Ability",
+          main: true,
+          sortable: true,
+          render: function (r) { return nameWithTip(r.ability, r.short_effect); },
+        },
+        { key: "ability_share", label: "Share", type: "share", main: true, title: shareOfTitle },
+        { key: "usage_count", label: "Teams", type: "int" },
+      ],
+    });
+    var moveTable = createDataTable(document.getElementById("profile-move-table"), {
+      caption: "Moves",
+      sort: { key: "usage_rank", dir: "asc" },
+      limit: 15,
+      empty: "No recorded moves.",
+      columns: [
+        { key: "usage_rank", label: "#", type: "rank", main: true },
+        {
+          key: "move_name",
+          label: "Move",
+          main: true,
+          sortable: true,
+          render: function (r) { return nameWithTip(r.move_name, r.short_effect, typeIconImg(r.move_type, 18)); },
+        },
+        {
+          key: "move_share",
+          label: "Usage",
+          type: "share",
+          main: true,
+          title: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " team sheets" : ""; },
+        },
+        { key: "category", label: "Category", sortable: true },
+        { key: "power", label: "Power", type: "int" },
+        {
+          key: "accuracy",
+          label: "Acc.",
+          type: "int",
+          render: function (r) { return r.accuracy != null ? r.accuracy + "%" : "—"; },
+        },
+        { key: "pp", label: "PP", type: "int", hideOnPhone: true },
+        { key: "priority", label: "Priority", type: "int", hideOnPhone: true },
+      ],
+    });
     var coreGrid = document.getElementById("profile-team-core-grid");
     var coreMetricSelect = document.getElementById("profile-team-core-metric");
     var coreSizeSelect = document.getElementById("profile-team-core-size");
@@ -1805,8 +2308,6 @@
       statMedians[field[0]] = values.length ? values[Math.floor(values.length / 2)] : null;
     });
     var STAT_SCALE_MAX = 200;
-    // Below this many team sheets, the most-common-set card says so.
-    var MIN_SET_SAMPLE = 30;
 
     function statBarsHtml(profile) {
       return '<div class="stat-bars" role="list">' + STAT_FIELDS.map(function (field) {
@@ -1831,56 +2332,123 @@
         .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
     }
 
-    function showdownName(key) {
-      return String(key).split("-").map(function (part) {
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      }).join("-");
+    // Real sets (docs/upgrade-plan-2027q1.md, P1): an item, ability, nature
+    // and four moves that appeared together on real team sheets, from
+    // pokemon_set_variants. "Exact" sets match all of it; "core" sets group
+    // on item, ability and the three most common moves, so near-identical
+    // sets differing in one flex move cluster. This replaced a card built
+    // from each slot's most common choice, which could describe a set
+    // nobody ran.
+    var setRows = marts.pokemon_set_variants || [];
+    var setsByKey = {};
+    setRows.forEach(function (r) {
+      var byLevel = setsByKey[r.pokemon_key] || (setsByKey[r.pokemon_key] = { full: [], core: [] });
+      (byLevel[r.set_level] || (byLevel[r.set_level] = [])).push(r);
+    });
+    Object.keys(setsByKey).forEach(function (key) {
+      ["full", "core"].forEach(function (level) {
+        setsByKey[key][level].sort(function (a, b) { return a.set_rank - b.set_rank; });
+      });
+    });
+    var setState = { level: "full", index: 0 };
+    // Below this many teams, a set's card says the sample is thin.
+    var MIN_SET_TEAMS = 10;
+
+    // A set's moves in the Pokémon's own move-usage order, not the mart's
+    // alphabetical order, so the headline move comes first.
+    function orderedMoves(key, moves) {
+      var rank = {};
+      topRow(moveRows, key).forEach(function (m, i) { rank[m.move_name] = i; });
+      return splitMoves(moves).sort(function (a, b) {
+        return (rank[a] === undefined ? 99 : rank[a]) - (rank[b] === undefined ? 99 : rank[b]);
+      });
     }
 
-    // The single most common choice in each slot (B4). These are separate
-    // modes, not one observed team sheet: the top item and top nature may
-    // never have appeared together. Labelled as such, and there is no EV
-    // line because no source publishes spreads.
-    function commonSetHtml(profile) {
-      var item = topRow(itemRows, profile.pokemon_key)[0];
-      var ability = topRow(abilityRows, profile.pokemon_key)[0];
-      var nature = topRow(natureRows, profile.pokemon_key)[0];
-      var moves = topRow(moveRows, profile.pokemon_key).slice(0, 4);
-      if (!item && !ability && !moves.length) return "";
-      var paste = [showdownName(profile.pokemon_key) + (item ? " @ " + item.item_name : "")];
-      if (ability) paste.push("Ability: " + ability.ability);
-      if (nature) paste.push(nature.nature + " Nature");
-      moves.forEach(function (m) { paste.push("- " + m.move_name); });
-      function line(label, value, share) {
-        return "<dt>" + label + "</dt><dd>" + escapeHtml(value) +
-          (share != null ? ' <span class="set-share">' + formatPercent(share) + "</span>" : "") + "</dd>";
-      }
-      var slots = item ? itemRows.filter(function (r) { return r.pokemon_key === profile.pokemon_key; })
-        .reduce(function (sum, r) { return sum + (r.usage_count || 0); }, 0) : 0;
-      var sampleNote = slots
-        ? '<p class="set-sample' + (slots < MIN_SET_SAMPLE ? " is-thin" : "") + '">From ' + slots.toLocaleString() +
-          " team sheet" + (slots === 1 ? "" : "s") + " in " + escapeHtml(scopeLabel(regulationScope)) +
-          (slots < MIN_SET_SAMPLE ? ". Small sample: treat as anecdotal." : ".") + "</p>"
+    function moveTypeOf(key, moveName) {
+      var row = moveRows.filter(function (m) { return m.pokemon_key === key && m.move_name === moveName; })[0];
+      return row ? row.move_type : null;
+    }
+
+    function setBodyHtml(profile, set) {
+      var moves = orderedMoves(profile.pokemon_key, set.moves);
+      var exportSet = {
+        pokemon_key: profile.pokemon_key,
+        item_name: set.item_name,
+        ability: set.ability,
+        nature: set.nature,
+        moves: moves,
+      };
+      var thin = set.team_count < MIN_SET_TEAMS;
+      var winLine = set.win_rate != null
+        ? ' · <span title="95% Wilson lower bound ' + formatPercent(set.wilson_lower_bound) + '">' +
+          formatPercent(set.win_rate) + " win rate</span>"
         : "";
-      return '<div class="common-set">' +
-        '<div class="common-set-head"><h3>Most common set</h3>' +
-        '<button type="button" class="btn btn-sm" id="copy-common-set">Copy for Showdown</button></div>' +
-        "<dl>" +
-        (item ? line("Item", item.item_name, item.item_share) : "") +
-        (ability ? line("Ability", ability.ability, ability.ability_share) : "") +
-        (nature ? line("Nature", nature.nature, nature.nature_share) : "") +
-        "</dl>" + sampleNote +
+      return "<dl>" +
+        "<dt>Item</dt><dd>" + itemCell(set.item_name) + "</dd>" +
+        "<dt>Ability</dt><dd>" + escapeHtml(set.ability || "—") + "</dd>" +
+        (set.nature ? "<dt>Nature</dt><dd>" + escapeHtml(set.nature) + "</dd>" : "") +
+        "</dl>" +
         '<ul class="set-moves">' + moves.map(function (m) {
-          return "<li>" + typeIconImg(m.move_type, 18) + " " + escapeHtml(m.move_name) +
-            ' <span class="set-share">' + formatPercent(m.move_share) + "</span></li>";
-        }).join("") + "</ul>" +
-        '<p class="stat-legend">Each line is the most common choice for that slot, counted separately. ' +
-        "No EVs: tournament team sheets don't publish them.</p>" +
-        '<textarea class="visually-hidden" id="common-set-paste" aria-hidden="true" tabindex="-1">' +
-        escapeHtml(paste.join("\n")) + "</textarea></div>";
+          return "<li>" + typeIconImg(moveTypeOf(profile.pokemon_key, m), 18) + " " + escapeHtml(m) + "</li>";
+        }).join("") + (set.set_level === "core" ? '<li class="set-flex">+ 1 flex move</li>' : "") + "</ul>" +
+        '<p class="set-sample' + (thin ? " is-thin" : "") + '">' +
+        '<span title="' + set.team_count.toLocaleString() + " of " + set.pokemon_slot_count.toLocaleString() +
+        " " + escapeHtml(profile.pokemon_name) + ' teams">Run by ' + set.team_count.toLocaleString() + " of " +
+        set.pokemon_slot_count.toLocaleString() + " teams (" + formatPercent(set.share_of_pokemon) + ")</span>" +
+        winLine + " in " + escapeHtml(shortRegulation(regulationScope)) +
+        (thin ? ". Small sample: treat as anecdotal." : ".") + "</p>" +
+        '<div class="set-actions">' + copyButtonHtml(setToShowdown(exportSet), "Copy for Showdown") +
+        (set.set_level === "full"
+          ? ' <a class="btn btn-sm" href="' + routeHash("team-builder", [profile.pokemon_key + "." + setState.index]) +
+            '">Open in Builder</a>'
+          : "") +
+        "</div>";
+    }
+
+    function setCardHtml(profile) {
+      var sets = setsByKey[profile.pokemon_key];
+      var list = sets ? sets[setState.level] : [];
+      if (!sets || (!sets.full.length && !sets.core.length)) {
+        return '<div class="set-card"><h3>Real sets</h3><p class="empty-state">No complete team sheet for ' +
+          escapeHtml(profile.pokemon_name) + " in " + escapeHtml(shortRegulation(regulationScope)) +
+          " yet: a set needs an item, ability, nature and four moves.</p></div>";
+      }
+      if (!list.length) {
+        setState.level = sets.full.length ? "full" : "core";
+        list = sets[setState.level];
+      }
+      if (setState.index >= list.length) setState.index = 0;
+      var set = list[setState.index];
+      return '<div class="set-card">' +
+        '<div class="set-card-head"><h3>Real sets</h3>' +
+        '<div class="set-level" role="group" aria-label="Set grouping">' +
+        '<button type="button" class="set-level-btn" data-set-level="full" aria-pressed="' + (setState.level === "full") + '">Exact</button>' +
+        '<button type="button" class="set-level-btn" data-set-level="core" aria-pressed="' + (setState.level === "core") + '">Core</button>' +
+        "</div></div>" +
+        '<div class="set-tabs" role="tablist" aria-label="Most common sets">' + list.map(function (r, i) {
+          return '<button type="button" role="tab" class="set-tab" data-set-index="' + i + '" aria-selected="' +
+            (i === setState.index) + '">Set ' + (i + 1) + ' <span class="set-share">' + formatPercent(r.share_of_pokemon) +
+            "</span></button>";
+        }).join("") + "</div>" +
+        '<div class="set-body" role="tabpanel">' + setBodyHtml(profile, set) + "</div>" +
+        '<p class="stat-legend">' + (setState.level === "full"
+          ? "Each set appeared exactly like this on real team sheets."
+          : "Core sets group by item, ability and the three most common moves; the fourth move varies.") +
+        " No EVs: team sheets don't publish them.</p></div>";
     }
 
     var setEl = document.getElementById("pokemon-profile-set");
+    if (setEl) {
+      setEl.addEventListener("click", function (e) {
+        var levelBtn = e.target.closest("[data-set-level]");
+        var tabBtn = e.target.closest("[data-set-index]");
+        if (!levelBtn && !tabBtn) return;
+        if (levelBtn) setState = { level: levelBtn.getAttribute("data-set-level"), index: 0 };
+        if (tabBtn) setState.index = Number(tabBtn.getAttribute("data-set-index"));
+        var profile = sortedProfiles.filter(function (r) { return r.pokemon_key === select.value; })[0];
+        if (profile) setEl.innerHTML = setCardHtml(profile);
+      });
+    }
 
     function render(chosenKey) {
       var profile = sortedProfiles.filter(function (r) {
@@ -1917,93 +2485,41 @@
         }
       }
       if (setEl) {
-        setEl.innerHTML = profile ? commonSetHtml(profile) : "";
-        var copyBtn = document.getElementById("copy-common-set");
-        if (copyBtn) {
-          copyBtn.addEventListener("click", function () {
-            var text = document.getElementById("common-set-paste").value;
-            var done = function () {
-              copyBtn.textContent = "Copied";
-              setTimeout(function () { copyBtn.textContent = "Copy for Showdown"; }, 1500);
-            };
-            // Some hosts refuse clipboard writes; then show the text
-            // selected so the viewer can copy it by hand.
-            var fallback = function () {
-              var box = document.getElementById("common-set-paste");
-              box.classList.remove("visually-hidden");
-              box.removeAttribute("aria-hidden");
-              box.rows = 7;
-              box.focus();
-              box.select();
-              copyBtn.textContent = "Select and copy";
-            };
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(text).then(done, fallback);
-            } else {
-              fallback();
-            }
-          });
+        if (profile && profile.pokemon_key !== setEl.getAttribute("data-key")) {
+          setState = { level: "full", index: 0 };
+          setEl.setAttribute("data-key", profile.pokemon_key);
         }
+        setEl.innerHTML = profile ? setCardHtml(profile) : "";
       }
 
       var items = chosenKey
-        ? itemRows
-            .filter(function (r) {
-              return r.pokemon_key === chosenKey;
-            })
-            .sort(function (a, b) {
-              return a.usage_rank - b.usage_rank;
-            })
-            .slice(0, 5)
+        ? itemRows.filter(function (r) {
+            return r.pokemon_key === chosenKey;
+          })
         : [];
-      renderGrid6xn(itemGrid, items, {
-        iconFn: function (r) {
-          return itemIcons[r.item_name];
-        },
-        labelFn: function (r) {
-          return r.item_name;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.item_share);
-        },
-        subFn: function (r) {
-          return r.short_effect;
-        },
-      });
+      var itemTotal = items.reduce(function (sum, r) { return sum + (r.usage_count || 0); }, 0);
+      itemTable.setRows(items.map(function (r) {
+        return { item_name: r.item_name, item_share: r.item_share, usage_count: r.usage_count,
+          usage_rank: r.usage_rank, short_effect: r.short_effect, total: itemTotal };
+      }));
 
       var abilities = chosenKey
-        ? abilityRows
-            .filter(function (r) {
-              return r.pokemon_key === chosenKey;
-            })
-            .sort(function (a, b) {
-              return a.usage_rank - b.usage_rank;
-            })
-            .slice(0, 5)
+        ? abilityRows.filter(function (r) {
+            return r.pokemon_key === chosenKey;
+          })
         : [];
-      renderGrid6xn(abilityGrid, abilities, {
-        labelFn: function (r) {
-          return r.ability;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.ability_share);
-        },
-        subFn: function (r) {
-          return r.short_effect;
-        },
-      });
+      var abilityTotal = abilities.reduce(function (sum, r) { return sum + (r.usage_count || 0); }, 0);
+      abilityTable.setRows(abilities.map(function (r) {
+        return { ability: r.ability, ability_share: r.ability_share, usage_count: r.usage_count,
+          usage_rank: r.usage_rank, short_effect: r.short_effect, total: abilityTotal };
+      }));
 
       var moves = chosenKey
-        ? moveRows
-            .filter(function (r) {
-              return r.pokemon_key === chosenKey;
-            })
-            .sort(function (a, b) {
-              return a.usage_rank - b.usage_rank;
-            })
-            .slice(0, 15)
+        ? moveRows.filter(function (r) {
+            return r.pokemon_key === chosenKey;
+          })
         : [];
-      if (moveTableSortable) moveTableSortable.setRows(moves);
+      moveTable.setRows(moves);
 
       var concentration = profile ? concentrationByKey[profile.pokemon_key] : null;
       if (itemConcentrationEl) {
@@ -2136,34 +2652,46 @@
     var scenarioSelect = document.getElementById("speed-tiers-scenario");
     var typeFilterEl = document.getElementById("speed-tiers-type-filter");
     var selectedTypes = {};
-    var grid = document.getElementById("speed-grid");
-    var table = document.getElementById("speed-tiers-table");
+    var SCENARIO_LABELS = {
+      max_investment_speed: "Max",
+      base_speed: "Base",
+      plus_one_speed: "+1 / Scarf",
+      plus_two_speed: "+2 / Tailwind",
+      scarf_tailwind_speed: "Scarf + TW",
+    };
 
     function scenarioField() {
       return scenarioSelect ? scenarioSelect.value : "max_investment_speed";
     }
 
-    var tableSortable = table
-      ? makeSortableTable(
-          table,
-          [],
-          function (r, i) {
-            return (
-              '<td><span class="badge badge-rank">#' + (i + 1) + "</span></td>" +
-              "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-              "<td>" + r.base_speed + "</td>" +
-              "<td>" + r.max_investment_speed + "</td>" +
-              "<td>" + r.plus_one_speed + "</td>" +
-              "<td>" + r.plus_two_speed + "</td>" +
-              "<td>" + r.scarf_tailwind_speed + "</td>" +
-              "<td>" + speedTierBadge(r.base_speed) + "</td>" +
-              "<td>" + formatPercent(r.usage_share) + "</td>" +
-              "<td>" + formatPercent(r.win_rate) + "</td>"
-            );
-          },
-          { defaultKey: "max_investment_speed" }
-        )
-      : null;
+    var table = createDataTable(document.getElementById("speed-tiers-table"), {
+      caption: "Speed tiers",
+      sort: { key: "scenario_speed", dir: "desc" },
+      limit: 60,
+      rowHref: pokemonRowHref,
+      columns: [
+        { key: "rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        {
+          key: "scenario_speed",
+          label: "Speed",
+          type: "int",
+          main: true,
+          render: function (r) { return "<strong>" + r.scenario_speed + "</strong>"; },
+          title: function () { return SCENARIO_LABELS[scenarioField()] + " scenario"; },
+        },
+        { key: "base_speed", label: "Base", type: "int" },
+        {
+          key: "tier",
+          label: "Tier",
+          sortable: false,
+          hideOnPhone: true,
+          render: function (r) { return speedTierBadge(r.base_speed); },
+        },
+        { key: "usage_share", label: "Usage", type: "percent" },
+        { key: "win_rate", label: "Win rate", type: "percent", hideOnPhone: true },
+      ],
+    });
 
     function filtered() {
       var field = scenarioField();
@@ -2176,27 +2704,20 @@
         .slice()
         .sort(function (a, b) {
           return b[field] - a[field];
+        })
+        .map(function (r, i) {
+          var row = {};
+          for (var k in r) if (Object.prototype.hasOwnProperty.call(r, k)) row[k] = r[k];
+          row.rank = i + 1;
+          row.scenario_speed = r[field];
+          return row;
         });
     }
 
     function draw() {
       var field = scenarioField();
       var f = filtered();
-      renderGrid6xn(grid, f.slice(0, 18), {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return String(r[field]);
-        },
-        subFn: function (r) {
-          return speedTier(r.base_speed).label + " · base " + r.base_speed;
-        },
-      });
-      if (tableSortable) tableSortable.setRows(f);
+      table.setRows(f);
 
       // "Outruns": how much of the filtered pool this scenario beats a
       // given opposing Speed number by -- the actual question a speed tier
@@ -2248,8 +2769,6 @@
     var countryRows = marts.pokemon_usage_by_country || [];
     var select = document.getElementById("players-country-filter");
     var note = document.getElementById("players-country-note");
-    var grid = document.getElementById("players-country-grid");
-    var table = document.getElementById("players-country-table");
     if (!select) return;
 
     // Countries ordered by how much recorded data each has, not
@@ -2276,48 +2795,39 @@
       select.appendChild(opt);
     });
 
-    var tableSortable = table
-      ? makeSortableTable(
-          table,
-          [],
-          function (r) {
-            return (
-              '<td><span class="badge badge-rank">#' + r.country_usage_rank + "</span></td>" +
-              "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-              "<td>" + formatPercent(r.usage_share) + "</td>"
-            );
+    var table = createDataTable(document.getElementById("players-country-table"), {
+      caption: "Usage by country",
+      sort: { key: "country_usage_rank", dir: "asc" },
+      limit: 30,
+      rowHref: pokemonRowHref,
+      columns: [
+        { key: "country_usage_rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        {
+          key: "usage_share",
+          label: "Share of picks",
+          type: "share",
+          main: true,
+          title: function (r) {
+            return r.usage_count + " of " + (appearancesByCountry[r.player_country] || 0).toLocaleString() + " picks";
           },
-          { defaultKey: "country_usage_rank", defaultDir: "asc" }
-        )
-      : null;
+        },
+        { key: "usage_count", label: "Picks", type: "int" },
+      ],
+    });
 
     function draw() {
       var country = select.value;
-      var rows = countryRows
-        .filter(function (r) {
-          return r.player_country === country;
-        })
-        .sort(function (a, b) {
-          return a.country_usage_rank - b.country_usage_rank;
-        });
+      var rows = countryRows.filter(function (r) {
+        return r.player_country === country;
+      });
       if (note) {
         note.textContent = rows.length
           ? country + " has " + appearancesByCountry[country].toLocaleString() +
             " recorded roster picks across " + rows.length + " distinct Pokémon."
           : "No recorded picks for this country.";
       }
-      renderGrid6xn(grid, rows.slice(0, 18), {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return formatPercent(r.usage_share);
-        },
-      });
-      if (tableSortable) tableSortable.setRows(rows.slice(0, 30));
+      table.setRows(rows);
     }
 
     select.addEventListener("change", draw);
@@ -2329,8 +2839,6 @@
     var signatureRows = marts.player_signature_pokemon || [];
     var select = document.getElementById("players-player-filter");
     var note = document.getElementById("players-player-note");
-    var grid = document.getElementById("players-signature-grid");
-    var table = document.getElementById("players-specialists-table");
     if (!select) return;
 
     // player_usage_share is a Pokémon's share of the player's total roster
@@ -2388,48 +2896,61 @@
       })
       .slice(0, 30);
 
-    if (table) {
-      makeSortableTable(
-        table,
-        specialists,
-        function (r, i) {
-          return (
-            '<td><span class="badge badge-rank">#' + (i + 1) + "</span></td>" +
-            "<td>" + escapeHtml(r.player_name) + "</td>" +
-            "<td>" + countryCell(r.player_country) + "</td>" +
-            "<td>" + pokemonCell(r.pokemon_key, r.pokemon_name) + "</td>" +
-            "<td>" + formatPercent(r.team_share) + "</td>" +
-            "<td>" + r.usage_count + " of " + r.player_team_count + "</td>"
-          );
+    createDataTable(document.getElementById("players-specialists-table"), {
+      caption: "Most committed specialists",
+      sort: { key: "team_share", dir: "desc" },
+      limit: 30,
+      rowHref: function (r) { return routeHash("player", [r.player_id]); },
+      columns: [
+        {
+          key: "player_name",
+          label: "Player",
+          main: true,
+          sortable: true,
+          render: function (r) {
+            return '<a href="' + routeHash("player", [r.player_id]) + '">' + escapeHtml(r.player_name) + "</a>";
+          },
         },
-        { defaultKey: "team_share" }
-      );
-    }
+        { key: "player_country", label: "Country", sortable: true, render: function (r) { return countryCell(r.player_country); } },
+        { key: "pokemon_name", label: "Signature Pokémon", type: "pokemon", main: true, sortable: true },
+        {
+          key: "team_share",
+          label: "Share of their teams",
+          type: "share",
+          main: true,
+          title: function (r) { return "On " + r.usage_count + " of their " + r.player_team_count + " teams"; },
+        },
+        { key: "player_team_count", label: "Teams", type: "int" },
+      ],
+    }).setRows(specialists);
+
+    var signatureTable = createDataTable(document.getElementById("players-signature-table"), {
+      caption: "A player's most-fielded Pokémon",
+      sort: { key: "player_pokemon_rank", dir: "asc" },
+      rowHref: pokemonRowHref,
+      columns: [
+        { key: "player_pokemon_rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+        {
+          key: "team_share",
+          label: "Share of their teams",
+          type: "share",
+          main: true,
+          title: function (r) { return "On " + r.usage_count + " of their " + r.player_team_count + " teams"; },
+        },
+        { key: "player_usage_share", label: "Share of picks", type: "percent" },
+      ],
+    });
 
     function draw() {
-      var rows = (byPlayer[select.value] || []).slice().sort(function (a, b) {
-        return a.player_pokemon_rank - b.player_pokemon_rank;
-      });
+      var rows = byPlayer[select.value] || [];
       if (note) {
-        note.textContent = rows.length
-          ? rows[0].player_name + " has " + rows[0].player_team_count +
-            " recorded teams; their top " + rows.length + " picks are below."
+        note.innerHTML = rows.length
+          ? '<a href="' + routeHash("player", [select.value]) + '">' + escapeHtml(rows[0].player_name) + "</a> has " +
+            rows[0].player_team_count + " recorded teams; their top " + rows.length + " picks are below."
           : "No recorded picks for this player.";
       }
-      renderGrid6xn(grid, rows, {
-        keyFn: function (r) {
-          return r.pokemon_key;
-        },
-        labelFn: function (r) {
-          return r.pokemon_name;
-        },
-        displayFn: function (r) {
-          return r.usage_count + " of " + r.player_team_count + " teams";
-        },
-        subFn: function (r) {
-          return formatPercent(r.player_usage_share) + " of their picks";
-        },
-      });
+      signatureTable.setRows(rows);
     }
 
     select.addEventListener("change", draw);
@@ -3030,6 +3551,8 @@
     speedTierBadge: speedTierBadge,
     renderGrid6xn: renderGrid6xn,
     makeSortableTable: makeSortableTable,
+    createDataTable: createDataTable,
+    pokemonRowHref: pokemonRowHref,
     registerTab: registerTab,
     setupSubTabs: setupSubTabs,
     ensureData: ensureData,
@@ -3038,6 +3561,11 @@
     attachPokemonCombobox: attachPokemonCombobox,
     openProfile: openProfile,
     fillSelectPairs: fillSelectPairs,
+    showdownName: showdownName,
+    setToShowdown: setToShowdown,
+    teamToShowdown: teamToShowdown,
+    copyButtonHtml: copyButtonHtml,
+    copyWithFallback: copyWithFallback,
     // Routing (U1): navigate() adds a history entry, setRoute() records a
     // tab's own state change, routeHash() builds a link.
     navigate: navigate,

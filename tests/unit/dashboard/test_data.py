@@ -1177,3 +1177,22 @@ def test_team_core_slicer_caps_partners_per_scope_and_pokemon():
         scoped = [r for r in kept if r["regulation_scope"] == scope]
         assert len(scoped) == data.MAX_CORE_PARTNERS_PER_POKEMON
         assert min(r["co_occurrence_count"] for r in scoped) == 5
+
+
+def test_set_variant_slicer_keeps_the_three_sets_the_profile_shows():
+    rows = [{"pokemon_key": "a", "set_level": "full", "set_rank": rank} for rank in range(1, 6)]
+    assert [r["set_rank"] for r in data._slice_set_variants(rows)] == [1, 2, 3]
+
+
+def test_top_cut_teams_are_the_top_sixteen_finishes():
+    rows = [{"team_id": str(p), "placement": p} for p in (1, 8, 16, 17, 200)]
+    rows.append({"team_id": "unplaced", "placement": None})
+    assert [r["team_id"] for r in data.top_cut_teams(rows)] == ["1", "8", "16"]
+
+
+def test_short_event_name_drops_the_words_every_event_shares():
+    assert data.short_event_name("2027 Louisville Pokémon VGC Regional Championships") == (
+        "Louisville Regional"
+    )
+    assert data.short_event_name("2026 Pokémon VGC World Championship") == "World Championships"
+    assert data.short_event_name("") == ""

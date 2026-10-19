@@ -125,8 +125,16 @@ class PageErrors(list):
 def open_page(browser):
     contexts = []
 
-    def make(width: int = 1440, height: int = 900, clock: str | None = None, storage=None):
-        context = browser.new_context(viewport={"width": width, "height": height})
+    def make(
+        width: int = 1440,
+        height: int = 900,
+        clock: str | None = None,
+        storage=None,
+        permissions=None,
+    ):
+        context = browser.new_context(
+            viewport={"width": width, "height": height}, permissions=permissions or []
+        )
         contexts.append(context)
         if storage:
             script = "".join(

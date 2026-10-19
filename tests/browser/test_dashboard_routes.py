@@ -18,6 +18,7 @@ ROUTES = [
     "#/usage/trends",
     "#/speed",
     "#/pokemon/garchomp",
+    "#/pokemon/garchomp/abilities",
     "#/pokemon/garchomp/moves",
     "#/pokemon/garchomp/cores",
     "#/compare/garchomp,kingambit",

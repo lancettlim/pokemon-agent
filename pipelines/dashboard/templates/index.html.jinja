@@ -259,6 +259,143 @@
   /* Components that set their own display (grid/flex) would otherwise
      override the hidden attribute app.js toggles. */
   .kpi-row[hidden], .movers-panel[hidden] { display: none; }
+  /* ---------------------------------------------------------------
+   * 2027 Q1 components (docs/upgrade-plan-2027q1.md). See
+   * docs/design-system.md for the component reference.
+   * --------------------------------------------------------------- */
+  /* Shared data table (app.js createDataTable, U5). The panel clips rather
+     than hides overflow, so the header can stick under the 56px bar. */
+  .data-table-host { margin-bottom: var(--space-4); }
+  .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--font-base); }
+  .data-table th {
+    position: sticky;
+    top: 56px;
+    z-index: 5;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .data-table th.sortable { cursor: pointer; user-select: none; }
+  .data-table th.sortable:hover { color: var(--navy); }
+  .data-table th[aria-sort="ascending"]::after { content: " ▲"; color: var(--accent-red); }
+  .data-table th[aria-sort="descending"]::after { content: " ▼"; color: var(--accent-red); }
+  .data-table td { border-bottom: 1px solid var(--light-blue); vertical-align: middle; }
+  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .data-table tr.row-link { cursor: pointer; }
+  .data-table tr.row-link:hover td { background: var(--light-blue); }
+  .data-table .cell-icon { width: 32px; height: 32px; }
+  .data-table-sort { display: none; }
+  .data-table-more { margin-top: var(--space-2); }
+  .share-cell { display: inline-grid; grid-template-columns: 64px 3.6em; align-items: center; gap: 6px; }
+  .share-bar { height: 8px; border-radius: 999px; background: var(--blue); justify-self: start; }
+  .share-value { text-align: right; }
+  .data-table th, .data-table td { padding: 4px 10px; }
+  .data-table .team-comp { justify-content: flex-start; }
+  .core-names { display: block; font-size: var(--font-xs); margin-top: 2px; }
+  .core-names a { color: inherit; }
+  @media (max-width: 600px) {
+    /* Two-line rows on phones: "main" columns on line one, the rest as
+       labelled details on line two. */
+    .data-table thead { display: none; }
+    .data-table, .data-table tbody { display: block; }
+    .data-table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--light-blue); }
+    .data-table tr::after { content: ""; order: 1; flex-basis: 100%; height: 0; }
+    .data-table td { border: 0; padding: 0; white-space: normal; }
+    .data-table td.col-main { order: 0; }
+    .data-table td.col-main:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+    .data-table td.col-detail { order: 2; font-size: var(--font-xs); color: var(--muted); }
+    .data-table td.col-detail::before { content: attr(data-label) " "; font-weight: 600; }
+    .data-table td.col-phone-hide { display: none; }
+    .data-table td.num { text-align: left; }
+    .data-table-sort { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--font-sm); color: var(--muted); margin-bottom: var(--space-2); }
+    .share-cell { grid-template-columns: 40px 3.6em; }
+  }
+  /* Tooltip (app.js tipHtml / [data-tip]). */
+  .tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 4px;
+    padding: 0;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--muted);
+    font: italic 700 12px/1 Georgia, serif;
+    cursor: help;
+    flex: 0 0 auto;
+  }
+  .tip-bubble {
+    position: absolute;
+    z-index: 60;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--panel-dark);
+    color: #fff;
+    font-size: var(--font-sm);
+    line-height: 1.35;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+  }
+  .tip-bubble[hidden] { display: none; }
+  /* Real-set card (app.js setCardHtml, P1). */
+  .set-card { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-4); background: var(--surface); }
+  .set-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+  .set-card h3 { margin: 0; font-size: 1rem; }
+  .set-level { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+  .set-level-btn { font: inherit; font-size: var(--font-xs); font-weight: 700; padding: 4px 12px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; min-height: 32px; }
+  .set-level-btn[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  .set-tabs { display: flex; gap: var(--space-1); margin: var(--space-3) 0 var(--space-2); overflow-x: auto; }
+  .set-tab { font: inherit; font-size: var(--font-sm); font-weight: 600; padding: 6px 12px; border-radius: var(--radius-pill); border: 0; background: var(--light-blue); color: var(--muted); cursor: pointer; white-space: nowrap; min-height: 36px; }
+  .set-tab[aria-selected="true"] { background: var(--panel-dark); color: #fff; }
+  .set-tab[aria-selected="true"] .set-share { color: #d7dbe8; }
+  .set-body dl { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); margin: var(--space-2) 0; align-items: center; }
+  .set-body dt { color: var(--muted); font-weight: 600; }
+  .set-body dd { margin: 0; font-weight: 600; }
+  .set-body .cell-icon { width: 28px; height: 28px; }
+  .set-flex { color: var(--muted); font-style: italic; }
+  .set-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-top: var(--space-2); }
+  a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+  textarea.copy-fallback { flex-basis: 100%; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--font-xs); }
+  /* Type filter popover (app.js renderTypeFilterChips, U6). */
+  .filter-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+  .type-popover { position: relative; }
+  .type-popover-btn { font: inherit; font-size: 16px; min-height: 36px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--navy); cursor: pointer; white-space: nowrap; }
+  .type-popover-btn.is-active { border-color: var(--blue); background: var(--light-blue); font-weight: 700; }
+  .type-popover-panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 6px);
+    left: 0;
+    width: min(340px, calc(100vw - 32px));
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: var(--space-2);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+  .type-popover-panel[hidden] { display: none; }
+  .type-popover-panel .type-filter-chip { display: flex; align-items: center; gap: 6px; border-radius: var(--radius-sm); padding: 4px 6px; min-height: 44px; color: var(--navy); font: inherit; font-size: var(--font-xs); text-transform: capitalize; }
+  .type-popover-panel .type-filter-chip[aria-pressed="true"] { background: var(--light-blue); border-color: var(--blue); }
+  .type-popover-panel.has-selection .type-filter-chip[aria-pressed="false"] { opacity: 0.5; }
+  .type-popover-clear { grid-column: 1 / -1; justify-self: end; }
+  /* Scroll cues for horizontally scrolling tab rows (U7). */
+  .tabs, .subtabs { position: relative; }
+  .scroll-cues.can-scroll-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+  .scroll-cues.can-scroll-left { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px); mask-image: linear-gradient(to right, transparent, #000 32px); }
+  .scroll-cues.can-scroll-left.can-scroll-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+  @media (max-width: 720px) {
+    .tabs, .subtabs { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar, .subtabs::-webkit-scrollbar { display: none; }
+    .tab-btn, .subtab-btn { scroll-snap-align: start; min-height: 44px; }
+    .tier-chip, .toggle-chip, .set-tab, .set-level-btn { min-height: 44px; }
+  }
   /* Team Builder suggested partners (teams.js renderSuggestions). */
   .suggestion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }
   .suggestion { display: flex; align-items: center; gap: var(--space-2); border: 2px solid var(--border); border-radius: 10px; padding: var(--space-2); background: var(--surface); }
@@ -496,6 +633,7 @@
     padding: var(--space-5) var(--space-6) var(--space-6);
     margin-bottom: var(--space-6);
     overflow: hidden;
+    overflow: clip;
   }
   /* A panel's own title repeats the tab label right above it, so it is
      kept for screen readers only (U2). */
@@ -1108,74 +1246,61 @@
     <details class="method"><summary>How this is computed</summary>
       <p>Every figure is computed from the team sheets of Champions-format tournaments only (MunchStats), never blended with standard VGC events. Usage is a Pokémon's share of all roster slots; a team contributes six.</p>
     </details>
-    <div class="controls">
-      <label>Tier
-        <select id="usage-tier-filter"></select>
-      </label>
-      <label>Type
-        <div class="type-filter-row" id="usage-type-filter"></div>
-      </label>
-      <label>Role
-        <select id="usage-role-filter">
-          <option value="">All roles</option>
-          <option value="physical">Physical</option>
-          <option value="special">Special</option>
-          <option value="mixed">Mixed</option>
-        </select>
-      </label>
-      <label>Usage %
-        <div class="range-filter">
-          <input type="number" id="usage-share-min" min="0" max="100" placeholder="min">
-          <span>–</span>
-          <input type="number" id="usage-share-max" min="0" max="100" placeholder="max">
-        </div>
-      </label>
-      <label>Speed
-        <div class="range-filter">
-          <input type="number" id="usage-speed-min" min="0" placeholder="min">
-          <span>–</span>
-          <input type="number" id="usage-speed-max" min="0" placeholder="max">
-        </div>
-      </label>
-    </div>
-    <div class="grid-6xn" id="usage-grid"></div>
-
-    <h3>Leaderboards</h3>
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="usage-leaders" data-route="leaders" aria-selected="true">Usage leaders</button>
-      <button class="subtab-btn" role="tab" data-subtab="win-rate-leaders" data-route="win-rate" aria-selected="false">Win rate leaders</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-leaders" data-route="leaders" aria-selected="true">Usage</button>
+      <button class="subtab-btn" role="tab" data-subtab="win-rate-leaders" data-route="win-rate" aria-selected="false">Win rate</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-success" data-route="success" aria-selected="false">Success</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-trends" data-route="trends" aria-selected="false">Trends</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-leaders">
-      <p class="sub">Ranked by % of meta within the selected tier and filters. Click a column header to re-sort.</p>
-      <div class="table-scroll">
-        <table id="usage-leaders-table">
-          <thead><tr><th>Rank</th><th>Pokémon</th><th class="sortable" data-sort-key="usage_share">% of meta</th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div class="controls">
+        <label>Tier
+          <select id="usage-tier-filter"></select>
+        </label>
+        <div class="filter-field"><span class="filter-label">Type</span>
+          <div class="type-filter-row" id="usage-type-filter"></div>
+        </div>
+        <label>Role
+          <select id="usage-role-filter">
+            <option value="">All roles</option>
+            <option value="physical">Physical</option>
+            <option value="special">Special</option>
+            <option value="mixed">Mixed</option>
+          </select>
+        </label>
+        <label>Usage %
+          <div class="range-filter">
+            <input type="number" id="usage-share-min" min="0" max="100" placeholder="min" aria-label="Minimum usage %">
+            <span>–</span>
+            <input type="number" id="usage-share-max" min="0" max="100" placeholder="max" aria-label="Maximum usage %">
+          </div>
+        </label>
+        <label>Speed
+          <div class="range-filter">
+            <input type="number" id="usage-speed-min" min="0" placeholder="min" aria-label="Minimum base Speed">
+            <span>–</span>
+            <input type="number" id="usage-speed-max" min="0" placeholder="max" aria-label="Maximum base Speed">
+          </div>
+        </label>
       </div>
+      <p class="sub" id="usage-table-note"></p>
+      <div id="usage-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="win-rate-leaders" hidden>
+      <p class="lead">Ranked by the 95% Wilson lower bound, so a small sample can't top the list on luck.</p>
       <div class="controls">
-        <label>Min. recorded matches
+        <label>Min. teams
           <select id="win-rate-min-record-count-filter">
             <option value="5">5+</option>
             <option value="10">10+</option>
-            <option value="20">20+</option>
+            <option value="20" selected>20+</option>
             <option value="50">50+</option>
           </select>
         </label>
       </div>
-      <div class="grid-6xn" id="win-rate-grid"></div>
-      <div class="table-scroll">
-        <table id="win-rate-table">
-          <thead><tr><th>Rank</th><th>Pokémon</th><th class="sortable" data-sort-key="win_rate">Win rate</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="win-rate-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-success" hidden>
@@ -1192,13 +1317,7 @@
           </select>
         </label>
       </div>
-      <div class="grid-6xn" id="usage-success-grid"></div>
-      <div class="table-scroll">
-        <table id="usage-success-table">
-          <thead><tr><th>Rank</th><th>Pokémon</th><th class="sortable" data-sort-key="weighted_usage_share">Weighted share</th><th class="sortable" data-sort-key="top_cut_usage_share">Top-cut share</th><th class="sortable" data-sort-key="usage_share">Raw usage</th><th class="sortable" data-sort-key="rank_movement">Movement</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="usage-success-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-trends" hidden>
@@ -1208,13 +1327,7 @@
           <select id="usage-trend-date-filter"></select>
         </label>
       </div>
-      <div class="grid-6xn" id="usage-trend-grid"></div>
-      <div class="table-scroll">
-        <table id="usage-trend-table">
-          <thead><tr><th>Rank</th><th>Pokémon</th><th class="sortable" data-sort-key="usage_share">% of meta</th><th class="sortable" data-sort-key="usage_share_delta">Change</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="usage-trend-table"></div>
     </div>
   </section>
 
@@ -1239,34 +1352,17 @@
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-items">
-      <p class="sub">Top 5 recorded held items. <span id="profile-item-concentration"></span></p>
-      <div class="grid-6xn" id="profile-item-grid"></div>
+      <p class="sub"><span id="profile-item-concentration"></span></p>
+      <div id="profile-item-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-ability" hidden>
-      <p class="sub">Top 5 recorded abilities. <span id="profile-ability-concentration"></span></p>
-      <div class="grid-6xn" id="profile-ability-grid"></div>
+      <p class="sub"><span id="profile-ability-concentration"></span></p>
+      <div id="profile-ability-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-moves" hidden>
-      <p class="sub">Top 15 recorded moves, with full mechanics.</p>
-      <div class="table-scroll">
-        <table id="profile-move-table">
-          <thead>
-            <tr>
-              <th>Move</th>
-              <th class="sortable" data-sort-key="move_share">Usage</th>
-              <th>Category</th>
-              <th class="sortable" data-sort-key="power">Power</th>
-              <th class="sortable" data-sort-key="accuracy">Accuracy</th>
-              <th class="sortable" data-sort-key="pp">PP</th>
-              <th class="sortable" data-sort-key="priority">Priority</th>
-              <th>Effect</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="profile-move-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-team-cores" hidden>
@@ -1328,30 +1424,12 @@
       <label>Outruns
         <input type="number" id="speed-tiers-benchmark" min="0" placeholder="e.g. 180">
       </label>
-      <label>Type
+      <div class="filter-field"><span class="filter-label">Type</span>
         <div class="type-filter-row" id="speed-tiers-type-filter"></div>
-      </label>
+      </div>
     </div>
     <p class="sub" id="speed-tiers-benchmark-note" hidden></p>
-    <div class="grid-6xn" id="speed-grid"></div>
-    <div class="table-scroll">
-      <table id="speed-tiers-table">
-        <thead>
-          <tr>
-            <th>Rank</th><th>Pokémon</th>
-            <th class="sortable" data-sort-key="base_speed">Base</th>
-            <th class="sortable" data-sort-key="max_investment_speed">Max</th>
-            <th class="sortable" data-sort-key="plus_one_speed">+1 / Scarf</th>
-            <th class="sortable" data-sort-key="plus_two_speed">+2 / Tailwind</th>
-            <th class="sortable" data-sort-key="scarf_tailwind_speed">Scarf + TW</th>
-            <th>Tier</th>
-            <th class="sortable" data-sort-key="usage_share">Usage</th>
-            <th class="sortable" data-sort-key="win_rate">Win rate</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+    <div id="speed-tiers-table"></div>
   </section>
 
   <section class="tab-panel" data-panel="matchup" data-section="pokemon" hidden>
@@ -1449,9 +1527,9 @@
               <option value="speed">Speed</option>
             </select>
           </label>
-          <label>Type
+          <div class="filter-field"><span class="filter-label">Type</span>
             <div class="type-filter-row" id="team-builder-type-filter"></div>
-          </label>
+          </div>
         </div>
         <ul class="roster-list" id="team-builder-available"></ul>
       </div>
@@ -1555,13 +1633,7 @@
         </label>
       </div>
       <p class="sub" id="players-country-note"></p>
-      <div class="grid-6xn" id="players-country-grid"></div>
-      <div class="table-scroll">
-        <table id="players-country-table">
-          <thead><tr><th>Rank</th><th>Pokémon</th><th class="sortable" data-sort-key="usage_share">Share of this country's picks</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="players-country-table"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="players-signature" hidden>
@@ -1575,15 +1647,10 @@
         </label>
       </div>
       <p class="sub" id="players-player-note"></p>
-      <div class="grid-6xn" id="players-signature-grid"></div>
+      <div id="players-signature-table"></div>
       <h3>Most committed specialists</h3>
       <p class="lead">Players who brought their top pick to the largest share of their own teams; 100% means every team.</p>
-      <div class="table-scroll">
-        <table id="players-specialists-table">
-          <thead><tr><th>Rank</th><th>Player</th><th>Country</th><th>Signature Pokémon</th><th class="sortable" data-sort-key="team_share">Share of their teams</th><th>Fielded in</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="players-specialists-table"></div>
     </div>
   </section>
 
@@ -1605,7 +1672,10 @@
       <label>Anchor Pokémon <select id="core-anchor"></select></label>
       <label>Core size <select id="core-size"><option value="pair">Pairs</option><option value="triple">Triples</option></select></label>
     </div>
-    <div id="core-results"></div>
+    <h3 id="core-title"></h3>
+    <div id="core-pair-table"></div>
+    <div id="core-triple-table" hidden></div>
+    <p class="source-note">Pairs are co-occurrence on tournament rosters. Triples are limited to cores seen on at least five teams with above-chance lift; association is not proof of a strategy.</p>
   </section>
   <section class="tab-panel" data-panel="data-sources" data-section="data" hidden>
     <h2 class="panel-title">Data &amp; Sources</h2>

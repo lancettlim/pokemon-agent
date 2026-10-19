@@ -18,9 +18,12 @@ labelled everywhere it appears, and the site stays static with no backend.
 | U2 Compact chrome | Done (Sprint 5): content starts at 114px desktop, 110px phone |
 | U3 Regulation rollover | Done (Sprint 5), with unit and browser fixture tests |
 | U4 Copy pass | Repo paths and internal names removed (Sprint 5); glossary and denominators not started |
-| U5–U7 Data presentation | Not started |
+| U5 Shared table | Done (Sprint 6): Usage, Profile, Speed Tiers, Core Explorer, Players |
+| U6 Type popover | Done (Sprint 6) |
+| U7 Mobile fixes | Done (Sprint 6) |
 | U8 Browser smoke tests + budget | Done (Sprint 5): core payload 448KB compressed |
-| P1–P5 Player features | Not started |
+| P1 Real sets | Done (Sprint 6) |
+| P2–P5 Player features | Not started |
 | C1–C4 Event, team and player features | Not started |
 | D1–D3 Data access and operations | Not started |
 

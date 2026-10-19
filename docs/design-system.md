@@ -500,6 +500,89 @@ and never itself called "Team Builder" — "Load into my builder" calls the
 same `addToTeam`/`ensureTeamBuilder()` pipeline the pokepaste importer
 uses (see "Team Builder" below).
 
+### Routes and links (2027 Q1, U1)
+
+Every view has a route, and the hash holds the whole view state:
+`#/pokemon/<key>[/<view>]`, `#/compare/<a>,<b>`, `#/matchup/<a>/<b>`,
+`#/teams[/<view>]`, `#/cores/<key>[/triple]`, `#/usage/<view>`,
+`#/players/<view>`, `#/data/<view>`, plus the detail routes
+`#/event/<event_id>` and `#/player/<player_id>`. `?reg=` in the query
+string stays the regulation.
+
+- Anything that names a Pokémon is a real `<a href>` to its profile:
+  `pokemonCell()`, Pokémon-keyed `.grid-6xn` tiles, tier chips, mover rows
+  and each slot of a `.team-comp`. Never attach a click handler that
+  navigates where a link would do; middle-click and long-press must work.
+- Moving to another view (a tab, a link, another Pokémon) adds a history
+  entry. Refining the current view (a filter, a sub-tab) replaces it, so
+  Back always means "the previous view".
+- A sub-tab row passed `{route: {tab, argIndex}}` to `setupSubTabs` keeps
+  its open sub-tab in the route; each button's `data-route` is its slug.
+- A tab registers `onRoute(route)` with `registerTab`; it runs once the
+  tab is ready and again on every Back/Forward while the tab is in view.
+
+### Compact chrome (2027 Q1, U2)
+
+One sticky 56px bar holds the brand, the five sections, the regulation
+select and a ⋯ menu (theme, "How to read this page", Data). Provenance
+(dataset version, snapshot, gate status) sits in a one-line footer. A
+panel's own `<h2>` repeats its tab label, so it is `.panel-title`
+(screen-reader only). Intros are one `.lead` sentence; the method goes in a
+`<details class="method">` "How this is computed" disclosure. Content
+starts within 200px of the top on desktop and 120px on phones.
+
+### Data table (2027 Q1, U5)
+
+`createDataTable(container, opts)` is the one component for ranked data,
+replacing tall card grids wherever more than a top-N highlight is shown
+(Usage, Profile items/abilities/moves, Speed Tiers, Core Explorer,
+Players). Card grids remain for top-N highlights only (Overview, Tier
+List).
+
+- Columns are specs: `rank`, `pokemon` (sprite + name link), `share`
+  (inline bar scaled to the column's maximum), `percent`, `int`, `text`,
+  or a custom `render`. Numeric columns are right-aligned with tabular
+  figures.
+- Every percentage cell should pass `title(row)` with its denominator
+  ("1,958 of 22,604 roster slots").
+- The header is sticky under the bar and sorts on click or Enter; a row
+  with `rowHref` opens what it describes when clicked anywhere but a link.
+- On phones (≤600px) rows collapse to two lines: `main: true` columns on
+  the first, the rest as labelled details on the second, with a Sort
+  select in place of the header. `hideOnPhone` drops a column there.
+- `limit` caps the first render with a "Show all N" button.
+
+### Tooltip (2027 Q1, U4/U5)
+
+Any element with `data-tip` shows that text in a bubble on hover, focus
+and tap (a `title` never shows on a phone). `tipHtml(text)` renders a
+small "i" button, used for item, ability and move effect text that used to
+sit inline and make each row ~270px tall.
+
+### Real-set card (2027 Q1, P1)
+
+The profile's set card lists a Pokémon's top 3 real sets
+(`pokemon_set_variants`) as tabs, each with its share and team count, and
+an Exact/Core toggle: exact sets match item, ability, nature and all four
+moves; core sets group item, ability and the three most common moves.
+Moves are shown in the Pokémon's own move-usage order. Below 10 teams the
+sample line says "Small sample". Copy for Showdown uses `setToShowdown()`
+(no EV line: team sheets don't publish spreads).
+
+### Type filter popover (2027 Q1, U6)
+
+`renderTypeFilterChips()` renders one "Any type ▾" button that opens the
+18-type multi-select and reads "Type · 2 selected" once types are picked.
+It replaced an 18-icon row that took ~140px of each filter panel. Escape
+or a click outside closes it.
+
+### Scroll cues (2027 Q1, U7)
+
+A horizontally scrolling tab row (`.tabs`, `.subtabs`) fades at whichever
+edge has more to show, snaps to tabs, and centres the active tab without
+scrolling the page. On phones every tab, sub-tab and chip is at least 44px
+tall.
+
 ### Removed tabs and components
 
 The Archetype Explorer and Regulation Comparison tabs (and their
