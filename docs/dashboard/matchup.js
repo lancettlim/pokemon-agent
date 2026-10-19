@@ -527,5 +527,5 @@
     updateAll();
   }
 
-  App.registerTab("matchup", setupMatchup);
+  App.registerTab("matchup", setupMatchup, { extraMarts: ["pokemon_head_to_head"] });
 })();

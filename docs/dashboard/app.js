@@ -2,8 +2,8 @@
  * window.DASHBOARD_DATA (the critical payload baked into index.html by
  * pipelines/dashboard/build.py) and wires up the tabs/filters/tables/grids
  * declared in index.html.jinja. The marts themselves are not inlined —
- * they are fetched once from the sibling data.json on the first activation
- * of a tab that needs them (see ensureData below).
+ * they are fetched as shard files under data/ on the first activation of a
+ * tab that needs them (see ensureData below).
  *
  * This file owns the core framework (tabs, tables, the shared .grid-6xn
  * component) plus the Overview/Usage/Pokémon Profile/Speed Tiers/Players &
@@ -617,6 +617,7 @@
   // ---------- tab switching ----------
 
   var tabInitializers = {};
+  var activeTabId = null;
   var initialized = {};
   var tabNeedsMarts = {};
 
@@ -624,41 +625,65 @@
   // inline critical payload (kpis/sprites/names) and so must not wait on
   // the data.json fetch — Overview is the one such tab today, which is why
   // the landing view paints with no network at all.
+  // opts.needsMarts === false: renders from the inline payload alone.
+  // opts.extraMarts: on-demand marts (DATA.mart_files.on_demand) the tab
+  // reads beyond the core and regulation files.
+  var tabExtraMarts = {};
   function registerTab(tabId, initFn, opts) {
     tabInitializers[tabId] = initFn;
     tabNeedsMarts[tabId] = !(opts && opts.needsMarts === false);
+    tabExtraMarts[tabId] = (opts && opts.extraMarts) || [];
+    // A tab registered after the page already opened on it (a #matchup
+    // link, with matchup.js loading after app.js) initialises now.
+    if (activeTabId === tabId) initTab(tabId);
   }
 
   // ---------- lazy mart payload ----------
 
   // index.html inlines only the critical payload (KPIs, sprite/hero/type
-  // icon maps, display names) — a few hundred KB. The marts themselves are
-  // ~8MB and live in the sibling data.json, fetched once on the first
-  // activation of a tab that needs them. Before this split the whole
-  // payload was inlined, so first paint blocked on parsing 8MB of JSON.
-  var martsPromise = null;
+  // icon maps, display names). The marts live in shard files indexed by
+  // DATA.mart_files (pipelines/dashboard/build.py's _write_mart_shards):
+  // a core file plus the selected regulation's file load on the first tab
+  // that needs marts, and the largest marts (head-to-head, triple cores,
+  // player signatures) load only when a tab that reads them opens
+  // (registerTab's extraMarts). Each file is fetched at most once.
+  var shardPromises = {};
 
-  function ensureData() {
-    if (martsPromise) return martsPromise;
-    if (Object.keys(marts).length) {
-      martsPromise = Promise.resolve(marts);
-      return martsPromise;
-    }
-    martsPromise = fetch("data.json")
-      .then(function (response) {
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        return response.json();
-      })
-      .then(function (full) {
-        // Mutated in place, never reassigned: matchup.js and teams.js hold
-        // a reference to this same object via window.DashboardApp.marts.
-        var loaded = (full && full.marts) || {};
-        Object.keys(loaded).forEach(function (name) {
-          marts[name] = applyRegulationScope(loaded[name]);
+  function fetchShard(path) {
+    if (!shardPromises[path]) {
+      shardPromises[path] = fetch(path)
+        .then(function (response) {
+          if (!response.ok) throw new Error("HTTP " + response.status + " for " + path);
+          return response.json();
+        })
+        .then(function (loaded) {
+          // Mutated in place, never reassigned: matchup.js and teams.js hold
+          // a reference to this same object via window.DashboardApp.marts.
+          Object.keys(loaded || {}).forEach(function (name) {
+            marts[name] = applyRegulationScope(loaded[name]);
+          });
+          return marts;
+        })
+        .catch(function (error) {
+          delete shardPromises[path];
+          throw error;
         });
-        return marts;
-      });
-    return martsPromise;
+    }
+    return shardPromises[path];
+  }
+
+  function ensureData(extraMarts) {
+    var files = DATA.mart_files;
+    if (!files) return Promise.resolve(marts);
+    var paths = [files.core];
+    var scopePath = files.scopes && (files.scopes[regulationScope] || files.scopes[ALL_SCOPE]);
+    if (scopePath) paths.push(scopePath);
+    (extraMarts || []).forEach(function (name) {
+      if (files.on_demand && files.on_demand[name]) paths.push(files.on_demand[name]);
+    });
+    return Promise.all(paths.filter(Boolean).map(fetchShard)).then(function () {
+      return marts;
+    });
   }
 
   // fetch() against a file:// URL is blocked as a cross-origin request, so
@@ -670,9 +695,9 @@
     if (!panel || panel.querySelector(".data-load-error")) return;
     var isFileProtocol = window.location.protocol === "file:";
     var message = isFileProtocol
-      ? "This page loads its data from data.json, which a browser will not fetch over file://. " +
+      ? "This page loads its data from files under data/, which a browser will not fetch over file://. " +
         "Serve the directory instead: python -m http.server -d docs/dashboard"
-      : "Could not load data.json (" + escapeHtml(String(error && error.message)) + ").";
+      : "Could not load the dashboard data (" + String(error && error.message) + ").";
     var box = document.createElement("p");
     box.className = "empty-state data-load-error";
     box.textContent = message;
@@ -2420,19 +2445,19 @@
   registerTab("data-sources", setupDataSources);
   registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage);
-  registerTab("pokemon-profile", setupPokemonProfile);
+  registerTab("pokemon-profile", setupPokemonProfile, { extraMarts: ["pokemon_team_core_triple_usage"] });
   registerTab("archetypes", setupDetectedArchetypes);
   registerTab("speed-tiers", setupSpeedTiers);
-  registerTab("players", setupPlayers);
+  registerTab("players", setupPlayers, { extraMarts: ["player_signature_pokemon"] });
 
-  setupTabs(function (tabId) {
+  function initTab(tabId) {
     if (initialized[tabId] || !tabInitializers[tabId]) return;
     initialized[tabId] = true;
     if (!tabNeedsMarts[tabId]) {
       tabInitializers[tabId]();
       return;
     }
-    ensureData().then(
+    ensureData(tabExtraMarts[tabId]).then(
       function () {
         tabInitializers[tabId]();
       },
@@ -2440,10 +2465,14 @@
         // Un-mark so a retry (re-clicking the tab) can try the fetch again
         // rather than silently doing nothing forever.
         initialized[tabId] = false;
-        martsPromise = null;
         renderDataLoadError(tabId, error);
       }
     );
+  }
+
+  setupTabs(function (tabId) {
+    activeTabId = tabId;
+    initTab(tabId);
   });
 
   // Shared namespace for matchup.js/teams.js (loaded right after this

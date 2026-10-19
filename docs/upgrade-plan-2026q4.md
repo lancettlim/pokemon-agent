@@ -21,7 +21,8 @@ per `docs/backlog.md`'s backlog → todo flow.
 | B2 five-section navigation | Done (Sprint 3), with the bottom nav on phones and the KPI strip on Meta only |
 | B4 Pokémon hub | Done (Sprint 3): type-ahead search on every Pokémon picker, `/` shortcut, stat bars against the format median, most-common-set card with Showdown copy. A per-regulation trend sparkline is not done |
 | B5 Meta landing | Done (Sprints 2–3): What changed panel and Tier List. Latest-event spotlight is not done |
-| B6–B9 | Not started |
+| B7 performance | Done (Sprint 4): mart shards under `docs/dashboard/data/`. The default view is ~400KB compressed, down from ~2MB, and Overview needs no fetch |
+| B6, B8, B9 | Not started |
 
 Two upstream breakages turned up during the Sprint 1 refresh, and both are
 fixed: Bulbagarden renamed every sprite file from "Menu CP" to "Menu Champs"

@@ -136,12 +136,11 @@ def test_build_writes_index_html_and_app_js(tmp_path):
     assert embedded["kpis"]["distinct_pokemon_used"] == payload["kpis"]["distinct_pokemon_used"]
 
 
-def test_build_writes_complete_json_feed_and_critical_only_inline_payload(tmp_path):
-    # The payload split. data.json stays the *complete* payload, preserving
-    # backlog.md #32's contract (scriptable without re-running dbt or
-    # scraping HTML) and doubling as the file app.js fetches for the marts.
-    # index.html inlines only the critical keys, so first paint doesn't
-    # block on parsing ~8MB of mart rows.
+def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_path):
+    # The payload split. data.json carries every non-mart key plus
+    # mart_files, the index of the shard files holding the marts; together
+    # they are backlog.md #32's complete feed. index.html inlines only the
+    # critical keys, so first paint doesn't parse any mart rows.
     marts_dir = tmp_path / "marts"
     normalized_dir = tmp_path / "normalized"
     output_dir = tmp_path / "out"
@@ -149,9 +148,20 @@ def test_build_writes_complete_json_feed_and_critical_only_inline_payload(tmp_pa
 
     payload = _build(marts_dir, normalized_dir, output_dir)
 
-    assert (output_dir / "data.json").exists()
-    from_json = json.loads((output_dir / "data.json").read_text(encoding="utf-8"))
-    assert from_json == payload
+    feed = json.loads((output_dir / "data.json").read_text(encoding="utf-8"))
+    assert "marts" not in feed
+    assert feed["mart_files"] == payload["mart_files"]
+
+    # Reassembling the shards gives back every mart, each scoped mart's
+    # rows split across its scope files without loss.
+    reassembled: dict = {}
+    files = feed["mart_files"]
+    for path in [files["core"], *files["scopes"].values(), *files["on_demand"].values()]:
+        for name, rows in json.loads((output_dir / path).read_text(encoding="utf-8")).items():
+            reassembled.setdefault(name, []).extend(rows)
+    assert set(reassembled) == set(payload["marts"])
+    for name, rows in payload["marts"].items():
+        assert len(reassembled[name]) == len(rows), name
 
     html = (output_dir / "index.html").read_text(encoding="utf-8")
     embedded = _embedded_payload(html)

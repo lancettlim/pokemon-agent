@@ -431,9 +431,9 @@ python -m http.server --directory docs/dashboard
 ```
 
 This used to work over `file://` too, because the entire payload was
-inlined into `index.html`. It no longer is: the marts are ~8MB and now live
-only in the sibling `data.json`, which `app.js` fetches on first use of a
-tab that needs it (see "Payload split" below). A browser refuses that fetch
+inlined into `index.html`. It no longer is: the marts live in shard files
+under `data/`, which `app.js` fetches on first use of a tab that needs them
+(see "Payload split" below). A browser refuses that fetch
 over `file://` as a cross-origin request, so a directly-opened page renders
 its header, KPI row and Overview tab — all of which read the inlined
 critical payload — and then shows an explanatory empty state on the deeper
@@ -442,26 +442,39 @@ tabs naming this command. The published GitHub Pages site is unaffected.
 ## Payload split
 
 `index.html` carries only the **critical payload** inline
-(`_CRITICAL_PAYLOAD_KEYS` in `build.py`): KPIs, provenance, the
-sprite/hero-art/type-icon/item-icon maps, type colors, display names and
-reference teams — a few hundred KB. The marts go into `data.json` alone.
+(`_CRITICAL_PAYLOAD_KEYS` in `build.py`): KPIs per regulation, provenance,
+the sprite/hero-art/type-icon/item-icon maps, type colors, display names,
+reference teams, the regulation registry and `mart_files`, about 45 KB
+compressed. Overview renders from it with no fetch.
 
-The reason is first paint. When everything was inlined, `index.html` was
-**8.18 MB** and the browser had to parse all of it before rendering
-anything; it is now **~140 KB**. `data.json` is still the *complete*
-payload, not the leftovers — that preserves backlog #32's contract (the
-data is scriptable via `curl | jq` or a notebook without re-running dbt or
-scraping HTML) and costs only the few hundred KB of critical keys appearing
-in both files, a rounding error against ~8MB of marts.
+The marts are split into **shard files under `docs/dashboard/data/`**
+(`_write_mart_shards`, docs/upgrade-plan-2026q4.md B7). Once the marts
+gained a `regulation_scope` partition, one `data.json` holding everything
+reached 22 MB:
 
-Client side, `app.js`'s `ensureData()` fetches `data.json` once, memoizes
-the promise, and merges the loaded marts **into the existing `marts`
-object** rather than reassigning it — `matchup.js` and `teams.js` hold a
-reference to that same object through `window.DashboardApp.marts`. Tabs
-registered with `{ needsMarts: false }` (only Overview today) skip the gate
-entirely and render straight from the inline payload, so the landing view
-never waits on a network round-trip. A failed fetch un-memoizes itself so
-re-clicking the tab retries.
+| File | Holds | Loaded |
+|---|---|---|
+| `data/core.json` | unscoped marts the common tabs read | first tab that needs marts |
+| `data/scope-<scope>.json` | the selected regulation's rows of every scoped mart | with core, for the page's regulation only |
+| `data/pokemon_head_to_head.json`, `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the three largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
+
+The default M-C view downloads about 400 KB compressed in total, against
+roughly 2 MB for the old single file.
+
+`data.json` remains backlog #32's JSON feed. It holds every non-mart key
+plus `mart_files`, the index of the shard paths, and together they are the
+complete payload, still scriptable with `curl`/`jq` or a notebook without
+re-running dbt. Since 2026-10 it no longer inlines the marts themselves.
+
+Client side, `app.js`'s `ensureData(extraMarts)` fetches each shard at
+most once and merges the loaded marts **into the existing `marts` object**
+rather than reassigning it, because `matchup.js` and `teams.js` hold a
+reference to that same object through `window.DashboardApp.marts`. Scoped
+marts are narrowed to the page's regulation as they load. Tabs registered
+with `{ needsMarts: false }` (only Overview today) skip the gate entirely.
+A failed fetch forgets itself, so re-clicking the tab retries. A tab
+registered by a later script (`matchup.js`, `expansions.js`, `teams.js`)
+initialises on registration if the page opened on it via a `#tab` link.
 
 ## Publishing (GitHub Pages)
 
@@ -469,8 +482,8 @@ Unlike other pipeline output in this repo (`data/normalized/`,
 `data/marts/`, `data/staging/` are all gitignored regenerated build
 output), **`docs/dashboard/index.html`, `docs/dashboard/app.js`,
 `docs/dashboard/matchup.js`, `docs/dashboard/teams.js`,
-`docs/dashboard/data.json`, and `docs/dashboard/images/` are committed to
-git.** They can be rebuilt by hand (`make dashboard`, then commit the
+`docs/dashboard/data.json`, `docs/dashboard/data/` and
+`docs/dashboard/images/` are committed to git.** They can be rebuilt by hand (`make dashboard`, then commit the
 regenerated files including `images/`), and since 2026-10 a weekly
 workflow also rebuilds them.
 
@@ -492,7 +505,7 @@ in force on the visitor's date (falling back to the newest one with data),
 or whatever `?reg=` names, and changing it reloads the page with the new
 `?reg=` so links are shareable. The open tab lives in the URL hash
 (`#usage`). `static/app.js` narrows each scoped mart to the selected scope
-once, as `data.json` loads (`applyRegulationScope`), so the tab code reads
+once, as its shard loads (`applyRegulationScope`), so the tab code reads
 `marts.<name>` exactly as before. KPIs are precomputed per scope
 (`kpis_by_scope`) and the template renders one KPI row per scope. Marts
 without the column (head-to-head, triple cores, country, players) still

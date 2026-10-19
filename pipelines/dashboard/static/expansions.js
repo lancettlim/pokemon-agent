@@ -166,7 +166,7 @@
     renderCore();
   }
   App.registerTab("compare", setupCompare);
-  App.registerTab("core-explorer", setupCoreExplorer);
+  App.registerTab("core-explorer", setupCoreExplorer, { extraMarts: ["pokemon_team_core_triple_usage"] });
 
   function initFromUrl() {
     var state = shareState();
