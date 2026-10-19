@@ -455,32 +455,33 @@ emblems** — no visible type-name text — with the type name exposed via
 itself, so the badge stays accessible/hoverable without a text label
 cluttering it.
 
-**The source PNGs are wide "icon + type name" badges (200x40), not bare
-square icons** — a PokéAPI/sprites generation-ix asset with the symbol in
-a fixed-width square on the left edge and the type name filling the rest.
-Squishing the whole 5:1 image into a square (an earlier approach) just
-stretched the text into an illegible blob. `typeIconImg()` instead crops
-to that left square via `.type-icon-crop` (an `overflow:hidden` window
-sized to the target icon size, holding a height-constrained `<img>` that
-scales to its natural ~5:1 aspect so only the icon shows) — every
-type-icon use gets this crop, including the filter chips and Matchup
-effectiveness grid below, which keep their own separate text label
-alongside the now-icon-only symbol instead of the old doubled-up
-icon-with-baked-in-text-plus-a-second-text-label.
-- **Compact** (`large=false`): `.type-pill`, an 18px cropped type icon.
+**The icons are square, text-free round emblems**: Bulbagarden Archives'
+128px Sword/Shield set ("File:&lt;Type&gt; icon SwSh.png"), committed under
+`static/icons/types/`. `typeIconImg()` is a plain `<img class="type-icon">`
+at the requested size, with the type name on `alt`/`title`. The earlier
+asset was PokéAPI's 200x40 "icon + type name" badge, which had to be
+cropped to its left square and still showed the start of the baked-in
+name at small sizes.
+- **Compact** (`large=false`): `.type-pill`, an 18px type icon.
   Used in the Matchup tab's attacker/defender panels.
 - **Large** (`large=true`): `.type-badge-lg .type-pill-lg`, an `--icon-md`
-  (64px) cropped icon in a 3px ring of that type's own `--type-*` color.
+  (64px) icon in a 3px ring of that type's own `--type-*` color.
   Used once, in the Pokémon Profile header, beside the hero art. It was
   `--icon-xl` until hero art landed; see "Icon size scale" above for why it
   shrank and the token moved to the Pokémon.
 
-Not icon-only: the type-filter chip row (`renderTypeFilterChips`, Usage/
-Speed Tiers/Team Builder) and the Matchup tab's type-effectiveness grid
-tiles both keep their visible type-name text — chips are pickers (a user
-needs to read what they're selecting) and effectiveness tiles are a
-lookup table (every row must be identifiable at a glance), so dropping
-text there would make the UI worse, not better.
+The type-filter row (`renderTypeFilterChips`, Usage/Speed Tiers/Team
+Builder) is **icon-only too**: one bare 32px emblem per
+`.type-filter-chip` button, nine to a row, with the type name as the
+button's `aria-label` and hover `title`. A picked type gets a navy ring;
+once anything is picked, the row takes `.has-selection` and fades the
+unpicked icons to 35% so the active filter reads at a glance. The
+round, color-coded emblems are distinct enough to scan without a label,
+and the text pills they replaced wrapped to five rows.
+
+Not icon-only: the Matchup tab's type-effectiveness grid tiles keep their
+visible type-name text. They are a lookup table, and every row must be
+identifiable at a glance.
 
 ### Gallery card (Pro Team Gallery)
 

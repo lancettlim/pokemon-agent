@@ -7,8 +7,13 @@ dataset_version, no release gate (see docs/dataset-spec.md's
 
 Bulbagarden Archives — the same MediaWiki wiki pipelines/extract/
 bulbagarden.py sources Champions-menu species sprites from — also hosts
-held-item sprite artwork, conventionally titled "File:Bag <Item Name>
-Sprite.png" (e.g. "File:Bag Leftovers Sprite.png"). Unlike the species
+held-item artwork. The classic "File:Bag <Item Name> Sprite.png" is a
+24x24 pixel sprite that turns into a blocky smear once a dashboard tile
+scales it up, so the 160x160 smooth renders from the newest games are
+tried first: "Bag <Item Name> ZA Sprite.png" (Legends: Z-A, which carries
+the Mega Stones Champions brings back), then the Scarlet/Violet "SV"
+variant, then the Dream World art. The pixel sprite is only a fallback
+for an item none of those cover. Unlike the species
 sprite extractor, there's no single category listing every item to page
 through ahead of time, so this resolves one item at a time: it queries
 prop=imageinfo for a small set of guessed title variants (MediaWiki
@@ -22,11 +27,12 @@ resolution miss (see pipelines/dashboard/build.py's _resolve_item_icons),
 the same graceful-degradation convention every other icon/sprite helper in
 this codebase follows.
 
-Cached under a "bulbagarden_items/" subdirectory of cache_dir, distinct
+Cached under a "bulbagarden_items_hd/" subdirectory of cache_dir, distinct
 from pipelines.render.assets.ensure_item_icon's "items/" subdirectory —
 sharing one cache path between the two sources would let a PokéAPI
 fallback silently poison the cache slot a later, successful Bulbagarden
-lookup should have filled.
+lookup should have filled. The "_hd" suffix also keeps a cache filled by
+the old pixel-sprite-first lookup from being served as if it were current.
 """
 
 from __future__ import annotations
@@ -39,12 +45,15 @@ API_BASE_URL = "https://archives.bulbagarden.net/w/api.php"
 
 
 def _title_candidates(item_name: str) -> list[str]:
-    """Naming variants to try, most-likely-correct first. Bulbagarden's
-    held-item sprites conventionally live under "Bag <Item Name>
-    Sprite.png"; the other two variants are fallbacks for items that
-    don't follow that convention."""
+    """Naming variants to try, sharpest first: the 160px Z-A and SV bag
+    renders and the Dream World art, then the 24px "Bag <Item Name>
+    Sprite.png" pixel sprite, then two fallbacks for items that follow
+    none of those conventions."""
     name = item_name.strip()
     return [
+        f"File:Bag {name} ZA Sprite.png",
+        f"File:Bag {name} SV Sprite.png",
+        f"File:Dream {name} Sprite.png",
         f"File:Bag {name} Sprite.png",
         f"File:{name} Sprite.png",
         f"File:{name}.png",
@@ -98,7 +107,7 @@ def ensure_item_icon_bulbagarden(
     _resolve_item_icons) falls back to the PokéAPI-sourced icon in that
     case, so a bad/missing Bulbagarden entry doesn't remove an item's icon
     outright."""
-    dest_path = cache_dir / "bulbagarden_items" / f"{_slugify(item_name)}.png"
+    dest_path = cache_dir / "bulbagarden_items_hd" / f"{_slugify(item_name)}.png"
     if dest_path.exists():
         return dest_path
 
