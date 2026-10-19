@@ -196,6 +196,12 @@
   /* Components that set their own display (grid/flex) would otherwise
      override the hidden attribute app.js toggles. */
   .kpi-row[hidden], .movers-panel[hidden] { display: none; }
+  /* Team Builder suggested partners (teams.js renderSuggestions). */
+  .suggestion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }
+  .suggestion { display: flex; align-items: center; gap: var(--space-2); border: 2px solid var(--border); border-radius: 10px; padding: var(--space-2); background: var(--surface); }
+  .suggestion-body { flex: 1; min-width: 0; }
+  .suggestion-body strong { display: block; }
+  .suggestion-body small { color: var(--muted); }
   /* Tier List (app.js setupTiers): usage bands, win-rate chip per Pokémon. */
   .tier-row { display: grid; grid-template-columns: 64px 1fr; gap: var(--space-3); align-items: stretch; margin-bottom: var(--space-3); }
   .tier-label { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; color: #fff; font-weight: 800; font-size: 1.6rem; line-height: 1; }
@@ -1411,12 +1417,19 @@
 
         <div class="stat-summary-row" id="team-builder-summary"></div>
 
+        <h3>Suggested partners</h3>
+        <p class="sub" id="team-builder-suggestions-note">
+          Pokémon that turn up alongside your picks more often than their
+          popularity alone predicts (synergy lift) in the selected regulation.
+        </p>
+        <div class="suggestion-list" id="team-builder-suggestions"></div>
+
         <div class="team-analysis" id="team-builder-analysis">
           <h3>Team analyst</h3>
           <p class="sub">
             Fast, source-backed checks for the current six. Coverage uses your
             selected recorded moves and the standard type chart; threat checks
-            use the most-used Pokémon in this dataset. These are screening
+            use the most-used Pokémon in the selected regulation. These are screening
             signals, not battle simulations.
           </p>
           <div class="team-analysis-grid" id="team-analysis-summary"></div>

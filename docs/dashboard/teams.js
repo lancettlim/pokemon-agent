@@ -650,11 +650,74 @@
         '<div class="stat"><strong>' + App.formatPercent(avg("win_rate")) + "</strong>Avg. win rate</div>";
     }
 
+    // Suggested partners (docs/upgrade-plan-2026q4.md, B9): candidates
+    // ranked by how many current picks they have a synergy row with
+    // (pokemon_team_synergy, already floored at a minimum pair count and
+    // scoped to the page's regulation), then by average lift with them.
+    // Lift, not raw co-occurrence, so the list isn't just "the most popular
+    // Pokémon" again.
+    var synergyByKey = {};
+    (marts.pokemon_team_synergy || []).forEach(function (r) {
+      (synergyByKey[r.pokemon_key] = synergyByKey[r.pokemon_key] || []).push(r);
+    });
+    var suggestionsEl = document.getElementById("team-builder-suggestions");
+    var MAX_SUGGESTIONS = 6;
+
+    function renderSuggestions() {
+      if (!suggestionsEl) return;
+      if (!team.length) {
+        suggestionsEl.innerHTML = '<p class="empty-state">Add a Pokémon to see who pairs well with it.</p>';
+        return;
+      }
+      if (team.length >= MAX_TEAM_SIZE) {
+        suggestionsEl.innerHTML = '<p class="empty-state">Your team is full.</p>';
+        return;
+      }
+      var onTeam = {};
+      team.forEach(function (slot) { onTeam[slot.key] = true; });
+      var candidates = {};
+      team.forEach(function (slot) {
+        (synergyByKey[slot.key] || []).forEach(function (r) {
+          var key = r.partner_pokemon_key;
+          if (onTeam[key] || !byKey[key] || !(r.lift > 1)) return;
+          var c = candidates[key] || (candidates[key] = { key: key, lifts: [], with: [] });
+          c.lifts.push(r.lift);
+          c.with.push(slot.key);
+        });
+      });
+      var ranked = Object.keys(candidates).map(function (key) {
+        var c = candidates[key];
+        c.avgLift = c.lifts.reduce(function (a, b) { return a + b; }, 0) / c.lifts.length;
+        return c;
+      }).sort(function (a, b) {
+        return b.with.length - a.with.length || b.avgLift - a.avgLift;
+      }).slice(0, MAX_SUGGESTIONS);
+      if (!ranked.length) {
+        suggestionsEl.innerHTML = '<p class="empty-state">Not enough recorded teams with these picks to suggest partners.</p>';
+        return;
+      }
+      suggestionsEl.innerHTML = ranked.map(function (c) {
+        var withNames = c.with.map(function (k) { return App.pokemonNames[k] || k; }).join(", ");
+        return '<div class="suggestion">' + App.spriteImg(c.key, App.ICON_SIZES.sm) +
+          '<div class="suggestion-body"><strong>' + App.escapeHtml(App.pokemonNames[c.key] || c.key) + "</strong>" +
+          "<small>With " + App.escapeHtml(withNames) + " · lift " + c.avgLift.toFixed(1) + "×</small></div>" +
+          '<button type="button" class="btn btn-sm" data-suggest="' + App.escapeHtml(c.key) + '">Add</button></div>';
+      }).join("");
+    }
+
+    if (suggestionsEl) {
+      suggestionsEl.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-suggest]");
+        if (btn) addToTeam(btn.getAttribute("data-suggest"));
+      });
+    }
+
     function renderAll() {
       renderAvailable();
       renderSlots();
       renderSpeedOrder();
       renderSummary();
+      renderSuggestions();
       renderAnalysis();
       if (exportOutput) exportOutput.style.display = "none";
     }

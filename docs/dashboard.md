@@ -114,6 +114,10 @@ Explorer, Matchup) carries a type-ahead search with sprites
   (S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%), each with a win-rate chip coloured
   only when the 95% Wilson interval sits clearly above or below 50%.
   Clicking a Pokémon opens its profile.
+- **Team Builder** gains **Suggested partners**: Pokémon with a synergy
+  lift above 1 alongside the current picks in the selected regulation,
+  ranked by how many picks they pair with, then by average lift, each with
+  an Add button.
 - **Profile** now shows base stats as bars against the legal pool's median
   and a **Most common set** card: the modal item, ability and nature
   (`pokemon_nature_usage`) and top four moves, each counted separately,

@@ -23,7 +23,8 @@ per `docs/backlog.md`'s backlog → todo flow.
 | B5 Meta landing | Done (Sprints 2–3): What changed panel and Tier List. Latest-event spotlight is not done |
 | B7 performance | Done (Sprint 4): mart shards under `docs/dashboard/data/`. The default view is ~400KB compressed, down from ~2MB, and Overview needs no fetch |
 | B8 theme + accessibility | Done (Sprint 4): dark theme (OS-following, with a header toggle), visible focus rings, reduced motion, combobox ARIA |
-| B6, B9 | Not started |
+| B9 Team Builder | Done (Sprint 4): suggested partners by synergy lift in the selected regulation; the threat screen follows the selected regulation. Pokepaste import already existed |
+| B6 shared table component | Not started. The views work and are consistent; this is a refactor with no visible change, so it's left for a later pass |
 
 Two upstream breakages turned up during the Sprint 1 refresh, and both are
 fixed: Bulbagarden renamed every sprite file from "Menu CP" to "Menu Champs"
