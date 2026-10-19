@@ -94,6 +94,8 @@ _CRITICAL_PAYLOAD_KEYS = (
     "default_scope",
     "min_default_scope_teams",
     "mart_files",
+    "share_cards",
+    "site",
 )
 
 # The marts are split into shards so the page downloads only what the view
@@ -215,6 +217,58 @@ def _asset_coverage(payload: dict[str, Any], referenced_keys: set[str]) -> list[
             "referenced": 18,
         },
     ]
+
+
+# The published site's address: Open Graph tags need absolute URLs.
+SITE_URL = "https://lancettlim.github.io/pokemon-agent/dashboard/"
+
+
+def _load_share_cards(output_dir: Path) -> dict[str, Any]:
+    """The manifest `render-share-cards` writes (pipelines/render/
+    share_cards.py), or {} when it hasn't run: the site then shows no
+    download buttons and no Open Graph image."""
+    path = output_dir / "images" / "cards" / "manifest.json"
+    if not path.exists():
+        return {}
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    # Only cards whose PNG is actually there.
+    manifest["teams"] = {
+        k: v for k, v in (manifest.get("teams") or {}).items() if (output_dir / v).exists()
+    }
+    manifest["whats_changed"] = {
+        k: v for k, v in (manifest.get("whats_changed") or {}).items() if (output_dir / v).exists()
+    }
+    if manifest.get("og_image") and not (output_dir / manifest["og_image"]).exists():
+        manifest["og_image"] = None
+    return manifest
+
+
+def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
+    """Open Graph title/description for link unfurls (docs/upgrade-plan-
+    2027q1.md, C4), refreshed on every build from the default regulation's
+    headline: "Reg M-C: Rillaboom leads at 8.7% of roster slots across
+    3,770 teams from 5 events."""
+    kpis = payload.get("kpis") or {}
+    scope = payload.get("default_scope") or data.ALL_SCOPE
+    label = "All regulations" if scope == data.ALL_SCOPE else f"Reg {scope.upper()}"
+    top = kpis.get("top_used_pokemon")
+    description = f"{label}: usage, real sets, events and teams from Pokémon Champions tournaments."
+    if top and top.get("usage_share") is not None:
+        description = (
+            f"{label}: {top.get('pokemon_name')} leads at {top['usage_share'] * 100:.1f}% of "
+            f"roster slots across {kpis.get('team_count') or 0:,} teams from "
+            f"{kpis.get('event_count') or 0} events. Real sets, event pages and a team builder."
+        )
+    og_image = (payload.get("share_cards") or {}).get("og_image")
+    return {
+        "url": SITE_URL,
+        "title": f"Pokémon Champions Data — {label}",
+        "description": description,
+        "og_image": SITE_URL + og_image if og_image else None,
+    }
 
 
 def _critical_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -399,6 +453,8 @@ def build(
         fetch_icons=fetch_icons,
     )
     payload["reference_teams"] = _load_reference_teams(output_dir, reference_teams_dir)
+    payload["share_cards"] = _load_share_cards(output_dir)
+    payload["site"] = _site_meta(payload)
     # Asset coverage is only knowable here, after the copies have run: it's
     # the ratio of what actually resolved to what the marts reference. The
     # Data & Sources tab reports it alongside the dbt release gates so the

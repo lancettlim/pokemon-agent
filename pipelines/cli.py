@@ -42,7 +42,7 @@ from pipelines.extract import (
 from pipelines.extract import http as extract_http
 from pipelines.extract import summary as extraction_summary
 from pipelines.release import build as release_build
-from pipelines.render import team_card
+from pipelines.render import share_cards, team_card
 from pipelines.validate import report
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -410,6 +410,15 @@ def _run_render_card(team_id: str | None, spec_path: Path | None, output_path: P
     return 0
 
 
+def _run_render_share_cards(output_dir: Path | None) -> int:
+    manifest = share_cards.render_share_cards(output_dir or share_cards.DEFAULT_OUTPUT_DIR)
+    print(
+        f"Rendered {len(manifest['teams'])} team cards and "
+        f"{len(manifest['whats_changed'])} What changed cards"
+    )
+    return 0
+
+
 def _run_build_dashboard(
     marts_dir: Path | None,
     normalized_dir: Path | None,
@@ -483,6 +492,13 @@ def main(argv: list[str] | None = None) -> int:
         "move-type icons are always local, offline copies)",
     )
 
+    share_parser = subparsers.add_parser(
+        "render-share-cards",
+        help="Render the dashboard's share images (newest event's top 8, What changed cards, "
+        "Open Graph image) with Playwright, before build-dashboard",
+    )
+    share_parser.add_argument("--output-dir", dest="output_dir", type=Path, default=None)
+
     args = parser.parse_args(argv)
 
     if args.command == "extract":
@@ -500,6 +516,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_build_dashboard(
             args.marts_dir, args.normalized_dir, args.output_dir, args.fetch_icons
         )
+    if args.command == "render-share-cards":
+        return _run_render_share_cards(args.output_dir)
     parser.error(f"Unknown command: {args.command}")
     return 2
 

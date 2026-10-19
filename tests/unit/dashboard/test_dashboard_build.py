@@ -329,3 +329,53 @@ def test_safe_json_escapes_script_close_tag():
     rendered = build._safe_json(payload)
     assert "</script>" not in rendered
     assert "\\u003c/script>" in rendered
+
+
+def test_share_card_manifest_keeps_only_cards_that_exist(tmp_path):
+    cards = tmp_path / "images" / "cards"
+    cards.mkdir(parents=True)
+    (cards / "t1.png").write_bytes(b"png")
+    (cards / "og.png").write_bytes(b"png")
+    (cards / "manifest.json").write_text(
+        json.dumps(
+            {
+                "teams": {"t1": "images/cards/t1.png", "t2": "images/cards/t2.png"},
+                "whats_changed": {"m-c": "images/cards/missing.png"},
+                "og_image": "images/cards/og.png",
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = build._load_share_cards(tmp_path)
+    assert manifest["teams"] == {"t1": "images/cards/t1.png"}
+    assert manifest["whats_changed"] == {}
+    assert manifest["og_image"] == "images/cards/og.png"
+    assert build._load_share_cards(tmp_path / "nowhere") == {}
+
+
+def test_site_meta_describes_the_default_regulation(tmp_path):
+    payload = {
+        "default_scope": "m-c",
+        "kpis": {
+            "top_used_pokemon": {"pokemon_name": "Rillaboom", "usage_share": 0.0866},
+            "team_count": 3770,
+            "event_count": 5,
+        },
+        "share_cards": {"og_image": "images/cards/og.png"},
+    }
+    meta = build._site_meta(payload)
+    assert meta["title"] == "Pokémon Champions Data — Reg M-C"
+    assert meta["description"].startswith(
+        "Reg M-C: Rillaboom leads at 8.7% of roster slots across 3,770 teams from 5 events."
+    )
+    assert meta["og_image"] == build.SITE_URL + "images/cards/og.png"
+
+
+def test_built_page_carries_open_graph_tags(tmp_path):
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    _populate_marts(marts_dir, normalized_dir)
+    _build(marts_dir, normalized_dir, tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert '<meta property="og:title"' in html
+    assert '<meta name="description"' in html

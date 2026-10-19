@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* "What changed" share card (docs/upgrade-plan-2027q1.md, C4): 1200x630,
+     the Open Graph size, in the dashboard's broadcast palette. */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; background: #10161f; }
+  .card-wrap { width: 1200px; height: 630px; display: flex; flex-direction: column; background: #12131a; color: #fff; }
+  .banner { background: #e3323c; padding: 22px 36px 18px; border-bottom: 4px solid #b8262e; }
+  .banner h1 { font-size: 40px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+  .banner p { margin-top: 6px; font-size: 19px; color: #ffe1e3; }
+  .columns { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 22px 36px 0; }
+  h2 { font-size: 18px; letter-spacing: 2px; text-transform: uppercase; color: #f4b942; margin-bottom: 10px; }
+  ol { list-style: none; }
+  li { display: grid; grid-template-columns: 56px 1fr auto auto; align-items: center; gap: 12px; height: 62px; border-bottom: 1px solid #2a2d3a; }
+  li img { width: 56px; height: 56px; object-fit: contain; }
+  .name { font-size: 22px; font-weight: 700; }
+  .share { font-size: 18px; color: #b8bdd1; }
+  .delta { font-size: 22px; font-weight: 800; min-width: 110px; text-align: right; }
+  .up { color: #4fc27f; }
+  .down { color: #ef6b6b; }
+  .footer { display: flex; justify-content: space-between; padding: 12px 36px 18px; font-size: 16px; color: #9aa6c2; }
+  .footer strong { color: #fff; }
+</style>
+</head>
+<body>
+<div class="card-wrap">
+  <div class="banner">
+    <h1>{{ title }}</h1>
+    <p>{{ subtitle }}</p>
+  </div>
+  <div class="columns">
+    {% for column in columns %}
+    <div>
+      <h2>{{ column.label }}</h2>
+      <ol>
+        {% for row in column.rows %}
+        <li>
+          {% if row.sprite %}<img src="{{ row.sprite }}" alt="">{% else %}<span></span>{% endif %}
+          <span class="name">{{ row.name }}</span>
+          <span class="share">{{ row.share }}</span>
+          <span class="delta {{ 'up' if row.delta_points > 0 else 'down' }}">{{ row.delta }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="footer">
+    <span><strong>Pokémon Champions Data</strong> · {{ footer }}</span>
+    <span>{{ site }}</span>
+  </div>
+</div>
+</body>
+</html>

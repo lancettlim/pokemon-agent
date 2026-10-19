@@ -4,6 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pokémon Champions — Analytics Dashboard</title>
+{# Link unfurls (docs/upgrade-plan-2027q1.md, C4), refreshed every build. #}
+{% if payload.site %}
+<meta name="description" content="{{ payload.site.description }}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pokémon Champions Data">
+<meta property="og:title" content="{{ payload.site.title }}">
+<meta property="og:description" content="{{ payload.site.description }}">
+<meta property="og:url" content="{{ payload.site.url }}">
+{% if payload.site.og_image %}
+<meta property="og:image" content="{{ payload.site.og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{ payload.site.og_image }}">
+{% else %}
+<meta name="twitter:card" content="summary">
+{% endif %}
+<meta name="twitter:title" content="{{ payload.site.title }}">
+<meta name="twitter:description" content="{{ payload.site.description }}">
+{% endif %}
 {# No favicon file to fetch: an inline one keeps the console free of 404s. #}
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23e3323c'/%3E%3Crect y='7' width='16' height='2' fill='%2312131a'/%3E%3Ccircle cx='8' cy='8' r='2.5' fill='%23fff' stroke='%2312131a'/%3E%3C/svg%3E">
 <script>
@@ -285,6 +305,8 @@
   .data-table tr.row-link { cursor: pointer; }
   .data-table tr.row-link:hover td { background: var(--light-blue); }
   .data-table .cell-icon { width: 32px; height: 32px; }
+  .data-table-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
+  .data-table-cite { font-size: var(--font-xs); }
   .data-table-sort { display: none; }
   .data-table-more { margin-top: var(--space-2); }
   .share-cell { display: inline-grid; grid-template-columns: 64px 3.6em; align-items: center; gap: 6px; }
@@ -308,7 +330,8 @@
     .data-table td.col-detail::before { content: attr(data-label) " "; font-weight: 600; }
     .data-table td.col-phone-hide { display: none; }
     .data-table td.num { text-align: left; }
-    .data-table-sort { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--font-sm); color: var(--muted); margin-bottom: var(--space-2); }
+    .data-table-tools { justify-content: space-between; }
+    .data-table-sort { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--font-sm); color: var(--muted); }
     .share-cell { grid-template-columns: 40px 3.6em; }
   }
   /* Tooltip (app.js tipHtml / [data-tip]). */
@@ -433,6 +456,30 @@
   @media (max-width: 900px) {
     .overview-row, .performer-columns { grid-template-columns: 1fr; }
   }
+  /* Pokémon hub v2 (P2): recently viewed, per-regulation trend, pressure. */
+  .profile-controls { align-items: center; }
+  .recent-strip { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+  .recent-strip[hidden] { display: none; }
+  .recent-label { font-size: var(--font-xs); color: var(--muted); margin-right: var(--space-1); }
+  .recent-chip { display: inline-flex; border-radius: var(--radius-sm); min-width: 36px; min-height: 36px; align-items: center; justify-content: center; }
+  .recent-chip:hover { background: var(--light-blue); }
+  .trend { margin-top: var(--space-3); max-width: 320px; }
+  .trend-title { margin: 0; font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  .trend-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .trend-label { font-size: 10px; fill: var(--navy); font-weight: 700; }
+  .trend-legend { display: grid; text-align: center; font-size: var(--font-xs); color: var(--muted); }
+  .trend-legend span { display: block; }
+  .trend-legend .is-current strong { color: var(--accent-red); }
+  .pressure-summary { font-size: var(--font-md); }
+  .type-name { text-transform: capitalize; }
+  .saved-teams { margin-top: var(--space-4); }
+  .saved-teams-form { display: flex; gap: var(--space-2); }
+  .saved-teams-form input { flex: 1 1 auto; }
+  .saved-teams-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+  .saved-teams-list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; border: 1px solid var(--light-blue); border-radius: var(--radius-sm); padding: var(--space-2); }
+  .saved-teams-list .saved-name { font-weight: 700; flex: 1 1 140px; min-width: 0; }
+  .saved-teams-list .saved-meta { display: block; font-weight: 400; font-size: var(--font-xs); color: var(--muted); }
+  .saved-teams-list .team-comp { gap: 0; }
   .builder-notice { background: var(--positive-bg); color: var(--positive); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-weight: 600; }
   .builder-notice[hidden] { display: none; }
   /* Team Builder suggested partners (teams.js renderSuggestions). */
@@ -540,6 +587,10 @@
     margin-bottom: var(--space-5);
   }
   .movers-panel h3 { margin: 0 0 var(--space-1); }
+  .movers-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); }
+  .movers-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+  .movers-toggle button { font: inherit; font-size: var(--font-xs); font-weight: 700; padding: 6px 12px; min-height: 36px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; }
+  .movers-toggle button[aria-pressed="true"] { background: var(--blue); color: #fff; }
   .movers-panel h4 { margin: var(--space-3) 0 var(--space-2); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
   .mover-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
   .mover-list { list-style: none; margin: 0; padding: 0; }
@@ -933,6 +984,10 @@
     cursor: pointer;
   }
   .toggle-chip[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .calc-mode { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; margin-bottom: var(--space-3); }
+  .calc-mode-btn { font: inherit; font-size: var(--font-sm); font-weight: 700; padding: 6px 14px; min-height: 40px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; }
+  .calc-mode-btn[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  .ko-badge { font-weight: 700; }
 
   /* Type filter (Usage, Pokémon Profile, Team Builder): one bare type icon
      per button, no pill and no text. A picked type gets a ring in the
@@ -1295,6 +1350,13 @@
 
     <div class="subtab-panel" data-subpanel="usage-leaders">
       <div class="controls">
+        {# Event window (docs/upgrade-plan-2027q1.md, C4): "what changed
+           since Frankfurt". #}
+        <label>Events
+          <select id="usage-window-filter">
+            <option value="">Whole regulation</option>
+          </select>
+        </label>
         <label>Tier
           <select id="usage-tier-filter"></select>
         </label>
@@ -1326,6 +1388,7 @@
       </div>
       <p class="sub" id="usage-table-note"></p>
       <div id="usage-table"></div>
+      <div id="usage-window-table" hidden></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="win-rate-leaders" hidden>
@@ -1373,10 +1436,12 @@
 
   <section class="tab-panel" data-panel="pokemon-profile" data-section="pokemon" hidden>
     <h2 class="panel-title">Pokémon Profile</h2>
-    <div class="controls">
+    <div class="controls profile-controls">
       <label>Pokémon
         <select id="pokemon-profile-filter"></select>
       </label>
+      {# Recently viewed, per browser (docs/upgrade-plan-2027q1.md, P2). #}
+      <div class="recent-strip" id="profile-recent" hidden></div>
     </div>
 
     <div class="profile-layout">
@@ -1388,7 +1453,9 @@
       <button class="subtab-btn" role="tab" data-subtab="profile-items" data-route="items" aria-selected="true">Items</button>
       <button class="subtab-btn" role="tab" data-subtab="profile-ability" data-route="abilities">Ability</button>
       <button class="subtab-btn" role="tab" data-subtab="profile-moves" data-route="moves">Moves</button>
-      <button class="subtab-btn" role="tab" data-subtab="profile-team-cores" data-route="cores">Team Cores</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-team-cores" data-route="cores">Teammates</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-teams" data-route="teams">Teams</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-pressure" data-route="pressure">Meta pressure</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-items">
@@ -1419,12 +1486,27 @@
         </label>
         <label>Ranked by
           <select id="profile-team-core-metric">
-            <option value="co_occurrence">Co-occurrence</option>
             <option value="synergy">Synergy (lift)</option>
+            <option value="co_occurrence">Co-occurrence</option>
           </select>
         </label>
       </div>
-      <div class="grid-6xn" id="profile-team-core-grid"></div>
+      <div id="profile-pair-table"></div>
+      <div id="profile-triple-table" hidden></div>
+    </div>
+
+    <div class="subtab-panel" data-subpanel="profile-teams" hidden>
+      <p class="lead" id="profile-teams-note">The top-placing teams in this regulation that brought this Pokémon.</p>
+      <div class="team-card-grid" id="profile-teams"></div>
+    </div>
+
+    <div class="subtab-panel" data-subpanel="profile-pressure" hidden>
+      <p class="lead">How hard the regulation's attacks hit this Pokémon, by type.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Each attacking type is weighted by how often the regulation's teams use damaging moves of that type: a Pokémon's usage share times each damaging move's share of its moveset. The multiplier is the standard type chart against this Pokémon's types. This is type-based, not battle results: it ignores abilities, items, Tera-less STAB and who actually brings what into which game.</p>
+      </details>
+      <p class="pressure-summary" id="profile-pressure-summary"></p>
+      <div id="profile-pressure-table"></div>
     </div>
   </section>
 
@@ -1479,7 +1561,13 @@
       <p>The calculator assumes level 50 with full investment in the attacking and defending stat (no source publishes EV spreads). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
       <p>Head-to-head is measured <strong>team vs team</strong>: no source publishes which Pokémon were brought to a given match.</p>
     </details>
-    <div class="matchup-picker-grid">
+    {# "vs the meta" (docs/upgrade-plan-2027q1.md, P3): one attacker and move
+       against the regulation's 12 most-used Pokémon. #}
+    <div class="calc-mode" role="group" aria-label="Calculator mode">
+      <button type="button" class="calc-mode-btn" data-calc-mode="single" aria-pressed="true">One defender</button>
+      <button type="button" class="calc-mode-btn" data-calc-mode="meta" aria-pressed="false">Top 12 of the meta</button>
+    </div>
+    <div class="matchup-picker-grid" id="matchup-pickers">
       <div class="matchup-side">
         <h4>Attacker</h4>
         <label>Pokémon <select id="matchup-attacker-select"></select></label>
@@ -1490,7 +1578,7 @@
         <h4>Setup</h4>
         <div id="matchup-attacker-stages"></div>
       </div>
-      <div class="matchup-side">
+      <div class="matchup-side" id="matchup-defender-side">
         <h4>Defender</h4>
         <label>Pokémon <select id="matchup-defender-select"></select></label>
         <div id="matchup-defender-type" class="type-badge-row"></div>
@@ -1511,7 +1599,12 @@
       </label>
     </div>
     <div class="toggle-chip-row" id="matchup-toggle-row"></div>
+    <p class="sub" id="matchup-preset-note"></p>
     <div class="damage-result" id="matchup-damage-result"></div>
+    <div id="matchup-meta" hidden>
+      <p class="sub">Estimated damage from the attacker's move against the 12 most-used Pokémon in the regulation, each with its own #1 set's Intimidate where it has one. An estimate: level 50 and full investment in the attacking and defending stats, since team sheets publish no EVs.</p>
+      <div id="matchup-meta-table"></div>
+    </div>
 
     <h3>Type effectiveness</h3>
     <p class="sub">The attacker's type(s) against the defender's type(s).</p>
@@ -1580,8 +1673,21 @@
         <div class="pokepaste-actions">
           <button class="btn btn-sm" id="team-builder-clear" type="button">Clear team</button>
           <button class="btn btn-sm" id="team-builder-export" type="button">Export as pokepaste text</button>
+          <button class="btn btn-sm" id="team-builder-share" type="button">Copy share link</button>
         </div>
         <textarea id="team-builder-export-output" class="pokepaste-box" style="display:none" readonly></textarea>
+        {# Saved teams and share links (docs/upgrade-plan-2027q1.md, P4): up to
+           five named teams in this browser; a share link carries the six
+           Pokémon and their real-set indices in the hash. #}
+        <div class="saved-teams">
+          <h3>Saved teams</h3>
+          <div class="saved-teams-form">
+            <input type="text" id="team-builder-save-name" maxlength="40" placeholder="Name this team" aria-label="Team name">
+            <button class="btn btn-sm btn-primary" id="team-builder-save" type="button">Save team</button>
+          </div>
+          <p class="sub" id="team-builder-saved-note" role="status"></p>
+          <ul class="saved-teams-list" id="team-builder-saved"></ul>
+        </div>
 
         <h3>Speed order</h3>
         <p class="sub">Your team's picks, fastest first — who moves before whom.</p>

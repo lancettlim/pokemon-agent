@@ -1,0 +1,23 @@
+{
+  "generated_at_utc": "2026-10-19T16:31:02Z",
+  "event": {
+    "event_id": "LO002-drfp6esCSpyU3s",
+    "event_name": "2027 Louisville Pok\u00e9mon VGC Regional Championships"
+  },
+  "teams": {
+    "sag2g0KIaVojGKNjX1GH": "images/cards/LO002-drfp6esCSpyU3s-1.png",
+    "4MX3CdtGBkPWRUaMYKKv": "images/cards/LO002-drfp6esCSpyU3s-2.png",
+    "YXmbYDN8vlqB1V50eI76": "images/cards/LO002-drfp6esCSpyU3s-3.png",
+    "VEbIPgL2Q0WvSfjCbu0o": "images/cards/LO002-drfp6esCSpyU3s-4.png",
+    "GdlUHWxciaa6slBn12qr": "images/cards/LO002-drfp6esCSpyU3s-5.png",
+    "9ALJhiJSOmdfBCyjn5Cl": "images/cards/LO002-drfp6esCSpyU3s-6.png",
+    "Wa8jkYRJKoUdw5dJlJ6k": "images/cards/LO002-drfp6esCSpyU3s-7.png",
+    "q1QrN7DAf7XZw5UgZtBn": "images/cards/LO002-drfp6esCSpyU3s-8.png"
+  },
+  "whats_changed": {
+    "m-a": "images/cards/whats-changed-m-a.png",
+    "m-b": "images/cards/whats-changed-m-b.png",
+    "m-c": "images/cards/whats-changed-m-c.png"
+  },
+  "og_image": "images/cards/og.png"
+}

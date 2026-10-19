@@ -85,6 +85,15 @@ jobs:
       - name: dbt build + validate
         run: make validate
 
+      # Share images (docs/upgrade-plan-2027q1.md, C4): the newest event's
+      # top 8 and the What changed / Open Graph cards. They need Chromium,
+      # and must exist before the build, which reads their manifest.
+      - name: Install Chromium for the share cards
+        run: uv run playwright install --with-deps chromium
+
+      - name: Render share cards
+        run: uv run python -m pipelines.cli render-share-cards
+
       - name: Build dashboard
         run: uv run python -m pipelines.cli build-dashboard
 

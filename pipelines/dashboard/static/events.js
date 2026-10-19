@@ -125,10 +125,17 @@
   }
 
   // ---------- Event page ----------
+  var currentEvent = null;
   function performerTable(container, caption) {
     return App.createDataTable(container, {
       caption: caption,
       sort: null,
+      citation: function () {
+        return currentEvent
+          ? App.shortEventName(currentEvent.event_name) + ", n = " +
+            Number(currentEvent.team_count || 0).toLocaleString() + " teams"
+          : null;
+      },
       rowHref: App.pokemonRowHref,
       columns: [
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
@@ -181,6 +188,7 @@
       perfNote.textContent = "";
       return;
     }
+    currentEvent = event;
     document.title = App.shortEventName(event.event_name) + " — Pokémon Champions Data";
     var sources = [];
     if (event.pairings_url) sources.push('<a href="' + esc(event.pairings_url) + '" rel="noopener">RK9 pairings</a>');

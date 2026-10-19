@@ -616,6 +616,29 @@ The fixture row was then removed. `tests/browser/test_regulation_rollover.py`
 and `tests/unit/dashboard/test_data.py` keep the rollover cases under test
 with the same fixture registry.
 
+## Share cards and link previews
+
+`python -m pipelines.cli render-share-cards` (`pipelines/render/
+share_cards.py`, docs/upgrade-plan-2027q1.md C4) renders, with Playwright:
+
+- the newest event's top 8 as team-card PNGs
+  (`images/cards/<event_id>-<placement>.png`), each offered as "Download
+  card" on its team card;
+- a 1200×630 "What changed" card per regulation
+  (`images/cards/whats-changed-<scope>.png`), using the same comparison the
+  Overview opens on, offered as "Download summary card";
+- `images/cards/og.png`, a copy of the default regulation's card, used as
+  the Open Graph / Twitter image.
+
+It writes `images/cards/manifest.json`, which `build-dashboard` reads, so it
+runs first: `make dashboard` and the weekly refresh workflow both do. The
+build also writes `og:`/`twitter:` title and description tags from the
+default regulation's headline ("Reg M-C: Rillaboom leads at 8.7% of roster
+slots across 3,770 teams from 5 events…"), so a shared link unfurls with
+the current state. Without the manifest the site simply has no download
+buttons and no preview image. The cards add about 1.6MB to
+`docs/dashboard/`, replaced on each refresh.
+
 ## Routes
 
 Every view has a route in the hash, and the hash holds its state, so Back,

@@ -583,6 +583,40 @@ edge has more to show, snaps to tabs, and centres the active tab without
 scrolling the page. On phones every tab, sub-tab and chip is at least 44px
 tall.
 
+### Team card (2027 Q1, C1/C2/P5)
+
+`teamCardHtml(team, opts)` draws a real team: placement and record as the
+headline ("1st 15–2"), win rate secondary, the player (linked to their
+page) and event (linked to its page), the six Pokémon as `.team-comp`
+links, the sets behind a "Sets" disclosure, and actions: Copy for
+Showdown, Use this team (`#/builder/team/<id>`) and, when a pre-rendered
+image exists, Download card. Event pages pass `hideEvent`; converged lists
+pass their own `headline` and `useHref`. Every team display on the site
+(Top Teams, event top 8, starter strip, a profile's Teams, player pages)
+uses it.
+
+### Per-regulation trend (2027 Q1, P2)
+
+The profile's "Usage across regulations" is a small inline SVG line of
+usage share, one point per regulation with data, the selected regulation's
+point in the accent red, with win rate and n under each. No charting
+library: it's one `<polyline>` and labelled `<circle>`s with an
+`aria-label` listing every value.
+
+### Baseline toggle ("What changed", 2027 Q1, C4)
+
+The Overview's "What changed" names its comparison with that baseline's
+own size ("vs Reg M-B (1 event, 395 teams)") and offers "Early vs recent
+events" within the selected regulation. A thin baseline (fewer than two
+events, or under 300 teams) opens on early vs recent.
+
+### Copy with citation (2027 Q1, C4)
+
+Every data table has "Copy with citation": its rows in the current order
+as tab-separated text, then "Source: Pokémon Champions Data Platform,
+dataset X, Reg M-C, n = 3,770 teams, <url>" (an event page's tables cite
+the event's own n).
+
 ### Removed tabs and components
 
 The Archetype Explorer and Regulation Comparison tabs (and their

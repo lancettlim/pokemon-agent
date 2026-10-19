@@ -844,13 +844,23 @@ table tracks sprint progress.
   rate. dbt tests check shares sum to at most 1 and that every exact set
   appears verbatim on its example team's sheet. The per-slot modal card is
   gone.
-- [ ] Pokémon hub v2: per-regulation trend, featuring teams, teammates, meta pressure (P2)
-- [ ] Calculator presets from real sets; "vs the meta" mode (P3)
-- [ ] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5).
-  Done so far: "Copy and play" starter strip on the Overview (three
-  top-placing fully reported teams, from `starter_teams` in the inline KPIs),
-  and "Use this team" loading a real sheet. Saved teams and share links
-  remain.
+- [x] Pokémon hub v2: per-regulation trend, featuring teams, teammates, meta pressure (P2).
+  The profile header draws usage share across every regulation with win
+  rate and n under each point (`pokemon_usage_by_regulation` now carries
+  `win_rate`/`record_count`); new Teams and Meta pressure views; Teammates
+  is a table ranked by synergy lift; a recently-viewed strip is kept per
+  browser. Meta pressure is labelled type-based, not battle results.
+- [x] Calculator presets from real sets; "vs the meta" mode (P3).
+  Each side starts on its #1 real set's item/ability toggles (and the
+  defender's Intimidate); "Top 12 of the meta" (`#/matchup/<a>/meta`)
+  lists damage ranges and OHKO/2HKO/3HKO verdicts against the regulation's
+  most-used Pokémon, labelled as a full-investment level-50 estimate.
+- [x] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5).
+  "Use this team" loads a real sheet (`#/builder/team/<id>`,
+  `#/builder/list/<id>`); up to five named teams save per browser; "Copy
+  share link" gives `?reg=<scope>#/builder/<key>.<set>,...` with real-set
+  indices. The Builder carries natures. The Overview's "Copy and play"
+  strip shows three top-placing fully reported teams.
 - [x] Event pages and `pokemon_event_usage_vs_regulation` mart (C1).
   `#/events` lists every event in the regulation (`tournament_event_summary`);
   `#/event/<id>` shows the header with RK9/MunchStats source links, the top
@@ -863,7 +873,15 @@ table tracks sprint progress.
   card has Copy for Showdown and Use this team (`#/builder/team/<id>`);
   converged lists load their Limitless sets (`team_list_sheets`).
 - [ ] Player pages (C3)
-- [ ] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4)
+- [x] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4).
+  Usage's "Events" filter (latest, last N, since an event) compares the
+  window with the regulation's earlier events. `render-share-cards`
+  (`pipelines/render/share_cards.py`) renders the newest event's top 8 and a
+  What changed card per regulation, the default one doubling as the Open
+  Graph image; the build adds download buttons and OG/Twitter tags. Every
+  data table has "Copy with citation". The What changed panel names its
+  baseline's events and teams and opens on early vs recent events when
+  the previous regulation is thin (M-B is one Worlds field).
 - [ ] Publish 0.4.0 as a Release asset; update the release contract (D1)
 - [ ] Data section table cards and a generated data dictionary (D2)
 - [x] Regulation rollover playbook and M-D dry run (D3).

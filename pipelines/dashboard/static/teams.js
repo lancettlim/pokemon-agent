@@ -266,6 +266,7 @@
     var clearBtn = document.getElementById("team-builder-clear");
     var exportBtn = document.getElementById("team-builder-export");
     var exportOutput = document.getElementById("team-builder-export-output");
+    var shareBtnEl = document.getElementById("team-builder-share");
     var analysisSummaryEl = document.getElementById("team-analysis-summary");
     var analysisDefenseTable = document.getElementById("team-analysis-defense-table");
     var analysisThreatTable = document.getElementById("team-analysis-threat-table");
@@ -406,6 +407,27 @@
         // localStorage unavailable (private browsing, etc.) — the team
         // just won't survive a reload; not fatal.
       }
+    }
+
+    function addSlot(slot) {
+      var normalized = normalizeEntry(slot);
+      if (!normalized) {
+        showNotice((App.pokemonNames[slot.key] || slot.key) + " isn't legal in " +
+          App.shortRegulation(App.regulationScope) + ".", false);
+        return;
+      }
+      var existing = team.map(function (s) { return s.key; }).indexOf(normalized.key);
+      if (existing !== -1) {
+        team[existing] = normalized;
+      } else if (team.length >= MAX_TEAM_SIZE) {
+        showNotice("Your team is full. Remove a Pokémon to add " + App.pokemonNames[normalized.key] + ".", false);
+        return;
+      } else {
+        team.push(normalized);
+      }
+      persist();
+      renderAll();
+      showNotice("Added " + App.pokemonNames[normalized.key] + " with its set.", false);
     }
 
     function addToTeam(key) {
@@ -685,6 +707,7 @@
       if (countEl) countEl.textContent = String(team.length);
       if (clearBtn) clearBtn.disabled = team.length === 0;
       if (exportBtn) exportBtn.disabled = team.length === 0;
+      if (shareBtnEl) shareBtnEl.disabled = team.length === 0;
     }
 
     function renderSpeedOrder() {
@@ -807,6 +830,7 @@
     }
 
     function renderAll() {
+      if (typeof renderSaved === "function") renderSaved();
       renderAvailable();
       renderSlots();
       renderSpeedOrder();
@@ -836,10 +860,135 @@
 
     renderAll();
 
+    // ---------- share links and saved teams (P4) ----------
+    // A share link is #/builder/<key>.<set>,<key>.<set>,... with each set an
+    // index into the Pokémon's real sets (pokemon_set_variants, exact level)
+    // in the link's ?reg= regulation. A slot edited away from every real set
+    // is shared as its key alone and opens on that Pokémon's #1 set.
+    function sameSet(slot, set) {
+      var a = (slot.moves || []).filter(Boolean).slice().sort().join("|");
+      var b = String(set.moves || "").split("|").filter(Boolean).sort().join("|");
+      return (slot.item || null) === (set.item_name || null) &&
+        (slot.ability || null) === (set.ability || null) &&
+        (slot.nature || null) === (set.nature || null) && a === b;
+    }
+    function shareToken(slot) {
+      var sets = setsByKey[slot.key] || [];
+      for (var i = 0; i < sets.length; i++) {
+        if (sameSet(slot, sets[i])) return slot.key + "." + i;
+      }
+      return slot.key;
+    }
+    function shareUrl() {
+      var params = new URLSearchParams(window.location.search);
+      params.set("reg", App.regulationScope);
+      return window.location.origin + window.location.pathname + "?" + params.toString() +
+        App.routeHash("team-builder", [team.map(shareToken).join(",")]);
+    }
+    function slotsFromShareArg(arg) {
+      return String(arg || "").split(",").filter(Boolean).map(function (token) {
+        var dot = token.lastIndexOf(".");
+        var key = dot > 0 ? token.slice(0, dot) : token;
+        var index = dot > 0 ? parseInt(token.slice(dot + 1), 10) : 0;
+        return byKey[key] ? makeDefaultSlot(key, isNaN(index) ? 0 : index) : { key: key };
+      });
+    }
+
+    var shareBtn = document.getElementById("team-builder-share");
+    if (shareBtn) {
+      shareBtn.addEventListener("click", function () {
+        if (!team.length) return;
+        App.copyWithFallback(shareBtn, shareUrl(), "Link copied");
+      });
+    }
+
+    var SAVED_KEY = "pokemonChampionsSavedTeams";
+    var MAX_SAVED = 5;
+    var savedList = document.getElementById("team-builder-saved");
+    var savedNote = document.getElementById("team-builder-saved-note");
+    var saveName = document.getElementById("team-builder-save-name");
+    var saveBtn = document.getElementById("team-builder-save");
+    function readSaved() {
+      try {
+        var list = JSON.parse(window.localStorage.getItem(SAVED_KEY) || "[]");
+        return Array.isArray(list) ? list : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function writeSaved(list) {
+      try {
+        window.localStorage.setItem(SAVED_KEY, JSON.stringify(list));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    function renderSaved() {
+      if (!savedList) return;
+      var list = readSaved();
+      savedList.innerHTML = list.map(function (entry, i) {
+        return '<li><span class="saved-name">' + App.escapeHtml(entry.name) +
+          '<span class="saved-meta">' + App.escapeHtml(App.shortRegulation(entry.reg || App.regulationScope)) + " · " +
+          App.escapeHtml(String(entry.saved_on || "")) + "</span></span>" +
+          App.teamCompositionHtml((entry.team || []).map(function (s) { return s.key; }).join("|"), 32) +
+          '<button type="button" class="btn btn-sm" data-saved-load="' + i + '">Load</button>' +
+          '<button type="button" class="btn-remove" data-saved-delete="' + i + '" aria-label="Delete ' +
+          App.escapeHtml(entry.name) + '">Delete</button></li>';
+      }).join("");
+      if (saveBtn) saveBtn.disabled = !team.length;
+    }
+    if (saveBtn) {
+      saveBtn.addEventListener("click", function () {
+        var list = readSaved();
+        if (!team.length) return;
+        if (list.length >= MAX_SAVED) {
+          if (savedNote) savedNote.textContent = "You have " + MAX_SAVED + " saved teams. Delete one to save another.";
+          return;
+        }
+        var name = (saveName && saveName.value.trim()) || "Team " + (list.length + 1);
+        list.push({
+          name: name,
+          reg: App.regulationScope,
+          saved_on: new Date().toISOString().slice(0, 10),
+          team: team.map(function (slot) {
+            return { key: slot.key, item: slot.item, ability: slot.ability, nature: slot.nature, moves: slot.moves };
+          }),
+        });
+        if (savedNote) {
+          savedNote.textContent = writeSaved(list)
+            ? "Saved “" + name + "”."
+            : "This browser won't store teams (private mode?), so it wasn't saved.";
+        }
+        if (saveName) saveName.value = "";
+        renderSaved();
+      });
+    }
+    if (savedList) {
+      savedList.addEventListener("click", function (e) {
+        var load = e.target.closest("[data-saved-load]");
+        var del = e.target.closest("[data-saved-delete]");
+        var list = readSaved();
+        if (load) {
+          var entry = list[Number(load.getAttribute("data-saved-load"))];
+          if (entry) replaceTeam(entry.team || [], "Loaded “" + entry.name + "”.");
+        } else if (del) {
+          var removed = list.splice(Number(del.getAttribute("data-saved-delete")), 1)[0];
+          writeSaved(list);
+          if (savedNote && removed) savedNote.textContent = "Deleted “" + removed.name + "”.";
+          renderSaved();
+        }
+      });
+    }
+    renderSaved();
+
     return {
       addToTeam: addToTeam,
       loadTeam: loadTeam,
       replaceTeam: replaceTeam,
+      slotsFromShareArg: slotsFromShareArg,
+      addSlot: addSlot,
+      renderSaved: renderSaved,
       showNotice: showNotice,
       makeDefaultSlot: makeDefaultSlot,
       team: function () { return team; },
@@ -1071,7 +1220,24 @@
   function loadFromRoute(route) {
     var kind = route.args[0];
     var id = route.args[1];
-    if ((kind !== "team" && kind !== "list") || !id) return;
+    if (kind === "add" && id) {
+      // #/builder/add/<key>.<set>: a profile's "Open in Builder" adds that
+      // real set to the current team (replacing the Pokémon if it's
+      // already on it) rather than replacing the team.
+      var adder = ensureTeamBuilder();
+      App.setRoute("team-builder", [], {});
+      var slot = adder.slotsFromShareArg(id)[0];
+      if (slot) adder.addSlot(slot);
+      return;
+    }
+    if (kind && kind !== "team" && kind !== "list") {
+      // A share link: #/builder/<key>.<set>,... (P4).
+      var shared = ensureTeamBuilder();
+      App.setRoute("team-builder", [], {});
+      shared.replaceTeam(shared.slotsFromShareArg(kind), "Loaded a shared team.");
+      return;
+    }
+    if (!kind || !id) return;
     var mart = kind === "team" ? "tournament_team_sheets" : "team_list_sheets";
     App.ensureData([mart]).then(function () {
       var state = ensureTeamBuilder();

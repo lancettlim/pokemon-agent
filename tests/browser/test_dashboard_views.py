@@ -159,3 +159,132 @@ def test_converged_lists_load_with_their_sets(site_url, open_page):
     page.wait_for_load_state("networkidle")
     page.wait_for_function("!document.getElementById('team-builder-notice').hidden")
     assert page.locator("#team-builder-slots .team-slot:not(.empty)").count() == 6
+
+
+def test_profile_hub_v2_sections(site_url, open_page):
+    """P2: per-regulation trend, recently viewed, teammates, teams, pressure."""
+    page = open_page()
+    page.goto(site_url + "#/pokemon/sneasler")
+    page.wait_for_load_state("networkidle")
+    page.goto(site_url + "#/pokemon/garchomp")
+    page.wait_for_load_state("networkidle")
+    assert page.locator("#pokemon-profile-stats .trend-svg circle").count() == 2
+    assert page.locator('#profile-recent a[href="#/pokemon/sneasler"]').count() == 1
+
+    page.click('[data-panel="pokemon-profile"] .subtab-btn[data-route="cores"]')
+    assert page.locator("#profile-pair-table tbody tr").count() > 0
+    page.click('[data-panel="pokemon-profile"] .subtab-btn[data-route="teams"]')
+    page.wait_for_function("location.hash === '#/pokemon/garchomp/teams'")
+    assert page.locator("#profile-teams .team-card").count() > 0
+    page.click('[data-panel="pokemon-profile"] .subtab-btn[data-route="pressure"]')
+    summary = page.locator("#profile-pressure-summary").inner_text()
+    # The fixture's damaging moves include Dragon and Fairy but no Ice.
+    assert "hits Garchomp for" in summary and "dragon" in summary
+    first = page.locator("#profile-pressure-table tbody tr").first.inner_text().lower()
+    assert "dragon" in first  # the biggest pressure above neutral
+    assert not page.errors
+
+
+def test_calculator_presets_and_meta_mode(site_url, open_page):
+    """P3: each side starts on its #1 set; "vs the meta" lists the top Pokémon."""
+    page = open_page()
+    page.goto(site_url + "#/matchup/gholdengo/incineroar")
+    page.wait_for_load_state("networkidle")
+    pressed = page.locator(
+        '#matchup-toggle-row .toggle-chip[aria-pressed="true"]'
+    ).all_inner_texts()
+    assert "Choice Specs" in pressed  # Gholdengo's #1 set
+    assert any("Intimidate" in t for t in pressed)  # Incineroar's #1 set
+    assert "Choice Specs" in page.locator("#matchup-preset-note").inner_text()
+
+    page.click('[data-calc-mode="meta"]')
+    page.wait_for_function("location.hash === '#/matchup/gholdengo/meta'")
+    rows = page.locator("#matchup-meta-table tbody tr")
+    assert rows.count() == 8  # every fixture Pokémon; the top 12 in real data
+    assert "%" in rows.first.inner_text()
+    assert page.locator("#matchup-damage-result").is_hidden()
+    assert not page.errors
+
+
+def test_builder_share_link_saved_teams(site_url, open_page):
+    """P4: a share link opens the team; teams save, load and delete."""
+    page = open_page(permissions=["clipboard-read", "clipboard-write"])
+    page.goto(site_url + "#/builder/garchomp.0,gholdengo.1")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_function("!document.getElementById('team-builder-notice').hidden")
+    assert page.locator("#team-builder-slots .team-slot:not(.empty)").count() == 2
+    page.click("#team-builder-share")
+    page.wait_for_function(
+        "document.getElementById('team-builder-share').textContent === 'Link copied'"
+    )
+    link = page.evaluate("navigator.clipboard.readText()")
+    assert "reg=m-c" in link and link.endswith("#/builder/garchomp.0,gholdengo.1")
+
+    page.fill("#team-builder-save-name", "Scarf Chomp")
+    page.click("#team-builder-save")
+    saved = page.locator("#team-builder-saved li")
+    assert saved.count() == 1 and "Scarf Chomp" in saved.first.inner_text()
+    page.click("#team-builder-clear")
+    assert page.locator("#team-builder-slots .team-slot:not(.empty)").count() == 0
+    saved.first.get_by_text("Load").click()
+    assert page.locator("#team-builder-slots .team-slot:not(.empty)").count() == 2
+    page.locator("[data-saved-delete]").first.click()
+    assert page.locator("#team-builder-saved li").count() == 0
+
+
+def test_add_to_builder_keeps_the_rest_of_the_team(site_url, open_page):
+    page = open_page()
+    page.goto(site_url + "#/builder/pelipper.0")
+    page.wait_for_load_state("networkidle")
+    page.goto(site_url + "#/pokemon/garchomp")
+    page.wait_for_load_state("networkidle")
+    page.locator("#pokemon-profile-set").get_by_text("Add to Builder").click()
+    page.wait_for_function("location.hash === '#/builder'")
+    page.wait_for_function(
+        "document.querySelectorAll('#team-builder-slots .team-slot:not(.empty)').length === 2"
+    )
+
+
+def test_usage_event_window_compares_with_earlier_events(site_url, open_page):
+    """C4: "since <event>" / "last N events" with the change against before."""
+    page = open_page()
+    page.goto(site_url + "#/usage")
+    page.wait_for_load_state("networkidle")
+    page.select_option("#usage-window-filter", "last-1")
+    page.wait_for_function("location.hash === '#/usage?window=last-1'")
+    assert page.locator("#usage-table").is_hidden()
+    rows = page.locator("#usage-window-table tbody tr")
+    assert rows.count() == 8
+    assert "pts" in page.locator("#usage-window-table").inner_text()
+    assert "Louisville" in page.locator("#usage-table-note").inner_text()
+    assert page.locator("#usage-tier-filter").is_disabled()
+
+
+def test_tables_copy_with_a_citation(site_url, open_page):
+    """C4: "Copy with citation" copies the rows and a source line."""
+    page = open_page(permissions=["clipboard-read", "clipboard-write"])
+    page.goto(site_url + "#/usage")
+    page.wait_for_load_state("networkidle")
+    page.locator("#usage-table .data-table-cite").click()
+    page.wait_for_function(
+        "document.querySelector('#usage-table .data-table-cite').textContent === 'Copied'"
+    )
+    text = page.evaluate("navigator.clipboard.readText()")
+    lines = text.splitlines()
+    assert lines[0].startswith("#\tPokémon")
+    assert "Rillaboom" in lines[1]
+    assert lines[-1].startswith("Source: Pokémon Champions Data Platform")
+    assert "Reg M-C" in lines[-1] and "n = 710 teams" in lines[-1]
+
+
+def test_what_changed_names_its_baseline_and_defaults_to_early_vs_recent(site_url, open_page):
+    """C4 (finding 6): M-B is one event, so M-C opens on early vs recent."""
+    page = open_page()
+    page.goto(site_url)
+    page.wait_for_load_state("networkidle")
+    panel = page.locator("#movers-panel")
+    assert "What changed within Reg M-C" in panel.text_content()
+    assert page.locator('[data-movers="window"]').get_attribute("aria-pressed") == "true"
+    assert "(1 event, 395 teams)" in page.locator('[data-movers="previous"]').inner_text()
+    page.click('[data-movers="previous"]')
+    assert "What changed in Reg M-C vs Reg M-B" in panel.text_content()

@@ -1196,3 +1196,61 @@ def test_short_event_name_drops_the_words_every_event_shares():
     )
     assert data.short_event_name("2026 Pokémon VGC World Championship") == "World Championships"
     assert data.short_event_name("") == ""
+
+
+def test_window_movers_compare_recent_events_with_earlier_ones():
+    events = [
+        _event("a", "m-c", "2026-09-18", 300),
+        _event("b", "m-c", "2026-09-26", 300),
+        _event("c", "m-c", "2026-10-03", 200),
+        _event("d", "m-c", "2026-10-09", 200),
+    ]
+
+    def usage(event_id, key, count):
+        return {
+            "event_id": event_id,
+            "pokemon_key": key,
+            "pokemon_name": key.title(),
+            "usage_count": count,
+            "event_slot_count": 1000,
+        }
+
+    rows = [
+        usage("a", "garchomp", 100),
+        usage("b", "garchomp", 100),
+        usage("c", "garchomp", 10),
+        usage("d", "garchomp", 10),
+        usage("a", "sneasler", 10),
+        usage("b", "sneasler", 10),
+        usage("c", "sneasler", 90),
+        usage("d", "sneasler", 90),
+    ]
+    summary = data.summarize_event_window_movers(rows, events)
+    # The newest half (c, d) against the rest (a, b).
+    assert summary["recent_events"] == ["C", "D"]
+    assert summary["early_events"] == ["A", "B"]
+    assert (summary["team_count"], summary["previous_team_count"]) == (400, 600)
+    assert summary["reliable"] is True
+    assert [r["pokemon_key"] for r in summary["risers"]] == ["sneasler"]
+    assert summary["risers"][0]["usage_share_delta"] == 0.08
+    assert [r["pokemon_key"] for r in summary["fallers"]] == ["garchomp"]
+    assert data.summarize_event_window_movers(rows, events[:1]) is None
+
+
+def test_movers_flag_a_one_event_previous_regulation_as_a_thin_baseline():
+    marts = {
+        "pokemon_usage_summary": [],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "pokemon_regulation_movers": [_mover("gholdengo", 0.03, 0.05, teams=3770, prev_teams=395)],
+        "tournament_event_summary": [
+            _event("wcs", "m-b", "2026-08-28", 395, tier="Worlds"),
+            _event("bal", "m-c", "2026-09-18", 1079),
+            _event("lou", "m-c", "2026-10-09", 1013),
+        ],
+        "pokemon_event_usage_vs_regulation": [],
+    }
+    movers = data.compute_kpis(marts, scope="m-c")["movers"]
+    assert movers["previous_event_count"] == 1
+    assert movers["event_count"] == 2
+    assert movers["baseline_thin"] is True

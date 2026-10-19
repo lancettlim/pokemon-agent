@@ -865,6 +865,77 @@ def summarize_movers(
     }
 
 
+# docs/upgrade-plan-2027q1.md, C4 (finding 6): a previous regulation with
+# fewer events than this is a thin baseline -- M-B is one elite Worlds field
+# -- so the "What changed" panel defaults to comparing the selected
+# regulation's own early and recent events instead.
+MIN_BASELINE_EVENTS = 2
+# A Pokémon below this share on both sides of an early-vs-recent comparison
+# isn't a mover worth listing, whatever its delta.
+MIN_WINDOW_MOVER_SHARE = 0.005
+
+
+def summarize_event_window_movers(
+    event_usage_rows: list[dict[str, Any]], events: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Risers and fallers between a regulation's early and recent events
+    (C4): the newest half of its events (by date) against the rest, with
+    shares of roster slots summed over each side from
+    pokemon_event_usage_vs_regulation. None with fewer than two events.
+    `reliable` follows the same MIN_MOVER_TEAMS floor as summarize_movers."""
+    ordered = sorted(events, key=lambda e: (e.get("event_date") or "", e.get("event_id") or ""))
+    if len(ordered) < 2:
+        return None
+    recent_count = len(ordered) // 2
+    early_ids = [e["event_id"] for e in ordered[: len(ordered) - recent_count]]
+    recent_ids = [e["event_id"] for e in ordered[len(ordered) - recent_count :]]
+
+    def side(ids: list[str]) -> tuple[dict[str, int], int]:
+        usage: dict[str, int] = {}
+        slots: dict[str, int] = {}
+        for row in event_usage_rows:
+            if row.get("event_id") not in ids:
+                continue
+            usage[row["pokemon_key"]] = usage.get(row["pokemon_key"], 0) + (row.get("usage_count") or 0)
+            slots[row["event_id"]] = row.get("event_slot_count") or 0
+        return usage, sum(slots.values())
+
+    early_usage, early_slots = side(early_ids)
+    recent_usage, recent_slots = side(recent_ids)
+    if not early_slots or not recent_slots:
+        return None
+    names = {r["pokemon_key"]: r.get("pokemon_name") for r in event_usage_rows}
+    rows = []
+    for key in set(early_usage) | set(recent_usage):
+        early_share = early_usage.get(key, 0) / early_slots
+        recent_share = recent_usage.get(key, 0) / recent_slots
+        if max(early_share, recent_share) < MIN_WINDOW_MOVER_SHARE:
+            continue
+        rows.append(
+            {
+                "pokemon_key": key,
+                "pokemon_name": names.get(key) or key,
+                "usage_share": round(recent_share, 4),
+                "previous_usage_share": round(early_share, 4),
+                "usage_share_delta": round(recent_share - early_share, 4),
+            }
+        )
+    by_id = {e["event_id"]: e for e in ordered}
+    early_teams = sum(by_id[i].get("team_count") or 0 for i in early_ids)
+    recent_teams = sum(by_id[i].get("team_count") or 0 for i in recent_ids)
+    risers = sorted((r for r in rows if r["usage_share_delta"] > 0), key=lambda r: -r["usage_share_delta"])
+    fallers = sorted((r for r in rows if r["usage_share_delta"] < 0), key=lambda r: r["usage_share_delta"])
+    return {
+        "early_events": [short_event_name(by_id[i].get("event_name")) for i in early_ids],
+        "recent_events": [short_event_name(by_id[i].get("event_name")) for i in recent_ids],
+        "team_count": recent_teams,
+        "previous_team_count": early_teams,
+        "reliable": min(early_teams, recent_teams) >= MIN_MOVER_TEAMS,
+        "risers": risers[:MAX_MOVERS_PER_LIST],
+        "fallers": fallers[:MAX_MOVERS_PER_LIST],
+    }
+
+
 def _current_regulation_kpi(
     legal_pool_by_regulation: list[dict[str, Any]],
     today: date | None,
@@ -965,6 +1036,21 @@ def compute_kpis(
     # reader how much data the page rests on, so it replaced the
     # distinct-Pokémon count as the first KPI.
     events = _events_in_scope(marts, scope)
+    movers = (
+        None
+        if scope == ALL_SCOPE
+        else summarize_movers(marts.get("pokemon_regulation_movers", []), scope)
+    )
+    if movers is not None:
+        # The comparison regulation's own size, shown beside the heading
+        # (C4, finding 6), and whether it is too thin to lead with.
+        previous_events = _events_in_scope(marts, movers.get("previous_regulation_code") or "")
+        movers["previous_event_count"] = len(previous_events)
+        movers["event_count"] = len(events)
+        movers["baseline_thin"] = (
+            len(previous_events) < MIN_BASELINE_EVENTS
+            or (movers.get("previous_team_count") or 0) < MIN_DEFAULT_SCOPE_TEAMS
+        )
 
     return {
         "latest_snapshot_date": latest_snapshot_date,
@@ -980,10 +1066,13 @@ def compute_kpis(
             None if scope == ALL_SCOPE else scope,
             regulations,
         ),
-        "movers": (
+        "movers": movers,
+        "window_movers": (
             None
             if scope == ALL_SCOPE
-            else summarize_movers(marts.get("pokemon_regulation_movers", []), scope)
+            else summarize_event_window_movers(
+                marts.get("pokemon_event_usage_vs_regulation", []), events
+            )
         ),
         # Newest tournament the marts cover. The staleness banner compares
         # this against the viewer's own clock (static/app.js), so a site
