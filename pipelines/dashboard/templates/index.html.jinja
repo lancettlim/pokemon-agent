@@ -396,6 +396,45 @@
     .tab-btn, .subtab-btn { scroll-snap-align: start; min-height: 44px; }
     .tier-chip, .toggle-chip, .set-tab, .set-level-btn { min-height: 44px; }
   }
+  /* Team cards (app.js teamCardHtml, C1/C2/P5): placement and record as
+     the headline, then who and where, the six Pokémon, sets and actions. */
+  .team-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+  .team-card { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--surface); display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+  .team-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+  .team-card-headline { font-size: var(--font-lg); font-weight: 800; }
+  .team-card-record { color: var(--accent-red); }
+  .team-card-wr { font-size: var(--font-xs); color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .team-card-who { font-size: var(--font-sm); color: var(--muted); }
+  .team-card-who a { color: var(--navy); font-weight: 600; }
+  .team-card .team-comp { justify-content: flex-start; }
+  .team-card-sets summary { cursor: pointer; font-size: var(--font-sm); font-weight: 600; color: var(--blue); }
+  .team-card-sets ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--font-sm); }
+  .team-card-sets a { font-weight: 700; color: var(--navy); }
+  .team-card-set-detail { display: block; color: var(--muted); font-size: var(--font-xs); }
+  .team-card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; }
+  .eyebrow { margin: 0; font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .eyebrow a { color: inherit; }
+  section h2.event-title { margin: var(--space-1) 0; padding: 0; background: none; color: var(--navy); font-size: var(--font-xl); text-transform: none; letter-spacing: 0; }
+  .event-meta { margin: 0 0 var(--space-1); font-weight: 600; }
+  .performer-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+  .performer-columns h4 { margin: 0 0 var(--space-2); }
+  .performer-columns[hidden] { display: none; }
+  .winner-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .winner-cell .team-comp { flex-wrap: nowrap; gap: 0; }
+  /* Overview: latest event + "Copy and play" (C1, P5). */
+  .overview-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); margin-bottom: var(--space-5); }
+  .overview-row[hidden] { display: none; }
+  .latest-event { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-4); height: 100%; }
+  .latest-event h3 { margin: var(--space-1) 0; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--navy); }
+  .latest-event h3 a { color: inherit; }
+  .latest-event .team-comp { justify-content: flex-start; margin: var(--space-2) 0; }
+  .starter-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-3); }
+  .starter-strip .team-comp-slot img { width: 32px; height: 32px; }
+  @media (max-width: 900px) {
+    .overview-row, .performer-columns { grid-template-columns: 1fr; }
+  }
+  .builder-notice { background: var(--positive-bg); color: var(--positive); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-weight: 600; }
+  .builder-notice[hidden] { display: none; }
   /* Team Builder suggested partners (teams.js renderSuggestions). */
   .suggestion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }
   .suggestion { display: flex; align-items: center; gap: var(--space-2); border: 2px solid var(--border); border-radius: 10px; padding: var(--space-2); background: var(--surface); }
@@ -1164,6 +1203,7 @@
   <button class="tab-btn" role="tab" data-section="pokemon" data-tab="compare" aria-selected="false">Compare</button>
   <button class="tab-btn" role="tab" data-section="pokemon" data-tab="matchup" aria-selected="false">Matchup</button>
   <button class="tab-btn" role="tab" data-section="teams" data-tab="top-teams" aria-selected="false">Top Teams</button>
+  <button class="tab-btn" role="tab" data-section="teams" data-tab="events" aria-selected="false">Events</button>
   <button class="tab-btn" role="tab" data-section="teams" data-tab="archetypes" aria-selected="false">Archetypes</button>
   <button class="tab-btn" role="tab" data-section="teams" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
   <button class="tab-btn" role="tab" data-section="teams" data-tab="players" aria-selected="false">Players</button>
@@ -1501,6 +1541,7 @@
   <section class="tab-panel" data-panel="team-builder" data-section="builder" hidden>
     <h2 class="panel-title">Team builder</h2>
     <p class="lead">Build a team of six from the legal pool. It's saved in this browser only.</p>
+    <p class="builder-notice" id="team-builder-notice" role="status" hidden></p>
     {# Pokepaste import lives here, not under Teams (docs/upgrade-plan-2027q1.md, U7). #}
     <details class="method import-team" id="import-team">
       <summary>Import team</summary>
@@ -1593,13 +1634,26 @@
   <section class="tab-panel" data-panel="top-teams" data-section="teams" hidden>
     <h2 class="panel-title">Top Teams</h2>
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="tt-leaderboard" data-route="top" aria-selected="true">By win rate</button>
+      <button class="subtab-btn" role="tab" data-subtab="tt-leaderboard" data-route="top" aria-selected="true">Top cut</button>
       <button class="subtab-btn" role="tab" data-subtab="tt-converged" data-route="converged" aria-selected="false">Converged lists</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="tt-leaderboard">
-      <p class="lead">Champions tournament teams ranked by reported win rate.</p>
-      <div class="grid-6xn" id="top-teams-grid"></div>
+      <p class="lead">Top-16 finishes, best placement first; the most prestigious events break ties.</p>
+      <div class="controls">
+        <label>Event tier
+          <select id="top-teams-tier"><option value="">All tiers</option></select>
+        </label>
+        <label>Ranked by
+          <select id="top-teams-sort">
+            <option value="placement">Placement</option>
+            <option value="win_rate">Win rate</option>
+          </select>
+        </label>
+      </div>
+      <p class="sub" id="top-teams-note"></p>
+      <div class="team-card-grid" id="top-teams-grid"></div>
+      <button type="button" class="btn btn-sm" id="top-teams-more" hidden></button>
     </div>
 
     <div class="subtab-panel" data-subpanel="tt-converged" hidden>
@@ -1607,12 +1661,31 @@
       <details class="method"><summary>How this is computed</summary>
         <p>From Limitless VGC team lists, which cover the <strong>day-2 cut only</strong>, so this shows what converged at the top of the field rather than the meta as a whole.</p>
       </details>
-      <div class="grid-6xn" id="converged-lists-grid"></div>
+      <div class="team-card-grid" id="converged-lists-grid"></div>
     </div>
 
     <h3>Pro Team Gallery</h3>
     <p class="lead">Hand-picked real tournament teams. "Load into my builder" copies one into the Team Builder.</p>
     <div class="gallery-grid" id="pro-team-gallery"></div>
+  </section>
+
+  <section class="tab-panel" data-panel="events" data-section="teams" hidden>
+    <h2 class="panel-title">Events</h2>
+    <p class="lead" id="events-note">Every Champions event on record.</p>
+    <div id="events-table"></div>
+  </section>
+
+  {# One event (docs/upgrade-plan-2027q1.md, C1): #/event/<event_id>. #}
+  <section class="tab-panel" data-panel="event" data-section="teams" hidden>
+    <div id="event-header"></div>
+    <h3>Top 8</h3>
+    <div class="team-card-grid" id="event-top8"></div>
+    <h3>Over- and under-performers</h3>
+    <p class="sub" id="event-performers-note"></p>
+    <div class="performer-columns" id="event-performers">
+      <div><h4>Used more than usual</h4><div id="event-over-table"></div></div>
+      <div><h4>Used less than usual</h4><div id="event-under-table"></div></div>
+    </div>
   </section>
 
   <section class="tab-panel" data-panel="players" data-section="teams" hidden>
@@ -1830,5 +1903,6 @@
 <script src="matchup.js"></script>
 <script src="teams.js"></script>
 <script src="expansions.js"></script>
+<script src="events.js"></script>
 </body>
 </html>

@@ -123,10 +123,16 @@
           if (move) moves.push(move);
         }
       });
+      var nature = null;
+      lines.slice(1).forEach(function (line) {
+        var match = line.match(/^(\w+)\s+Nature$/i);
+        if (match) nature = match[1];
+      });
       resolvedSlots.push({
         key: key,
         item: itemPart || null,
         ability: ability,
+        nature: nature,
         moves: moves.slice(0, MOVE_SLOT_COUNT),
       });
     });
@@ -137,23 +143,30 @@
   // Pokémon's top-recorded build), so the pokepaste export reflects real
   // edits made in the builder.
   function exportTeamAsPokepaste(teamSlots) {
-    var byKey = {};
-    (marts.pokemon_champions_profile || []).forEach(function (r) {
-      byKey[r.pokemon_key] = r;
-    });
-    var blocks = teamSlots
-      .map(function (slot) {
-        if (!byKey[slot.key]) return null;
-        var name = keyToShowdownName(slot.key);
-        var lines = [name + (slot.item ? " @ " + slot.item : "")];
-        if (slot.ability) lines.push("Ability: " + slot.ability);
-        (slot.moves || []).forEach(function (m) {
-          if (m) lines.push("- " + m);
-        });
-        return lines.join("\n");
-      })
-      .filter(Boolean);
-    return blocks.join("\n\n");
+    return App.teamToShowdown(teamSlots.map(slotToSet));
+  }
+
+  // The Builder's slot shape -> the {pokemon_key, item_name, ...} set shape
+  // App.setToShowdown and the share link use.
+  function slotToSet(slot) {
+    return {
+      pokemon_key: slot.key,
+      item_name: slot.item,
+      ability: slot.ability,
+      nature: slot.nature,
+      moves: (slot.moves || []).filter(Boolean),
+    };
+  }
+
+  // A team sheet row (tournament_team_sheets / team_list_sheets) -> a slot.
+  function sheetToSlot(row) {
+    return {
+      key: row.pokemon_key,
+      item: row.item_name || null,
+      ability: row.ability || null,
+      nature: row.nature || null,
+      moves: String(row.moves || "").split("|").map(function (m) { return m.trim(); }).filter(Boolean),
+    };
   }
 
   // ---------- Team Builder (fully client-side; localStorage only) ----------
@@ -167,6 +180,7 @@
     });
     var itemsByKey = groupByPokemonKey(marts.pokemon_item_usage);
     var abilitiesByKey = groupByPokemonKey(marts.pokemon_ability_usage);
+    var naturesByKey = groupByPokemonKey(marts.pokemon_nature_usage);
     var movesByKey = groupByPokemonKey(marts.pokemon_move_usage);
 
     var STORAGE_KEY = "pokemonChampionsTeamBuilder";
@@ -175,14 +189,40 @@
     // Slot shape: {key, item, ability, moves: string[]} — item/ability
     // default to that Pokémon's top-recorded pick, moves default to its
     // top 4, all independently editable afterward (see makeDefaultSlot).
-    function makeDefaultSlot(key) {
+    // A new pick starts on its #1 real set (pokemon_set_variants, P1) when
+    // it has one, otherwise on each slot's most common choice.
+    var setsByKey = {};
+    (marts.pokemon_set_variants || []).forEach(function (r) {
+      if (r.set_level !== "full") return;
+      (setsByKey[r.pokemon_key] = setsByKey[r.pokemon_key] || []).push(r);
+    });
+    Object.keys(setsByKey).forEach(function (key) {
+      setsByKey[key].sort(function (a, b) { return a.set_rank - b.set_rank; });
+    });
+
+    function slotFromSet(key, set) {
+      return {
+        key: key,
+        item: set.item_name || null,
+        ability: set.ability || null,
+        nature: set.nature || null,
+        moves: String(set.moves || "").split("|").filter(Boolean),
+      };
+    }
+
+    function makeDefaultSlot(key, setIndex) {
+      var sets = setsByKey[key] || [];
+      var set = sets[setIndex || 0] || sets[0];
+      if (set) return slotFromSet(key, set);
       var topItem = sortByUsageRank(itemsByKey[key])[0];
       var topAbility = sortByUsageRank(abilitiesByKey[key])[0];
+      var topNature = sortByUsageRank(naturesByKey[key])[0];
       var topMoves = sortByUsageRank(movesByKey[key]).slice(0, MOVE_SLOT_COUNT);
       return {
         key: key,
         item: topItem ? topItem.item_name : null,
         ability: topAbility ? topAbility.ability : null,
+        nature: topNature ? topNature.nature : null,
         moves: topMoves.map(function (m) {
           return m.move_name;
         }),
@@ -202,6 +242,7 @@
         key: entry.key,
         item: entry.item || null,
         ability: entry.ability || null,
+        nature: entry.nature || null,
         moves: (entry.moves || []).slice(0, MOVE_SLOT_COUNT),
       };
     }
@@ -388,6 +429,41 @@
       renderAll();
     }
 
+    // Replaces the team from a link (a real team, a converged list, a
+    // shared team), saying what was loaded and offering to undo it. Slots
+    // outside this regulation's legal pool are skipped and counted.
+    var noticeEl = document.getElementById("team-builder-notice");
+    var previousTeam = null;
+    function replaceTeam(entries, message) {
+      previousTeam = team.slice();
+      var kept = entries.map(normalizeEntry).filter(Boolean).slice(0, MAX_TEAM_SIZE);
+      var skipped = entries.length - kept.length;
+      team = kept;
+      persist();
+      renderAll();
+      showNotice(
+        message + (skipped ? " " + skipped + " Pokémon not legal in " +
+          App.shortRegulation(App.regulationScope) + " were skipped." : ""),
+        previousTeam.length > 0
+      );
+    }
+    function showNotice(message, undoable) {
+      if (!noticeEl) return;
+      noticeEl.innerHTML = App.escapeHtml(message) +
+        (undoable ? ' <button type="button" class="btn btn-sm" data-undo-load>Undo</button>' : "");
+      noticeEl.hidden = false;
+    }
+    if (noticeEl) {
+      noticeEl.addEventListener("click", function (e) {
+        if (!e.target.closest("[data-undo-load]") || !previousTeam) return;
+        team = previousTeam;
+        previousTeam = null;
+        persist();
+        renderAll();
+        noticeEl.textContent = "Restored your previous team.";
+      });
+    }
+
     function renderAvailable() {
       if (!availableList) return;
       var query = ((searchInput && searchInput.value) || "").trim().toLowerCase();
@@ -524,6 +600,24 @@
       );
       abilitySelect.setAttribute("aria-label", "Ability");
       el.appendChild(abilitySelect);
+
+      var natureOptions = sortByUsageRank(naturesByKey[key])
+        .slice(0, ABILITY_OPTION_CAP)
+        .map(function (n) {
+          return n.nature;
+        });
+      var natureSelect = buildChoiceSelect(
+        natureOptions,
+        slot.nature,
+        "No nature",
+        "No recorded nature",
+        function (value) {
+          slot.nature = value;
+          persist();
+        }
+      );
+      natureSelect.setAttribute("aria-label", "Nature");
+      el.appendChild(natureSelect);
 
       var movePool = sortByUsageRank(movesByKey[key])
         .slice(0, MOVE_OPTION_CAP)
@@ -742,7 +836,14 @@
 
     renderAll();
 
-    return { addToTeam: addToTeam, loadTeam: loadTeam };
+    return {
+      addToTeam: addToTeam,
+      loadTeam: loadTeam,
+      replaceTeam: replaceTeam,
+      showNotice: showNotice,
+      makeDefaultSlot: makeDefaultSlot,
+      team: function () { return team; },
+    };
   }
 
   // Team Builder normally initializes lazily (on first tab activation,
@@ -795,77 +896,137 @@
     });
   }
 
-  // ---------- Top Teams tab: real leaderboard + pokepaste import + gallery ----------
+  // ---------- Top Teams (docs/upgrade-plan-2027q1.md, C2) ----------
+  // Real top-cut teams as team cards: "1st · 9–2" is the headline and win
+  // rate is secondary, ranked by placement within event tier by default
+  // (a Worlds 1st above a regional 1st), with win rate as a sort option.
+  // ?tier= in the route filters to one event tier. Every card has Copy for
+  // Showdown and Use this team.
+  var TOP_TEAMS_PAGE = 18;
+
   function setupTopTeams() {
-    var teamRows = marts.top_tournament_teams || [];
+    var events = App.eventsById();
+    var tierSelect = document.getElementById("top-teams-tier");
+    var sortSelect = document.getElementById("top-teams-sort");
     var grid = document.getElementById("top-teams-grid");
-    if (grid) {
-      var ranked = teamRows.slice().sort(function (a, b) {
-        return a.team_rank - b.team_rank;
+    var moreBtn = document.getElementById("top-teams-more");
+    var note = document.getElementById("top-teams-note");
+    var shown = TOP_TEAMS_PAGE;
+    var inScope = {};
+    App.eventsInScope().forEach(function (e) { inScope[e.event_id] = true; });
+
+    var teams = (marts.tournament_top_cut_teams || [])
+      .filter(function (t) { return inScope[t.event_id]; })
+      .map(function (t) {
+        var event = events[t.event_id] || {};
+        var team = {};
+        for (var k in t) if (Object.prototype.hasOwnProperty.call(t, k)) team[k] = t[k];
+        team.event_name = event.event_name;
+        team.event_date = event.event_date;
+        team.event_tier = event.event_tier;
+        team.event_size = event.team_count || 0;
+        return team;
       });
-      App.renderGrid6xn(grid, ranked.slice(0, 18), {
-        // The whole roster, not just slot 1: a team is six Pokémon, and
-        // drawing it as one sprite misrepresented which team a tile is.
-        iconHtmlFn: function (r) {
-          return App.teamCompositionHtml(r.pokemon_keys);
-        },
-        labelFn: function (r) {
-          return (r.player_name || "Unknown") + (r.event_name ? " · " + r.event_name : "");
-        },
-        displayFn: function (r) {
-          return App.formatPercent(r.win_rate);
-        },
-        subFn: function (r) {
-          // The names stay as the sub-line: the sprite row above is
-          // scannable, but a sprite alone doesn't name a Pokémon, and the
-          // per-slot title attribute isn't reachable on touch.
-          var names = (r.pokemon_keys || "")
-            .split("|")
-            .map(function (key) {
-              return App.pokemonNames[key] || key;
-            })
-            .join(", ");
-          return names;
-        },
+
+    var tiers = [];
+    teams.forEach(function (t) {
+      if (t.event_tier && tiers.indexOf(t.event_tier) === -1) tiers.push(t.event_tier);
+    });
+    tiers.sort(function (a, b) { return App.tierRank(a) - App.tierRank(b); });
+    tiers.forEach(function (tier) {
+      var opt = document.createElement("option");
+      opt.value = tier.toLowerCase();
+      opt.textContent = tier;
+      tierSelect.appendChild(opt);
+    });
+
+    function ranked() {
+      var tier = tierSelect.value;
+      var list = teams.filter(function (t) {
+        return !tier || String(t.event_tier || "").toLowerCase() === tier;
+      });
+      if (sortSelect.value === "win_rate") {
+        return list.sort(function (a, b) {
+          return (b.win_rate || 0) - (a.win_rate || 0) || (b.record_wins || 0) - (a.record_wins || 0) ||
+            a.placement - b.placement;
+        });
+      }
+      return list.sort(function (a, b) {
+        return a.placement - b.placement ||
+          App.tierRank(a.event_tier) - App.tierRank(b.event_tier) ||
+          b.event_size - a.event_size ||
+          String(b.event_date || "").localeCompare(String(a.event_date || ""));
       });
     }
 
-    // Converged lists: whole compositions multiple players independently
-    // brought (Limitless team_list layer). Ranked by player_count, which
-    // is the point of the view -- convergence, not placement.
+    function draw() {
+      var list = ranked();
+      grid.innerHTML = list.length
+        ? list.slice(0, shown).map(function (t) { return App.teamCardHtml(t); }).join("")
+        : '<p class="empty-state">No top-cut teams in this regulation yet.</p>';
+      moreBtn.hidden = list.length <= shown;
+      moreBtn.textContent = "Show " + Math.min(TOP_TEAMS_PAGE, list.length - shown) + " more";
+      if (note) {
+        note.textContent = list.length + " top-16 teams from " +
+          Object.keys(list.reduce(function (acc, t) { acc[t.event_id] = 1; return acc; }, {})).length +
+          " events in " + App.shortRegulation(App.regulationScope) + ".";
+      }
+    }
+
+    function recordRoute() {
+      var route = App.currentRoute();
+      App.setRoute("top-teams", route.args, {
+        tier: tierSelect.value,
+        sort: sortSelect.value === "win_rate" ? "win-rate" : "",
+      });
+    }
+    tierSelect.addEventListener("change", function () { shown = TOP_TEAMS_PAGE; draw(); recordRoute(); });
+    sortSelect.addEventListener("change", function () { shown = TOP_TEAMS_PAGE; draw(); recordRoute(); });
+    moreBtn.addEventListener("click", function () { shown += TOP_TEAMS_PAGE; draw(); });
+
+    topTeamsRoute = function (route) {
+      var tier = String(route.query.tier || "").toLowerCase();
+      var sort = route.query.sort === "win-rate" ? "win_rate" : "placement";
+      var changed = false;
+      if (tierSelect.value !== tier && (!tier || tierSelect.querySelector('option[value="' + tier + '"]'))) {
+        tierSelect.value = tier;
+        changed = true;
+      }
+      if (sortSelect.value !== sort) {
+        sortSelect.value = sort;
+        changed = true;
+      }
+      if (changed || !grid.innerHTML) draw();
+      if (topTeamsSubTabs) topTeamsSubTabs.fromRoute(route);
+    };
+    draw();
+
+    // Converged lists: whole compositions several players independently
+    // brought (Limitless team_list layer), ranked by player_count -- the
+    // point of the view is convergence, not placement.
     var convergedGrid = document.getElementById("converged-lists-grid");
     if (convergedGrid) {
       var converged = (marts.team_list_convergence || []).slice().sort(function (a, b) {
         return a.convergence_rank - b.convergence_rank;
-      });
-      App.renderGrid6xn(convergedGrid, converged.slice(0, 18), {
-        iconHtmlFn: function (r) {
-          return App.teamCompositionHtml(r.pokemon_keys);
-        },
-        labelFn: function (r) {
-          return (r.pokemon_keys || "")
-            .split("|")
-            .map(function (key) {
-              return App.pokemonNames[key] || key;
-            })
-            .join(", ");
-        },
-        displayFn: function (r) {
-          var n = r.player_count || 0;
-          return n + (n === 1 ? " player" : " players");
-        },
-        subFn: function (r) {
-          var parts = [];
-          if (r.best_placement) parts.push("best finish #" + r.best_placement);
-          if (r.tournament_count) {
-            parts.push(
-              r.tournament_count + (r.tournament_count === 1 ? " event" : " events")
-            );
+      }).slice(0, TOP_TEAMS_PAGE);
+      convergedGrid.innerHTML = converged.map(function (r) {
+        var n = r.player_count || 0;
+        var meta = [];
+        if (r.best_placement) meta.push("best finish " + App.ordinal(r.best_placement));
+        if (r.tournament_count) meta.push(r.tournament_count + (r.tournament_count === 1 ? " event" : " events"));
+        if (r.first_seen_date) meta.push("first seen " + String(r.first_seen_date).slice(0, 10));
+        return App.teamCardHtml(
+          {
+            pokemon_keys: r.pokemon_keys,
+            sets: App.teamListSheet(r.team_list_id),
+          },
+          {
+            headline: n + (n === 1 ? " player" : " players"),
+            meta: meta.join(" · "),
+            useHref: App.routeHash("team-builder", ["list", r.team_list_id]),
           }
-          if (r.first_seen_date) parts.push("first seen " + String(r.first_seen_date).slice(0, 10));
-          return parts.join(" · ");
-        },
-      });
+        );
+      }).join("") || '<p class="empty-state">No converged lists on record.</p>';
     }
 
     var ttSubtabs = document.querySelectorAll('[data-panel="top-teams"] .subtab-btn');
@@ -877,6 +1038,7 @@
     renderProTeamGallery();
   }
   var topTeamsSubTabs = null;
+  var topTeamsRoute = function () {};
 
   // The pokepaste import sits in the Builder (docs/upgrade-plan-2027q1.md,
   // U7): importing a team is building one, not browsing Top Teams.
@@ -902,13 +1064,48 @@
     });
   }
 
-  App.registerTab("team-builder", function () {
-    ensureTeamBuilder();
-    setupPokepasteImport();
-  });
+  // #/builder/team/<team_id> and #/builder/list/<team_list_id> load a real
+  // tournament team or a converged Limitless list, with the sets as
+  // published (docs/upgrade-plan-2027q1.md, C2/P4). Once loaded, the
+  // address goes back to #/builder, so a reload doesn't overwrite edits.
+  function loadFromRoute(route) {
+    var kind = route.args[0];
+    var id = route.args[1];
+    if ((kind !== "team" && kind !== "list") || !id) return;
+    var mart = kind === "team" ? "tournament_team_sheets" : "team_list_sheets";
+    App.ensureData([mart]).then(function () {
+      var state = ensureTeamBuilder();
+      var sheet = kind === "team" ? App.teamSheet(id) : App.teamListSheet(id);
+      App.setRoute("team-builder", [], {});
+      if (!sheet) {
+        state.showNotice("That team's sheet isn't in this dataset.", false);
+        return;
+      }
+      var label = "Loaded a converged team list.";
+      if (kind === "team") {
+        var team = (marts.tournament_top_cut_teams || []).filter(function (t) { return t.team_id === id; })[0];
+        var event = team ? App.eventsById()[team.event_id] : null;
+        label = team
+          ? "Loaded " + team.player_name + "'s team (" + App.ordinal(team.placement) +
+            (event ? ", " + App.shortEventName(event.event_name) : "") + ")."
+          : "Loaded a tournament team.";
+      }
+      state.replaceTeam(sheet.map(sheetToSlot), label);
+    });
+  }
+
+  App.registerTab(
+    "team-builder",
+    function () {
+      ensureTeamBuilder();
+      setupPokepasteImport();
+    },
+    { onRoute: loadFromRoute }
+  );
   App.registerTab("top-teams", setupTopTeams, {
+    extraMarts: ["tournament_team_sheets", "team_list_sheets"],
     onRoute: function (route) {
-      if (topTeamsSubTabs) topTeamsSubTabs.fromRoute(route);
+      topTeamsRoute(route);
     },
   });
 })();

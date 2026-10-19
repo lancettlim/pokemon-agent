@@ -816,6 +816,25 @@ models:
                 meta: {category: mart_quality, table_name: tournament_team_sheets}
       - name: moves
         description: "Up to four moves, pipe-delimited as the sheet lists them."
+  - name: team_list_sheets
+    description: >
+      Full sheets (item, ability, nature, moves per slot) for the 60 most
+      converged Limitless team lists, so Top Teams' "Use this team" loads a
+      converged list into the Builder with real sets. One row per list x
+      slot. Written to data/marts/team_list_sheets.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['team_list_id', 'slot_number']
+          config:
+            meta: {category: mart_quality, table_name: team_list_sheets}
+    columns:
+      - name: team_list_id
+        description: "The Limitless team list."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: team_list_sheets}
   - name: pokemon_set_variants
     description: >
       Real sets per Pokémon: the item, ability, nature and four moves that

@@ -507,11 +507,11 @@ and approve pull requests" enabled (Settings → Actions → General).
 
 **Regulation selector**: every regulation-sensitive mart is partitioned
 by `regulation_scope` (each regulation plus `all`). The header's Regulation
-dropdown chooses one scope for the whole page. It opens on the regulation
-in force on the visitor's date (falling back to the newest one with data),
-or whatever `?reg=` names, and changing it reloads the page with the new
-`?reg=` so links are shareable. The open tab lives in the URL hash
-(`#usage`). `static/app.js` narrows each scoped mart to the selected scope
+dropdown chooses one scope for the whole page. Changing it reloads the page
+with the new `?reg=` so links are shareable. Which regulation the page
+opens on is described under "Regulation rollover playbook" below. The open
+view and its state live in the URL hash (`#/usage/win-rate`,
+`#/pokemon/garchomp`; see "Routes"). `static/app.js` narrows each scoped mart to the selected scope
 once, as its shard loads (`applyRegulationScope`), so the tab code reads
 `marts.<name>` exactly as before. KPIs are precomputed per scope
 (`kpis_by_scope`) and the template renders one KPI row per scope. Marts
@@ -556,6 +556,88 @@ https://lancettlim.github.io/pokemon-agent/dashboard/.
 `location.replace`, so it works with JS disabled too) that sends
 `https://<owner>.github.io/<repo>/` itself to `dashboard/` — the site root
 would otherwise 404, since nothing else lives at `docs/`'s top level.
+
+## Regulation rollover playbook
+
+A new regulation set (M-D after M-C ends on 2026-12-02) needs one change:
+a row in `dbt/seeds/champions_regulations.csv`. Everything else follows
+from the seed (CLAUDE.md's "Regulation registry").
+
+1. **Add the seed row** as soon as the set is announced:
+   `regulation_code`, `regulation_name`, the MunchStats format
+   (`gen9championsvgc2026regmd`), the Limitless format (`m-d`), and the
+   start/end dates. Run `make refresh` and commit the seed.
+2. **If you miss it, the drift alarm says so.** MunchStats is extracted
+   unfiltered, so a new `gen9champions*` format reaches staging the day it
+   is indexed, and `assert_champions_formats_registered` fails naming the
+   unregistered format (it reports, for example,
+   `gen9championsvgc2026regmc`). It is a referential-integrity gate, so a
+   release and the weekly refresh both stop until the row is added.
+3. **What the site shows in the first weeks.** The page opens on the
+   regulation in force on the visitor's date only once it has at least
+   300 teams on record (`MIN_DEFAULT_SCOPE_TEAMS` in `data.py`, carried to
+   the page as `min_default_scope_teams`). Before that it opens on the
+   previous regulation with a banner: "Reg M-D started 2026-12-02. Not
+   enough results yet; showing Reg M-C." Once M-D has any results, the
+   banner adds "Switch to Reg M-D →". A regulation a visitor picked by
+   hand is remembered only while the regulation in force is the same one
+   it was picked under, so the October choice of M-C doesn't pin anyone
+   to M-C in December. `?reg=` always wins. This runs in the browser
+   against the visitor's clock, so a site built before the rollover still
+   behaves correctly after it.
+4. **When to switch the "What changed" baseline.** The panel compares the
+   selected regulation with the one before it, and shows deltas only when
+   both sides have at least 100 teams; below that it shows sample sizes
+   and new arrivals only. In a new set's first weeks the previous set is
+   the useful comparison, which the rollover default already gives. Once
+   the new set passes 300 teams the page opens on it and the panel
+   compares it with the set before; nothing needs switching by hand.
+5. **Legality** arrives separately: PokéBase usually publishes the new
+   legal pool before the first event. Until it does, the legal-pool KPI for
+   the new set reads "—".
+
+**Dry run (2026-10-19).** A fixture `m-d` row (2026-12-02 to 2027-03-03)
+was added to the seed and the pipeline run end to end against real data:
+
+- `dbt build` passed all 259 nodes with no other change; the Limitless and
+  MunchStats format lists picked up `m-d` from the seed.
+- The payload built for 2026-12-03 kept scopes M-A/M-B/M-C/all (no M-D
+  events), opened on M-C, and reported M-D as the regulation in force
+  with no legal pool yet.
+- In the browser, with the clock at 2026-12-03, the page opened on M-C
+  with the rollover banner.
+- The one finding: the staleness banner also fired and repeated the
+  rollover banner's point ("M-D began…, these figures describe an earlier
+  regulation"). It now defers to the rollover banner during a rollover.
+- Removing the M-C row made `assert_champions_formats_registered` fail
+  naming `gen9championsvgc2026regmc`, as step 2 describes.
+
+The fixture row was then removed. `tests/browser/test_regulation_rollover.py`
+and `tests/unit/dashboard/test_data.py` keep the rollover cases under test
+with the same fixture registry.
+
+## Routes
+
+Every view has a route in the hash, and the hash holds its state, so Back,
+Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
+
+| Route | View |
+|---|---|
+| `#/overview`, `#/tiers`, `#/speed` | Meta views |
+| `#/usage[/win-rate\|success\|trends]` | Usage and its sub-views |
+| `#/pokemon/<key>[/abilities\|moves\|cores]` | A Pokémon's profile |
+| `#/compare/<a>,<b>`, `#/matchup/<attacker>/<defender>` | Comparisons |
+| `#/teams[/converged]?tier=regional&sort=win-rate` | Top Teams |
+| `#/events`, `#/event/<event_id>` | Event index and event pages |
+| `#/cores/<key>[/triple]`, `#/archetypes` | Cores and archetypes |
+| `#/players[/signatures]`, `#/player/<player_id>` | Players |
+| `#/builder`, `#/builder/team/<team_id>`, `#/builder/list/<team_list_id>`, `#/builder/<key>.<set>,...` | Team Builder, loading a real team, a converged list, or a shared team |
+| `#/data[/<view>]` | Data & Sources |
+
+Moving to another view pushes a history entry; refining the current one (a
+filter, a sub-tab) replaces it. Links from before routing (`#usage`,
+`?tab=compare&a=..&b=..`) are rewritten to their routes on load.
+`?reg=` in the query string stays the regulation.
 
 ## Triple cores and detected archetypes
 

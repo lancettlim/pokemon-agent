@@ -221,6 +221,7 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("win_rate",),
     ),
     "tournament_team_sheets": (("slot_number",), ()),
+    "team_list_sheets": (("slot_number",), ()),
     "pokemon_set_variants": (
         (
             "set_rank",

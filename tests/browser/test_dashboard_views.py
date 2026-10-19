@@ -85,3 +85,77 @@ def test_phone_tab_rows_scroll_with_edge_cues(site_url, open_page):
     page.wait_for_load_state("networkidle")
     row = page.locator("nav.tabs")
     assert "can-scroll-right" in row.get_attribute("class")
+
+
+def test_event_page_lists_the_top_8_and_the_fields_outliers(site_url, open_page):
+    """C1: header, top 8 with sets and copy, over/under-performers."""
+    page = open_page()
+    page.goto(site_url + "#/event/EVT-LOU")
+    page.wait_for_load_state("networkidle")
+    assert "Louisville" in page.locator("#event-header").inner_text()
+    assert "360 teams" in page.locator("#event-header").inner_text()
+    cards = page.locator("#event-top8 .team-card")
+    assert cards.count() == 8
+    first = cards.first.inner_text()
+    assert first.startswith("1st") and "Player 1" in first
+    assert cards.first.locator("[data-copy]").count() == 1
+    assert page.locator("#event-over-table tbody tr").count() > 0
+    assert page.locator("#event-under-table tbody tr").count() > 0
+    # The Events tab is highlighted while an event page is open.
+    selected = page.locator('.tab-btn[aria-selected="true"]')
+    assert selected.get_attribute("data-tab") == "events"
+    assert not page.errors
+
+
+def test_an_unknown_event_says_so(site_url, open_page):
+    page = open_page()
+    page.goto(site_url + "#/event/NOPE")
+    page.wait_for_load_state("networkidle")
+    assert "No event with id" in page.locator("#event-header").inner_text()
+
+
+def test_top_teams_lead_with_placement_and_filter_by_tier(site_url, open_page):
+    """C2: "1st · 9–1" headline, placement-within-tier ranking, ?tier=."""
+    page = open_page()
+    page.goto(site_url + "#/teams")
+    page.wait_for_load_state("networkidle")
+    first = page.locator("#top-teams-grid .team-card").first
+    assert first.locator(".team-card-headline").inner_text().startswith("1st")
+    page.select_option("#top-teams-tier", "regional")
+    page.wait_for_function("location.hash === '#/teams?tier=regional'")
+    events = page.locator("#top-teams-grid .team-card-who").all_inner_texts()
+    assert events and all("Regional" in text for text in events)
+    page.select_option("#top-teams-sort", "win_rate")
+    page.wait_for_function("location.hash === '#/teams?tier=regional&sort=win-rate'")
+
+
+def test_overview_has_the_latest_event_and_starter_teams(site_url, open_page):
+    """C1/P5: the Overview links the newest event and offers starter teams."""
+    page = open_page()
+    page.goto(site_url)
+    page.wait_for_load_state("networkidle")
+    latest = page.locator("#overview-latest-event")
+    assert "Louisville" in latest.inner_text()
+    starters = page.locator("#overview-starters .team-card")
+    assert starters.count() == 3
+    assert starters.first.locator("[data-copy]").count() == 1
+
+
+def test_use_this_team_loads_the_real_sheet_into_the_builder(site_url, open_page):
+    """C2/P4: Use this team loads the six Pokémon with their sets, undoably."""
+    page = open_page()
+    page.goto(site_url + "#/event/EVT-LOU")
+    page.wait_for_load_state("networkidle")
+    page.locator("#event-top8 .team-card").first.get_by_text("Use this team").click()
+    page.wait_for_function("location.hash === '#/builder'")
+    page.wait_for_function("!document.getElementById('team-builder-notice').hidden")
+    assert "Loaded Player 1's team" in page.locator("#team-builder-notice").inner_text()
+    assert page.locator("#team-builder-slots .team-slot:not(.empty)").count() == 6
+
+
+def test_converged_lists_load_with_their_sets(site_url, open_page):
+    page = open_page()
+    page.goto(site_url + "#/builder/list/TL0")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_function("!document.getElementById('team-builder-notice').hidden")
+    assert page.locator("#team-builder-slots .team-slot:not(.empty)").count() == 6

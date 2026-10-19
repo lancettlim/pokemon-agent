@@ -787,6 +787,22 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
         ],
     )
     _write(
+        marts_dir / "team_list_sheets.csv",
+        [
+            {
+                "team_list_id": f"TL{i}",
+                "slot_number": slot,
+                "pokemon_key": key,
+                "item_name": SETS[key][0],
+                "ability": SETS[key][1],
+                "nature": SETS[key][2],
+                "moves": SETS[key][3],
+            }
+            for i in range(3)
+            for slot, key in enumerate(KEYS[i : i + 6], start=1)
+        ],
+    )
+    _write(
         marts_dir / "player_archetype_record.csv",
         [
             {

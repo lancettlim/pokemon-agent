@@ -105,6 +105,10 @@ _CRITICAL_PAYLOAD_KEYS = (
 #   data/<mart>.json          the largest unscoped marts, each fetched only
 #                             by the tab that reads it (registerTab's
 #                             extraMarts in static/app.js)
+# The page's scripts, in load order (templates/index.html.jinja's <script>
+# tags). Each is copied verbatim next to index.html.
+SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js", "events.js")
+
 SHARD_DIR = "data"
 ON_DEMAND_MARTS = (
     "pokemon_head_to_head",
@@ -117,6 +121,7 @@ ON_DEMAND_MARTS = (
     "pokemon_event_usage_vs_regulation",
     "tournament_team_results",
     "tournament_team_sheets",
+    "team_list_sheets",
     "player_archetype_record",
 )
 
@@ -410,7 +415,7 @@ def build(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text(html, encoding="utf-8")
-    for script_name in ("app.js", "matchup.js", "teams.js", "expansions.js"):
+    for script_name in SCRIPT_NAMES:
         shutil.copyfile(STATIC_DIR / script_name, output_dir / script_name)
     # backlog.md #32's JSON feed: data.json carries every non-mart key plus
     # `mart_files`, the index of the shard files holding the marts (see

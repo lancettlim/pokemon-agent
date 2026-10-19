@@ -767,6 +767,140 @@
     if (text != null) copyWithFallback(button, text);
   });
 
+  // ---------- events and team cards (docs/upgrade-plan-2027q1.md, C1/C2/P5) ----------
+
+  // "2027 Louisville Pokémon VGC Regional Championships" -> "Louisville
+  // Regional". Mirrors data.py's short_event_name.
+  var EVENT_NAME_NOISE = /^\d{4}\s+|\bPok[ée]mon\b|\bVGC\b|\bChampionships?\b|\bChampions\b/gi;
+  function shortEventName(name) {
+    if (!name) return "";
+    var short = String(name).replace(EVENT_NAME_NOISE, " ").replace(/\s+/g, " ").trim();
+    if (short.toLowerCase() === "world") return "World Championships";
+    return short || name;
+  }
+
+  function ordinal(n) {
+    if (n == null) return "—";
+    var mod100 = n % 100;
+    var suffix = mod100 >= 11 && mod100 <= 13 ? "th" : { 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th";
+    return n + suffix;
+  }
+
+  function recordText(wins, losses) {
+    return wins == null || losses == null ? "" : wins + "–" + losses;
+  }
+
+  // Event tiers, most prestigious first, for "placement within tier"
+  // ranking. Mirrors data.py's EVENT_TIER_ORDER.
+  var EVENT_TIER_ORDER = ["Worlds", "International", "Special", "Regional"];
+  function tierRank(tier) {
+    var i = EVENT_TIER_ORDER.indexOf(tier);
+    return i === -1 ? EVENT_TIER_ORDER.length : i;
+  }
+
+  function eventsById() {
+    var out = {};
+    (marts.tournament_event_summary || []).forEach(function (e) {
+      out[e.event_id] = e;
+    });
+    return out;
+  }
+
+  // Events in the page's regulation (every event for "all").
+  function eventsInScope() {
+    return (marts.tournament_event_summary || []).filter(function (e) {
+      return regulationScope === ALL_SCOPE || e.regulation_code === regulationScope;
+    });
+  }
+
+  // team_id -> its sheet's slots, from the on-demand tournament_team_sheets
+  // (or team_list_sheets for a Limitless list, keyed by team_list_id).
+  var sheetIndexes = {};
+  function sheetsFor(martName, idField, id) {
+    if (!sheetIndexes[martName] || sheetIndexes[martName].size !== (marts[martName] || []).length) {
+      var index = {};
+      (marts[martName] || []).forEach(function (row) {
+        (index[row[idField]] = index[row[idField]] || []).push(row);
+      });
+      Object.keys(index).forEach(function (k) {
+        index[k].sort(function (a, b) { return (a.slot_number || 0) - (b.slot_number || 0); });
+      });
+      sheetIndexes[martName] = { size: (marts[martName] || []).length, index: index };
+    }
+    return sheetIndexes[martName].index[id] || null;
+  }
+  function teamSheet(teamId) {
+    return sheetsFor("tournament_team_sheets", "team_id", teamId);
+  }
+  function teamListSheet(teamListId) {
+    return sheetsFor("team_list_sheets", "team_list_id", teamListId);
+  }
+
+  function compactSetHtml(set) {
+    return '<li><a href="' + pokemonHref(set.pokemon_key) + '">' +
+      escapeHtml(pokemonNames[set.pokemon_key] || set.pokemon_key) + "</a>" +
+      (set.item_name ? ' <span class="set-share">@ ' + escapeHtml(set.item_name) + "</span>" : "") +
+      '<span class="team-card-set-detail">' +
+      escapeHtml([set.ability, set.nature ? set.nature + " Nature" : null].filter(Boolean).join(" · ")) +
+      (splitMoves(set.moves).length ? " · " + escapeHtml(splitMoves(set.moves).join(" / ")) : "") +
+      "</span></li>";
+  }
+
+  // A real team as a card: placement and record as the headline (C2),
+  // win rate secondary, who brought it where, its six Pokémon, and -- when
+  // its sheet is known -- the sets, Copy for Showdown and Use this team.
+  // team: {team_id | team_list_id, placement, record_wins, record_losses,
+  // win_rate, player_id, player_name, player_country, event_id, event_name,
+  // event_date, event_team_count, pokemon_keys, sets?}. opts.headline
+  // overrides the placement line (a converged list has none);
+  // opts.useHref is where "Use this team" goes (null for no button);
+  // opts.hideEvent drops the event link on the event's own page.
+  function teamCardHtml(team, opts) {
+    opts = opts || {};
+    var sets = team.sets || (team.team_id ? teamSheet(team.team_id) : null);
+    var placement = team.placement != null
+      ? '<span class="team-card-place" title="' + escapeHtml(
+          team.event_team_count ? ordinal(team.placement) + " of " + team.event_team_count.toLocaleString() + " teams" : ""
+        ) + '">' + ordinal(team.placement) + "</span>"
+      : "";
+    var record = recordText(team.record_wins, team.record_losses);
+    var headline = opts.headline != null
+      ? opts.headline
+      : placement + (record ? ' <span class="team-card-record">' + record + "</span>" : "");
+    var winRate = team.win_rate != null
+      ? '<span class="team-card-wr">' + formatPercent(team.win_rate) + " win rate</span>"
+      : "";
+    var who = [];
+    if (team.player_name) {
+      who.push(
+        (team.player_id ? '<a href="' + routeHash("player", [team.player_id]) + '">' : "<span>") +
+        escapeHtml(team.player_name) + (team.player_id ? "</a>" : "</span>") +
+        (team.player_country ? " " + countryCell(team.player_country) : "")
+      );
+    }
+    if (team.event_id && !opts.hideEvent) {
+      who.push('<a href="' + routeHash("event", [team.event_id]) + '" title="' + escapeHtml(team.event_name || "") + '">' +
+        escapeHtml(shortEventName(team.event_name)) + "</a>" +
+        (team.event_date ? ' <span class="set-share">' + escapeHtml(String(team.event_date).slice(0, 10)) + "</span>" : ""));
+    }
+    if (opts.meta) who.push(opts.meta);
+    var actions = [];
+    if (sets && sets.length) actions.push(copyButtonHtml(teamToShowdown(sets), "Copy for Showdown"));
+    if (opts.useHref !== null) {
+      var useHref = opts.useHref || (team.team_id ? routeHash("team-builder", ["team", team.team_id]) : null);
+      if (useHref) actions.push('<a class="btn btn-sm" href="' + useHref + '">Use this team</a>');
+    }
+    return '<article class="team-card">' +
+      '<header class="team-card-head"><span class="team-card-headline">' + headline + "</span>" + winRate + "</header>" +
+      (who.length ? '<div class="team-card-who">' + who.join(" · ") + "</div>" : "") +
+      teamCompositionHtml(team.pokemon_keys, 40) +
+      (sets && sets.length
+        ? '<details class="team-card-sets"><summary>Sets</summary><ul>' + sets.map(compactSetHtml).join("") + "</ul></details>"
+        : "") +
+      (actions.length ? '<div class="team-card-actions">' + actions.join(" ") + "</div>" : "") +
+      "</article>";
+  }
+
   // ---------- 6-wide grid (docs/design-system.md's ".grid-6xn component") ----------
 
   // The dashboard's primary visual for any usage/win-rate metric,
@@ -1386,17 +1520,21 @@
     return btn ? btn.getAttribute("data-section") : null;
   }
 
+  // A detail view highlights the list it belongs to in the tab row.
+  var DETAIL_PARENT = { event: "events", player: "players" };
+
   function showTab(tabId) {
     var section = sectionOf(tabId);
     var hasButton = tabButtons.some(function (b) { return b.getAttribute("data-tab") === tabId; });
     if (hasButton) lastTabBySection[section] = tabId;
+    var highlighted = DETAIL_PARENT[tabId] || tabId;
     var inSection = 0;
     var tabRow = document.querySelector(".tabs");
     tabButtons.forEach(function (btn) {
       var mine = btn.getAttribute("data-section") === section;
       btn.hidden = !mine;
       if (mine) inSection += 1;
-      btn.setAttribute("aria-selected", btn.getAttribute("data-tab") === tabId ? "true" : "false");
+      btn.setAttribute("aria-selected", btn.getAttribute("data-tab") === highlighted ? "true" : "false");
     });
     if (tabRow) {
       tabRow.hidden = inSection < 2;
@@ -1423,8 +1561,12 @@
     handler(route);
   }
 
+  var DEFAULT_TITLE = document.title;
   function applyRoute(route) {
     var tabChanged = route.tab !== currentRoute.tab;
+    // An event or player page titles the tab after itself; everything else
+    // keeps the site's title.
+    if (tabChanged) document.title = DEFAULT_TITLE;
     currentRoute = route;
     lastHashByTab[route.tab] = routeHash(route.tab, route.args, route.query);
     showTab(route.tab);
@@ -3343,13 +3485,17 @@
     var ageDays = Math.floor((Date.parse(todayIso) - Date.parse(latest)) / 86400000);
     var current = regulationInForce(DATA.regulations, todayIso);
     var messages = [];
-    if (current && latest < current.start_date) {
+    // During a rollover the rollover banner already says the new set has
+    // no results yet and which regulation is shown; repeating it here was
+    // the one finding of the M-D dry run (docs/dashboard.md's rollover
+    // playbook). Only the data's age is still worth a warning then.
+    if (current && latest < current.start_date && !rolloverNotice) {
       messages.push(
         current.regulation_name + " began " + current.start_date +
         ", but the newest tournament here is from " + latest +
         ". These figures describe an earlier regulation."
       );
-    } else if (ageDays > STALE_AFTER_DAYS) {
+    } else if (ageDays > STALE_AFTER_DAYS && (!rolloverNotice || latest < rolloverNotice.in_force.start_date)) {
       messages.push(
         "The newest tournament here is from " + latest + " (" + ageDays +
         " days ago). Results from more recent events are not included yet."
@@ -3565,6 +3711,17 @@
     setToShowdown: setToShowdown,
     teamToShowdown: teamToShowdown,
     copyButtonHtml: copyButtonHtml,
+    shortEventName: shortEventName,
+    ordinal: ordinal,
+    recordText: recordText,
+    tierRank: tierRank,
+    eventsById: eventsById,
+    eventsInScope: eventsInScope,
+    teamSheet: teamSheet,
+    teamListSheet: teamListSheet,
+    teamCardHtml: teamCardHtml,
+    tipHtml: tipHtml,
+    ALL_SCOPE: ALL_SCOPE,
     copyWithFallback: copyWithFallback,
     // Routing (U1): navigate() adds a history entry, setRoute() records a
     // tab's own state change, routeHash() builds a link.

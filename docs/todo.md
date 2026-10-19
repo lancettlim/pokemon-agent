@@ -846,14 +846,31 @@ table tracks sprint progress.
   gone.
 - [ ] Pokémon hub v2: per-regulation trend, featuring teams, teammates, meta pressure (P2)
 - [ ] Calculator presets from real sets; "vs the meta" mode (P3)
-- [ ] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5)
-- [ ] Event pages and `pokemon_event_usage_vs_regulation` mart (C1)
-- [ ] Top Teams: record/placement headline, placement ranking, copy actions (C2)
+- [ ] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5).
+  Done so far: "Copy and play" starter strip on the Overview (three
+  top-placing fully reported teams, from `starter_teams` in the inline KPIs),
+  and "Use this team" loading a real sheet. Saved teams and share links
+  remain.
+- [x] Event pages and `pokemon_event_usage_vs_regulation` mart (C1).
+  `#/events` lists every event in the regulation (`tournament_event_summary`);
+  `#/event/<id>` shows the header with RK9/MunchStats source links, the top
+  8 as team cards with full sets and copy, and the Pokémon the field over-
+  and under-used against the regulation average (withheld below 100
+  teams). The Overview has a Latest event card. Code in `static/events.js`.
+- [x] Top Teams: record/placement headline, placement ranking, copy actions (C2).
+  Cards lead with "1st 15–2", rank by placement within event tier, and
+  offer win rate as a sort; `?tier=` and `?sort=` live in the route. Every
+  card has Copy for Showdown and Use this team (`#/builder/team/<id>`);
+  converged lists load their Limitless sets (`team_list_sheets`).
 - [ ] Player pages (C3)
 - [ ] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4)
 - [ ] Publish 0.4.0 as a Release asset; update the release contract (D1)
 - [ ] Data section table cards and a generated data dictionary (D2)
-- [ ] Regulation rollover playbook and M-D dry run (D3)
+- [x] Regulation rollover playbook and M-D dry run (D3).
+  `docs/dashboard.md`'s "Regulation rollover playbook". The dry run added a
+  fixture M-D row and ran the real pipeline end to end; its one finding
+  (the staleness banner repeating the rollover banner) is fixed. The drift
+  alarm was also probed by withholding M-C.
 
 ## Release readiness (v1 definition of done)
 

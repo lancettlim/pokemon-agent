@@ -23,9 +23,13 @@ labelled everywhere it appears, and the site stays static with no backend.
 | U7 Mobile fixes | Done (Sprint 6) |
 | U8 Browser smoke tests + budget | Done (Sprint 5): core payload 448KB compressed |
 | P1 Real sets | Done (Sprint 6) |
-| P2–P5 Player features | Not started |
-| C1–C4 Event, team and player features | Not started |
-| D1–D3 Data access and operations | Not started |
+| P2–P4 Player features | Not started (P4's "Use this team" done in Sprint 7) |
+| P5 Starter teams | Done (Sprint 7) |
+| C1 Event pages | Done (Sprint 7) |
+| C2 Top Teams | Done (Sprint 7) |
+| C3–C4 | Not started |
+| D1–D2 Data access | Not started |
+| D3 Rollover playbook | Done (Sprint 7), with an end-to-end M-D dry run |
 
 ---
 

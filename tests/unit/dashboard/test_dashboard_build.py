@@ -125,7 +125,7 @@ def test_build_writes_index_html_and_app_js(tmp_path):
     payload = _build(marts_dir, normalized_dir, output_dir)
 
     assert (output_dir / "index.html").exists()
-    for script_name in ("app.js", "matchup.js", "teams.js"):
+    for script_name in build.SCRIPT_NAMES:
         assert (output_dir / script_name).exists()
         assert (output_dir / script_name).read_bytes() == (
             build.STATIC_DIR / script_name
