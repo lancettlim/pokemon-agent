@@ -119,6 +119,88 @@
   /* Components that set their own display (grid/flex) would otherwise
      override the hidden attribute app.js toggles. */
   .kpi-row[hidden], .movers-panel[hidden] { display: none; }
+  /* Tier List (app.js setupTiers): usage bands, win-rate chip per Pokémon. */
+  .tier-row { display: grid; grid-template-columns: 64px 1fr; gap: var(--space-3); align-items: stretch; margin-bottom: var(--space-3); }
+  .tier-label { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; color: #fff; font-weight: 800; font-size: 1.6rem; line-height: 1; }
+  .tier-label small { font-size: 0.65rem; font-weight: 600; margin-top: 4px; opacity: 0.9; }
+  .tier-s { background: var(--accent-red); }
+  .tier-a { background: #e8622c; }
+  .tier-b { background: var(--accent-gold); color: var(--navy); }
+  .tier-c { background: var(--muted); }
+  .tier-members { display: flex; flex-wrap: wrap; gap: var(--space-2); border: 2px solid var(--border); border-radius: 10px; padding: var(--space-2); }
+  .tier-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--light-blue); font-weight: 600; font-size: 0.9rem; border: 0; cursor: pointer; font-family: inherit; color: var(--navy); }
+  .tier-chip:hover { outline: 2px solid var(--blue); }
+  .tier-wr { font-size: 0.75rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+  .tier-wr.is-strong { color: var(--positive); }
+  .tier-wr.is-weak { color: var(--danger); }
+  /* Pokémon Profile: stat bars against the format median, and the
+     most-common-set card beside them (app.js statBarsHtml/commonSetHtml). */
+  .profile-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-5); align-items: start; margin-bottom: var(--space-5); }
+  .profile-usage-line { margin: var(--space-1) 0 var(--space-3); color: var(--muted); }
+  .stat-bars { min-width: 260px; }
+  .stat-bar-row { display: grid; grid-template-columns: 2.5em 2.5em 1fr; align-items: center; gap: var(--space-2); margin: 3px 0; font-variant-numeric: tabular-nums; }
+  .stat-label { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+  .stat-value { font-weight: 700; text-align: right; }
+  .stat-track { position: relative; height: 10px; background: var(--light-blue); border-radius: 999px; }
+  .stat-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--blue); }
+  .stat-fill.is-high { background: var(--positive); }
+  .stat-fill.is-low { background: var(--warning); }
+  .stat-median { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--navy); }
+  .stat-legend { font-size: 0.8rem; color: var(--muted); margin: var(--space-2) 0 0; }
+  .common-set { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-4); background: var(--surface); }
+  .common-set-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+  .common-set h3 { margin: 0; font-size: 1rem; }
+  .common-set dl { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); margin: var(--space-3) 0; }
+  .common-set dt { color: var(--muted); font-weight: 600; }
+  .common-set dd { margin: 0; font-weight: 600; }
+  .set-moves { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px var(--space-3); }
+  .set-sample { font-size: 0.85rem; color: var(--muted); margin: 0 0 var(--space-2); }
+  .set-sample.is-thin { color: var(--warning); font-weight: 600; }
+  .set-share { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 720px) { .profile-layout { grid-template-columns: 1fr; } }
+  /* Phones: the header keeps its title and the Regulation picker only. */
+  @media (max-width: 480px) {
+    header { padding: 14px 12px; }
+    header h1 { font-size: 1.1rem; }
+    header > p, .header-meta .header-chip:not(.regulation-picker) { display: none; }
+    .kpi-card .kpi-sprite { display: none; }
+    .kpi-card .sub { display: none; }
+    .kpi-card .value { font-size: 1.05rem; }
+  }
+  /* Pokémon search combobox (app.js attachPokemonCombobox). The original
+     <select> stays in the DOM as the source of truth, visually hidden. */
+  .combo { position: relative; display: inline-block; min-width: 240px; }
+  .combo-input {
+    width: 100%;
+    font: inherit;
+    padding: 8px 10px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .combo-input:focus { outline: 3px solid var(--blue); outline-offset: 1px; }
+  .combo-list {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 360px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  }
+  .combo-list li { display: flex; align-items: center; gap: var(--space-2); padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+  .combo-list li[aria-selected="true"] { background: var(--light-blue); }
+  .combo-list .combo-empty { color: var(--muted); cursor: default; }
+  .combo-list[hidden] { display: none; }
+  .combo-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   .regulation-picker { display: inline-flex; align-items: center; gap: var(--space-2); }
   .regulation-picker select {
     font: inherit;
@@ -188,6 +270,31 @@
     border-bottom: 2px solid var(--border);
     margin-bottom: 20px;
   }
+  .sections {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    gap: var(--space-1);
+    background: var(--bg);
+    padding: var(--space-2) 0;
+    margin-bottom: var(--space-1);
+  }
+  .section-btn {
+    flex: 0 0 auto;
+    font: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--navy);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-pill);
+    padding: 8px 18px;
+    cursor: pointer;
+  }
+  .section-btn:hover { border-color: var(--blue); }
+  .section-btn[aria-current="true"] { background: var(--panel-dark); border-color: var(--panel-dark); color: #fff; }
+  .tab-btn[hidden], .tabs[hidden], #kpi-strip[hidden] { display: none; }
   .tab-btn {
     flex: 0 0 auto;
     background: none;
@@ -662,6 +769,22 @@
 
   @media (max-width: 720px) {
     .tabs { flex-wrap: nowrap; }
+    /* Bottom navigation: the five sections stay one thumb-reach away. */
+    .sections {
+      position: fixed;
+      top: auto;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      justify-content: space-around;
+      margin: 0;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      background: var(--panel-dark);
+      box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+    }
+    .section-btn { flex: 1 1 0; padding: 8px 4px; font-size: 0.85rem; background: transparent; border: none; color: #b8bdd1; border-radius: var(--radius-sm); }
+    .section-btn[aria-current="true"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
+    body { padding-bottom: 64px; }
     .team-builder-grid { grid-template-columns: 1fr; }
     .team-slots { grid-template-columns: repeat(2, 1fr); }
     .team-analysis-grid, .team-analysis-columns { grid-template-columns: 1fr; }
@@ -739,7 +862,9 @@
    was played under the regulation in force today. #}
 <div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
 <main>
-  {# One KPI row per regulation scope; app.js shows the selected one. #}
+  <div id="kpi-strip">
+  {# One KPI row per regulation scope; app.js shows the selected one. The
+     whole strip shows on the Meta section only. #}
   {% for scope, scope_kpis in (payload.kpis_by_scope or {"all": payload.kpis}).items() %}
   <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
@@ -785,21 +910,34 @@
     </div>
   </div>
   {% endfor %}
+  </div>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab-btn" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button class="tab-btn" role="tab" data-tab="usage" aria-selected="false">Usage</button>
-    <button class="tab-btn" role="tab" data-tab="pokemon-profile" aria-selected="false">Pokémon Profile</button>
-    <button class="tab-btn" role="tab" data-tab="archetypes" aria-selected="false">Archetypes</button>
-    <button class="tab-btn" role="tab" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
-    <button class="tab-btn" role="tab" data-tab="matchup" aria-selected="false">Matchup</button>
-    <button class="tab-btn" role="tab" data-tab="team-builder" aria-selected="false">Team Builder</button>
-    <button class="tab-btn" role="tab" data-tab="top-teams" aria-selected="false">Top Teams</button>
-    <button class="tab-btn" role="tab" data-tab="players" aria-selected="false">Players &amp; Regions</button>
-
-    <button class="tab-btn" role="tab" data-tab="compare" aria-selected="false">Compare</button>
-    <button class="tab-btn" role="tab" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
-    <button class="tab-btn" role="tab" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
+  {# Five sections, each with its own row of views (docs/upgrade-plan-
+     2026q4.md, B2). The view buttons keep the .tab-btn/data-tab contract
+     every script already uses; data-section groups them, and app.js shows
+     only the active section's row. On narrow screens the section bar
+     becomes a bottom navigation bar. #}
+  <nav class="sections" aria-label="Sections">
+    <button class="section-btn" data-section="meta" aria-current="true">Meta</button>
+    <button class="section-btn" data-section="pokemon">Pokémon</button>
+    <button class="section-btn" data-section="teams">Teams</button>
+    <button class="section-btn" data-section="builder">Builder</button>
+    <button class="section-btn" data-section="data">Data</button>
+  </nav>
+  <nav class="tabs" role="tablist" aria-label="Views in this section">
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="overview" aria-selected="true">Overview</button>
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="usage" aria-selected="false">Usage</button>
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
+    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="pokemon-profile" aria-selected="false">Profile</button>
+    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="compare" aria-selected="false">Compare</button>
+    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="matchup" aria-selected="false">Matchup</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="top-teams" aria-selected="false">Top Teams</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="archetypes" aria-selected="false">Archetypes</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="players" aria-selected="false">Players &amp; Regions</button>
+    <button class="tab-btn" role="tab" data-section="builder" data-tab="team-builder" aria-selected="false">Team Builder</button>
+    <button class="tab-btn" role="tab" data-section="data" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
   </nav>
 
   <section class="tab-panel" data-panel="overview">
@@ -807,6 +945,12 @@
     <section class="movers-panel" id="movers-panel" hidden></section>
     <p class="sub" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
     <div class="grid-6xn" id="overview-top-12"></div>
+  </section>
+
+  <section class="tab-panel" data-panel="tiers" hidden>
+    <h2>Tier List</h2>
+    <p class="sub" id="tiers-method"></p>
+    <div id="tiers-body"></div>
   </section>
 
   <section class="tab-panel" data-panel="usage" hidden>
@@ -938,7 +1082,10 @@
       </label>
     </div>
 
-    <div id="pokemon-profile-stats" class="empty-state"></div>
+    <div class="profile-layout">
+      <div id="pokemon-profile-stats" class="empty-state"></div>
+      <div id="pokemon-profile-set"></div>
+    </div>
 
     <div class="subtabs" role="tablist">
       <button class="subtab-btn" role="tab" data-subtab="profile-items" aria-selected="true">Items</button>

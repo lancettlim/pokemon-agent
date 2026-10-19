@@ -137,6 +137,24 @@ models:
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_ability_usage}
+  - name: pokemon_nature_usage
+    description: >
+      Nature drill-down per Pokémon x nature (usage_count, nature_share,
+      usage_rank within the Pokémon), restricted to the current legal pool
+      and partitioned by regulation_scope. Feeds the Pokémon Profile's
+      most-common-set card. Written to data/marts/pokemon_nature_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'nature']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_nature_usage}
+    columns:
+      - name: pokemon_key
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_nature_usage}
   - name: pokemon_move_usage
     description: >
       Move drill-down for the Pokémon Profile tab's Moves section (top 15

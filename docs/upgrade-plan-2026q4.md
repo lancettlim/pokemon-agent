@@ -18,7 +18,10 @@ per `docs/backlog.md`'s backlog → todo flow.
 | A6 refresh workflow + staleness banner | Done (Sprint 1) |
 | B1 quick fixes | Done (Sprint 1) |
 | A7 publish 0.4.0 | Deferred: needs re-extraction stamped 0.4.0 and adds ~55MB to git, so it's a separate decision |
-| B2, B4–B9 | Not started |
+| B2 five-section navigation | Done (Sprint 3), with the bottom nav on phones and the KPI strip on Meta only |
+| B4 Pokémon hub | Done (Sprint 3): type-ahead search on every Pokémon picker, `/` shortcut, stat bars against the format median, most-common-set card with Showdown copy. A per-regulation trend sparkline is not done |
+| B5 Meta landing | Done (Sprints 2–3): What changed panel and Tier List. Latest-event spotlight is not done |
+| B6–B9 | Not started |
 
 Two upstream breakages turned up during the Sprint 1 refresh, and both are
 fixed: Bulbagarden renamed every sprite file from "Menu CP" to "Menu Champs"

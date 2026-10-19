@@ -679,34 +679,70 @@
     panel.insertBefore(box, panel.firstChild);
   }
 
+  // Two-level navigation (docs/upgrade-plan-2026q4.md, B2): five section
+  // buttons, each owning a row of view buttons (.tab-btn[data-section]).
+  // Only the active section's row shows, and only when it has more than
+  // one view; the KPI strip shows on Meta only. The open view lives in the
+  // URL hash (#usage), so a link opens the same view and the regulation
+  // selector's reload keeps it. Each section remembers its last view.
   function setupTabs(onActivate) {
-    var buttons = document.querySelectorAll(".tab-btn");
+    var buttons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
     var panels = document.querySelectorAll(".tab-panel");
+    var sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-btn"));
+    var tabRow = document.querySelector(".tabs");
+    var kpiStrip = document.getElementById("kpi-strip");
+    var lastTabBySection = {};
+
+    function sectionOf(tabId) {
+      var btn = buttons.filter(function (b) { return b.getAttribute("data-tab") === tabId; })[0];
+      return btn ? btn.getAttribute("data-section") : null;
+    }
+
     function activate(tabId) {
+      var section = sectionOf(tabId);
+      lastTabBySection[section] = tabId;
+      var inSection = 0;
       buttons.forEach(function (btn) {
+        var mine = btn.getAttribute("data-section") === section;
+        btn.hidden = !mine;
+        if (mine) inSection += 1;
         btn.setAttribute("aria-selected", btn.getAttribute("data-tab") === tabId ? "true" : "false");
       });
+      if (tabRow) tabRow.hidden = inSection < 2;
+      sectionButtons.forEach(function (btn) {
+        if (btn.getAttribute("data-section") === section) btn.setAttribute("aria-current", "true");
+        else btn.removeAttribute("aria-current");
+      });
+      if (kpiStrip) kpiStrip.hidden = section !== "meta";
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-panel") !== tabId;
       });
       if (onActivate) onActivate(tabId);
     }
-    // The open tab lives in the URL hash (#usage), so a link opens the same
-    // view and the regulation selector's reload keeps it.
-    var tabIds = Array.prototype.map.call(buttons, function (btn) {
-      return btn.getAttribute("data-tab");
-    });
+
+    function go(tabId) {
+      activate(tabId);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", window.location.search + "#" + tabId);
+      }
+    }
+
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var tabId = btn.getAttribute("data-tab");
-        activate(tabId);
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState(null, "", window.location.search + "#" + tabId);
-        }
+        go(btn.getAttribute("data-tab"));
+      });
+    });
+    sectionButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var section = btn.getAttribute("data-section");
+        var first = buttons.filter(function (b) { return b.getAttribute("data-section") === section; })[0];
+        var target = lastTabBySection[section] || (first && first.getAttribute("data-tab"));
+        if (target) go(target);
+        window.scrollTo(0, 0);
       });
     });
     var fromHash = window.location.hash.replace(/^#/, "");
-    activate(tabIds.indexOf(fromHash) >= 0 ? fromHash : "overview");
+    activate(sectionOf(fromHash) ? fromHash : "overview");
   }
 
   // ---------- sub-tabs ----------
@@ -809,6 +845,80 @@
       subFn: function (r) {
         return formatPercent(r.win_rate) + " win rate";
       },
+    });
+  }
+
+  // Tier List (docs/upgrade-plan-2026q4.md, B5). Bands by usage share in
+  // the selected regulation; the chip beside each Pokémon is its win rate,
+  // coloured only when the 95% Wilson interval sits clearly above or below
+  // 50%. Usage decides the band and win rate qualifies it, kept as two
+  // signals rather than blended into one opaque score.
+  var TIERS = [
+    { id: "s", label: "S", min: 0.04 },
+    { id: "a", label: "A", min: 0.02 },
+    { id: "b", label: "B", min: 0.01 },
+    { id: "c", label: "C", min: 0.005 },
+  ];
+
+  function setupTiers() {
+    var body = document.getElementById("tiers-body");
+    var method = document.getElementById("tiers-method");
+    if (!body) return;
+    var winByKey = {};
+    (marts.pokemon_win_rate_summary || []).forEach(function (r) {
+      winByKey[r.pokemon_key] = r;
+    });
+    var rows = (marts.pokemon_usage_summary || [])
+      .filter(function (r) { return !r.event_tier; })
+      .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
+    if (method) {
+      method.textContent = "Bands by share of roster slots in " + scopeLabel(regulationScope) +
+        ": S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%. The chip is win rate: green when its 95% Wilson lower bound " +
+        "is above 50%, red when even its upper bound is below 50%, grey otherwise. Click a Pokémon for its profile.";
+    }
+    body.innerHTML = TIERS.map(function (tier, i) {
+      var max = i === 0 ? Infinity : TIERS[i - 1].min;
+      var members = rows.filter(function (r) {
+        return r.usage_share >= tier.min && r.usage_share < max;
+      });
+      if (!members.length) return "";
+      var chips = members.map(function (r) {
+        var win = winByKey[r.pokemon_key];
+        var wrHtml = "";
+        if (win && win.win_rate != null) {
+          // Upper bound mirrors the Wilson lower bound around the point
+          // estimate; enough to flag "clearly losing" without a second mart.
+          var upper = win.win_rate + (win.win_rate - (win.wilson_lower_bound || 0));
+          var cls = win.wilson_lower_bound > 0.5 ? " is-strong" : upper < 0.5 ? " is-weak" : "";
+          wrHtml = '<span class="tier-wr' + cls + '" title="' + win.record_count + ' recorded results">' +
+            formatPercent(win.win_rate) + "</span>";
+        }
+        return '<button type="button" class="tier-chip" data-pokemon="' + escapeHtml(r.pokemon_name) + '">' +
+          spriteImg(r.pokemon_key, ICON_SIZES.sm) + escapeHtml(r.pokemon_name) +
+          ' <span class="set-share">' + formatPercent(r.usage_share) + "</span>" + wrHtml + "</button>";
+      }).join("");
+      return '<div class="tier-row"><div class="tier-label tier-' + tier.id + '">' + tier.label +
+        "<small>" + members.length + "</small></div>" +
+        '<div class="tier-members">' + chips + "</div></div>";
+    }).join("") || '<p class="empty-state">No usage data for this regulation yet.</p>';
+    body.addEventListener("click", function (e) {
+      var chip = e.target.closest(".tier-chip");
+      if (!chip) return;
+      openProfile(chip.getAttribute("data-pokemon"));
+    });
+  }
+
+  // Opens the Pokémon Profile on a given display name (the profile
+  // select's option values), from any view.
+  function openProfile(pokemonName) {
+    var tab = document.querySelector('.tab-btn[data-tab="pokemon-profile"]');
+    if (tab) tab.click();
+    ensureData().then(function () {
+      var select = document.getElementById("pokemon-profile-filter");
+      if (!select) return;
+      select.value = pokemonName;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      window.scrollTo(0, 0);
     });
   }
 
@@ -1161,6 +1271,7 @@
     var itemRows = marts.pokemon_item_usage || [];
     var abilityRows = marts.pokemon_ability_usage || [];
     var moveRows = marts.pokemon_move_usage || [];
+    var natureRows = marts.pokemon_nature_usage || [];
     var coreRows = marts.pokemon_team_core_usage || [];
     var synergyRows = marts.pokemon_team_synergy || [];
     var tripleRows = marts.pokemon_team_core_triple_usage || [];
@@ -1308,6 +1419,99 @@
       );
     }
 
+    // Base stats as bars against the legal pool's median for each stat
+    // (docs/upgrade-plan-2026q4.md, B4), so "Atk 130" reads as "well above
+    // a typical Champions Pokémon" at a glance.
+    var STAT_FIELDS = [
+      ["hp", "HP"], ["attack", "Atk"], ["defense", "Def"],
+      ["sp_attack", "SpA"], ["sp_defense", "SpD"], ["speed", "Spe"],
+    ];
+    var statMedians = {};
+    STAT_FIELDS.forEach(function (field) {
+      var values = profileRows
+        .map(function (r) { return r[field[0]]; })
+        .filter(function (v) { return v != null; })
+        .sort(function (a, b) { return a - b; });
+      statMedians[field[0]] = values.length ? values[Math.floor(values.length / 2)] : null;
+    });
+    var STAT_SCALE_MAX = 200;
+    // Below this many team sheets, the most-common-set card says so.
+    var MIN_SET_SAMPLE = 30;
+
+    function statBarsHtml(profile) {
+      return '<div class="stat-bars" role="list">' + STAT_FIELDS.map(function (field) {
+        var value = profile[field[0]];
+        var median = statMedians[field[0]];
+        var width = Math.min(100, ((value || 0) / STAT_SCALE_MAX) * 100);
+        var medianLeft = median != null ? Math.min(100, (median / STAT_SCALE_MAX) * 100) : null;
+        var cls = median == null ? "" : value >= median * 1.15 ? " is-high" : value <= median * 0.85 ? " is-low" : "";
+        return '<div class="stat-bar-row" role="listitem" aria-label="' + field[1] + " " + value +
+          (median != null ? ", format median " + median : "") + '">' +
+          '<span class="stat-label">' + field[1] + "</span>" +
+          '<span class="stat-value">' + value + "</span>" +
+          '<span class="stat-track"><span class="stat-fill' + cls + '" style="width:' + width + '%"></span>' +
+          (medianLeft != null ? '<span class="stat-median" style="left:' + medianLeft + '%" title="Format median ' + median + '"></span>' : "") +
+          "</span></div>";
+      }).join("") + '<p class="stat-legend">Tick marks the median across the legal pool.</p></div>';
+    }
+
+    function topRow(rows, name) {
+      return rows
+        .filter(function (r) { return r.pokemon_name === name; })
+        .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
+    }
+
+    function showdownName(key) {
+      return String(key).split("-").map(function (part) {
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      }).join("-");
+    }
+
+    // The single most common choice in each slot (B4). These are separate
+    // modes, not one observed team sheet: the top item and top nature may
+    // never have appeared together. Labelled as such, and there is no EV
+    // line because no source publishes spreads.
+    function commonSetHtml(profile) {
+      var item = topRow(itemRows, profile.pokemon_name)[0];
+      var ability = topRow(abilityRows, profile.pokemon_name)[0];
+      var nature = topRow(natureRows, profile.pokemon_name)[0];
+      var moves = topRow(moveRows, profile.pokemon_name).slice(0, 4);
+      if (!item && !ability && !moves.length) return "";
+      var paste = [showdownName(profile.pokemon_key) + (item ? " @ " + item.item_name : "")];
+      if (ability) paste.push("Ability: " + ability.ability);
+      if (nature) paste.push(nature.nature + " Nature");
+      moves.forEach(function (m) { paste.push("- " + m.move_name); });
+      function line(label, value, share) {
+        return "<dt>" + label + "</dt><dd>" + escapeHtml(value) +
+          (share != null ? ' <span class="set-share">' + formatPercent(share) + "</span>" : "") + "</dd>";
+      }
+      var slots = item ? itemRows.filter(function (r) { return r.pokemon_name === profile.pokemon_name; })
+        .reduce(function (sum, r) { return sum + (r.usage_count || 0); }, 0) : 0;
+      var sampleNote = slots
+        ? '<p class="set-sample' + (slots < MIN_SET_SAMPLE ? " is-thin" : "") + '">From ' + slots.toLocaleString() +
+          " team sheet" + (slots === 1 ? "" : "s") + " in " + escapeHtml(scopeLabel(regulationScope)) +
+          (slots < MIN_SET_SAMPLE ? ". Small sample: treat as anecdotal." : ".") + "</p>"
+        : "";
+      return '<div class="common-set">' +
+        '<div class="common-set-head"><h3>Most common set</h3>' +
+        '<button type="button" class="btn btn-sm" id="copy-common-set">Copy for Showdown</button></div>' +
+        "<dl>" +
+        (item ? line("Item", item.item_name, item.item_share) : "") +
+        (ability ? line("Ability", ability.ability, ability.ability_share) : "") +
+        (nature ? line("Nature", nature.nature, nature.nature_share) : "") +
+        "</dl>" + sampleNote +
+        '<ul class="set-moves">' + moves.map(function (m) {
+          return "<li>" + typeIconImg(m.move_type, 18) + " " + escapeHtml(m.move_name) +
+            ' <span class="set-share">' + formatPercent(m.move_share) + "</span></li>";
+        }).join("") + "</ul>" +
+        '<p class="stat-legend">Each line is the most common choice for that slot, counted separately. ' +
+        "No EVs: tournament team sheets don't publish them.</p>" +
+        '<textarea class="visually-hidden" id="common-set-paste" aria-hidden="true" tabindex="-1">' +
+        escapeHtml(paste.join("\n")) + "</textarea></div>";
+    }
+
+    var setEl = document.getElementById("pokemon-profile-set");
+
     function render(chosenName) {
       var profile = sortedProfiles.filter(function (r) {
         return r.pokemon_name === chosenName;
@@ -1336,12 +1540,26 @@
             "<div><strong>" + escapeHtml(profile.pokemon_name) + "</strong> " +
             speedTierBadge(profile.speed) +
             '<div class="type-badge-row type-badge-lg" id="profile-type-badge"></div>' +
-            "HP " + profile.hp + " · Atk " + profile.attack + " · Def " + profile.defense +
-            " · SpA " + profile.sp_attack + " · SpD " + profile.sp_defense +
-            " · Spe " + profile.speed + "<br>" +
-            formatPercent(profile.usage_share) + " usage · " + formatPercent(profile.win_rate) +
-            " win rate</div></div>";
+            '<div class="profile-usage-line">' + formatPercent(profile.usage_share) + " usage · " +
+            formatPercent(profile.win_rate) + " win rate in " + escapeHtml(scopeLabel(regulationScope)) +
+            "</div>" + statBarsHtml(profile) + "</div></div>";
           renderTypeBadgeRow(document.getElementById("profile-type-badge"), profile.type_1, profile.type_2, true);
+        }
+      }
+      if (setEl) {
+        setEl.innerHTML = profile ? commonSetHtml(profile) : "";
+        var copyBtn = document.getElementById("copy-common-set");
+        if (copyBtn) {
+          copyBtn.addEventListener("click", function () {
+            var text = document.getElementById("common-set-paste").value;
+            var done = function () {
+              copyBtn.textContent = "Copied";
+              setTimeout(function () { copyBtn.textContent = "Copy for Showdown"; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(done, function () {});
+            }
+          });
         }
       }
 
@@ -1951,6 +2169,194 @@
     setupSubTabs(subtabs, subpanels);
   }
 
+  // ---------- Pokémon search combobox ----------
+  // Type-ahead search with sprites, layered over an existing Pokémon
+  // <select> (docs/upgrade-plan-2026q4.md, B4). The select stays the source
+  // of truth: picking a result sets select.value and dispatches "change",
+  // so every listener the tabs already attach keeps working, and options
+  // are read from the select on each open, so it can be attached before a
+  // tab fills it. Option values are either pokemon_keys or display names
+  // depending on the tab; both resolve to a sprite.
+  var keyByName = {};
+  Object.keys(pokemonNames).forEach(function (key) {
+    keyByName[pokemonNames[key]] = key;
+  });
+  var MAX_COMBO_RESULTS = 12;
+  var comboCount = 0;
+
+  function normalizeSearch(text) {
+    return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  function attachPokemonCombobox(select) {
+    if (!select || select.dataset.combobox) return;
+    select.dataset.combobox = "1";
+    comboCount += 1;
+    var listId = "combo-list-" + comboCount;
+    var wrap = document.createElement("div");
+    wrap.className = "combo";
+    var input = document.createElement("input");
+    input.type = "search";
+    input.className = "combo-input";
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-controls", listId);
+    input.setAttribute("autocomplete", "off");
+    input.placeholder = "Search Pokémon…";
+    var list = document.createElement("ul");
+    list.className = "combo-list";
+    list.id = listId;
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+    wrap.appendChild(input);
+    wrap.appendChild(list);
+    select.parentNode.insertBefore(wrap, select);
+    select.classList.add("combo-source");
+    select.setAttribute("tabindex", "-1");
+    select.setAttribute("aria-hidden", "true");
+
+    var results = [];
+    var active = -1;
+
+    function selectedText() {
+      var opt = select.options[select.selectedIndex];
+      return opt && opt.value ? opt.textContent : "";
+    }
+    function syncInput() {
+      if (document.activeElement !== input) input.value = selectedText();
+    }
+    function options() {
+      return Array.prototype.filter.call(select.options, function (o) { return o.value; });
+    }
+    function spriteFor(opt) {
+      return spriteImg(sprites[opt.value] ? opt.value : keyByName[opt.textContent], ICON_SIZES.sm);
+    }
+    function close() {
+      list.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+      active = -1;
+    }
+    function highlight(index) {
+      active = index;
+      Array.prototype.forEach.call(list.children, function (li, i) {
+        li.setAttribute("aria-selected", i === index ? "true" : "false");
+      });
+      if (index >= 0 && list.children[index]) {
+        input.setAttribute("aria-activedescendant", list.children[index].id);
+        list.children[index].scrollIntoView({ block: "nearest" });
+      }
+    }
+    function render() {
+      var query = normalizeSearch(input.value);
+      var all = options();
+      // Prefix matches first, then substring matches; select order (which
+      // is usage order on most tabs) breaks ties.
+      var prefix = [];
+      var inner = [];
+      // A match at the start of any word counts as a prefix match, so
+      // "salam" ranks Mega Salamence (by usage) alongside Salamence.
+      all.forEach(function (opt) {
+        var words = String(opt.textContent).split(/[\s-]+/).map(normalizeSearch);
+        var text = normalizeSearch(opt.textContent);
+        var wordStart = words.some(function (w) { return w.indexOf(query) === 0; });
+        if (!query || wordStart || text.indexOf(query) === 0) prefix.push(opt);
+        else if (text.indexOf(query) > 0) inner.push(opt);
+      });
+      results = prefix.concat(inner).slice(0, MAX_COMBO_RESULTS);
+      list.innerHTML = results.length
+        ? results.map(function (opt, i) {
+            return '<li role="option" id="' + listId + "-" + i + '" data-index="' + i + '">' +
+              spriteFor(opt) + "<span>" + escapeHtml(opt.textContent) + "</span></li>";
+          }).join("")
+        : '<li class="combo-empty" aria-disabled="true">No Pokémon match “' + escapeHtml(input.value) + "”</li>";
+      list.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      highlight(results.length ? 0 : -1);
+    }
+    function choose(index) {
+      var opt = results[index];
+      if (!opt) return;
+      select.value = opt.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      close();
+      input.value = opt.textContent;
+      input.blur();
+    }
+
+    input.addEventListener("focus", function () {
+      input.select();
+      render();
+    });
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (list.hidden) render();
+        else highlight(Math.min(active + 1, results.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        highlight(Math.max(active - 1, 0));
+      } else if (e.key === "Enter") {
+        if (!list.hidden && active >= 0) {
+          e.preventDefault();
+          choose(active);
+        }
+      } else if (e.key === "Escape") {
+        close();
+        input.value = selectedText();
+        input.blur();
+      }
+    });
+    // mousedown, not click: it fires before the input's blur closes the list.
+    list.addEventListener("mousedown", function (e) {
+      var li = e.target.closest("li[data-index]");
+      if (!li) return;
+      e.preventDefault();
+      choose(Number(li.getAttribute("data-index")));
+    });
+    input.addEventListener("blur", function () {
+      close();
+      input.value = selectedText();
+    });
+    select.addEventListener("change", syncInput);
+    // Tabs fill and preselect their selects after setup; poll the label
+    // cheaply until the first real selection appears.
+    var tries = 0;
+    var timer = setInterval(function () {
+      syncInput();
+      tries += 1;
+      if (selectedText() || tries > 40) clearInterval(timer);
+    }, 250);
+  }
+
+  [
+    "pokemon-profile-filter",
+    "compare-a",
+    "compare-b",
+    "core-anchor",
+    "matchup-attacker-select",
+    "matchup-defender-select",
+  ].forEach(function (id) {
+    attachPokemonCombobox(document.getElementById(id));
+  });
+
+  // "/" jumps to the Pokémon search from anywhere on the page.
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    e.preventDefault();
+    var profileTab = document.querySelector('.tab-btn[data-tab="pokemon-profile"]');
+    if (profileTab) profileTab.click();
+    setTimeout(function () {
+      var input = document.querySelector('[data-panel="pokemon-profile"] .combo-input');
+      if (input) input.focus();
+    }, 50);
+  });
+
   // ---------- staleness banner ----------
   // Evaluated against the viewer's clock, not the build time: a site that
   // stops being rebuilt is exactly the case this exists for (the published
@@ -2012,6 +2418,7 @@
   // network round-trip, so the landing view is never waiting on data.json.
   registerTab("overview", setupOverview, { needsMarts: false });
   registerTab("data-sources", setupDataSources);
+  registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage);
   registerTab("pokemon-profile", setupPokemonProfile);
   registerTab("archetypes", setupDetectedArchetypes);
@@ -2086,5 +2493,7 @@
     ensureData: ensureData,
     regulationScope: regulationScope,
     scopeLabel: scopeLabel,
+    attachPokemonCombobox: attachPokemonCombobox,
+    openProfile: openProfile,
   };
 })();

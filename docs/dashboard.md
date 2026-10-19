@@ -98,6 +98,32 @@ The dashboard degrades gracefully in several ways:
 
 ## Tabs
 
+**Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
+B2): the views are grouped into five sections, each with its own row of
+views. **Meta** has Overview, Tier List, Usage and Speed Tiers. **Pokémon**
+has Profile, Compare and Matchup. **Teams** has Top Teams, Archetypes, Core
+Explorer and Players & Regions. **Builder** has Team Builder, and **Data**
+has Data & Sources. The section bar sticks to the top of the page, and on
+phones it becomes a bottom navigation bar. The KPI strip shows on Meta
+only. View buttons keep the `.tab-btn[data-tab]` contract, so scripts that
+click a tab still work. Every Pokémon picker (Profile, Compare, Core
+Explorer, Matchup) carries a type-ahead search with sprites
+(`attachPokemonCombobox`), and `/` jumps to the Profile search.
+
+- **Tier List** bands Pokémon by usage share in the selected regulation
+  (S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%), each with a win-rate chip coloured
+  only when the 95% Wilson interval sits clearly above or below 50%.
+  Clicking a Pokémon opens its profile.
+- **Profile** now shows base stats as bars against the legal pool's median
+  and a **Most common set** card: the modal item, ability and nature
+  (`pokemon_nature_usage`) and top four moves, each counted separately,
+  with the sample size, a small-sample warning under 30 team sheets, and a
+  "Copy for Showdown" button.
+
+The notes below describe each view's contents from earlier passes. Where
+they mention the Usage tab's Regulation filter, that filter has been
+replaced by the page-wide Regulation selector.
+
 The page is a single scrolling KPI row plus eight tabs (client-side,
 vanilla JS — no routing library, no page reload). The competitive-UX
 redesign pass removed Archetypes and Regulations, added Matchup and Top
