@@ -2439,6 +2439,33 @@
   }
   setupRegulationSelector();
 
+  // Theme toggle: Auto (follow the OS) -> Light -> Dark. The choice is a
+  // per-browser convenience in localStorage; the inline script in <head>
+  // applies it before first paint.
+  function setupThemeToggle() {
+    var button = document.getElementById("theme-toggle");
+    if (!button) return;
+    var order = ["auto", "light", "dark"];
+    var labels = { auto: "Theme: Auto", light: "Theme: Light", dark: "Theme: Dark" };
+    var current = document.documentElement.getAttribute("data-theme") || "auto";
+    function apply(theme) {
+      current = theme;
+      if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", theme);
+      button.textContent = labels[theme];
+      try {
+        localStorage.setItem("dashboard-theme", theme);
+      } catch (e) {
+        // Storage blocked (private mode): the choice lasts for this page only.
+      }
+    }
+    button.textContent = labels[current];
+    button.addEventListener("click", function () {
+      apply(order[(order.indexOf(current) + 1) % order.length]);
+    });
+  }
+  setupThemeToggle();
+
   // Overview reads only DATA.kpis, which is inlined — it renders with no
   // network round-trip, so the landing view is never waiting on data.json.
   registerTab("overview", setupOverview, { needsMarts: false });

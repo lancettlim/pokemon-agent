@@ -39,6 +39,24 @@ color, spacing, or radius value that already has a token — add one instead.
 | `--type-<name>` (18) | see below | Per-type accent color, one per Pokémon type |
 | `--type-unknown` | `#6B7280` | Fallback when a type is absent or unrecognized |
 
+### Dark theme
+
+Every color token above has a dark value, defined twice in
+`templates/index.html.jinja`: under `@media (prefers-color-scheme: dark)`
+for `:root:not([data-theme="light"])`, and under `:root[data-theme="dark"]`.
+The header's Theme button cycles Auto → Light → Dark and stores the choice
+in `localStorage` (`dashboard-theme`). A small inline script in `<head>`
+applies it before first paint. `--navy` is the primary *text* token in
+both themes (light text in dark mode), so text, borders and the stat-bar
+median tick follow it automatically. Type colors are not redefined: they
+are accents on borders and pills and read on both backgrounds. A new
+component must use tokens for surfaces and text (`var(--surface)`, not
+`#fff`) or it will glare in dark mode. White text on a colored fill (an
+active pill, a primary button) is fine in both.
+
+Keyboard focus always shows a 3px `--blue` ring (`:focus-visible`), and
+`prefers-reduced-motion` turns off transitions and animations.
+
 ### Type color accents
 
 The 18 `--type-*` tokens are **not** authored in the stylesheet. They are
