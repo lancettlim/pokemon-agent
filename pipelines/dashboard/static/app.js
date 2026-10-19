@@ -33,16 +33,47 @@
   // ---------- regulation scope ----------
   // Every regulation-sensitive mart carries a regulation_scope column with
   // one partition per regulation plus "all" (docs/upgrade-plan-2026q4.md,
-  // A3). The page shows exactly one scope, chosen once at load from ?reg=
-  // (so a link can point at "M-B"), else the regulation in force on the
-  // viewer's date, else the build's default. Changing it reloads the page
-  // (see setupRegulationSelector) rather than re-rendering live tabs.
+  // A3). The page shows exactly one scope, chosen once at load. Changing it
+  // reloads the page (see setupRegulationSelector) rather than re-rendering
+  // live tabs.
+  //
+  // The order (docs/upgrade-plan-2027q1.md, U3):
+  //   1. ?reg= in the link.
+  //   2. The viewer's last choice, but only if it was made while the same
+  //      regulation was in force as today. A choice of M-C made in October
+  //      must not keep someone on M-C after M-D starts.
+  //   3. The regulation in force, once it has MIN_DEFAULT_SCOPE_TEAMS teams.
+  //      Before that (the first week of a new set), the previous regulation,
+  //      with a banner saying so (renderRolloverBanner).
+  //   4. The newest regulation with data, then the build's default.
   var SCOPE_PARAM = "reg";
   var SCOPE_STORAGE_KEY = "dashboard-regulation";
   var ALL_SCOPE = "all";
+  var MIN_DEFAULT_SCOPE_TEAMS = DATA.min_default_scope_teams || 300;
+  var TODAY_ISO = new Date().toISOString().slice(0, 10);
+  var rolloverNotice = null;
+
+  function regulationsWithData() {
+    var byScope = DATA.kpis_by_scope || {};
+    return (DATA.regulations || []).filter(function (r) {
+      return byScope[r.regulation_code];
+    });
+  }
+
+  function readRememberedScope() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(SCOPE_STORAGE_KEY) || "null");
+      return saved && typeof saved === "object" && saved.code ? saved : null;
+    } catch (e) {
+      // A bare string from before U3 can't say when it was chosen, so it
+      // is ignored rather than trusted.
+      return null;
+    }
+  }
 
   function resolveRegulationScope() {
     var byScope = DATA.kpis_by_scope || {};
+    var inForce = regulationInForce(DATA.regulations, TODAY_ISO);
     var requested = null;
     try {
       requested = new URLSearchParams(window.location.search).get(SCOPE_PARAM);
@@ -52,15 +83,33 @@
     if (requested && byScope[requested]) return requested;
     // Hosts that don't pass the query string through (a Claude artifact
     // frame) fall back to the viewer's last choice in this browser.
-    var remembered = null;
-    try {
-      remembered = localStorage.getItem(SCOPE_STORAGE_KEY);
-    } catch (e) {
-      remembered = null;
+    var remembered = readRememberedScope();
+    if (
+      remembered && byScope[remembered.code] && inForce &&
+      remembered.in_force === inForce.regulation_code
+    ) {
+      return remembered.code;
     }
-    if (remembered && byScope[remembered]) return remembered;
-    var inForce = regulationInForce(DATA.regulations, new Date().toISOString().slice(0, 10));
-    if (inForce && byScope[inForce.regulation_code]) return inForce.regulation_code;
+    var withData = regulationsWithData();
+    if (inForce) {
+      var kpis = byScope[inForce.regulation_code];
+      if (kpis && (kpis.team_count || 0) >= MIN_DEFAULT_SCOPE_TEAMS) return inForce.regulation_code;
+      var earlier = withData.filter(function (r) {
+        return r.start_date < inForce.start_date;
+      });
+      if (earlier.length) {
+        var shown = earlier[earlier.length - 1];
+        rolloverNotice = {
+          in_force: inForce,
+          shown: shown,
+          team_count: kpis ? kpis.team_count || 0 : 0,
+          has_data: !!kpis,
+        };
+        return shown.regulation_code;
+      }
+      if (kpis) return inForce.regulation_code;
+    }
+    if (withData.length) return withData[withData.length - 1].regulation_code;
     return DATA.default_scope || ALL_SCOPE;
   }
 
@@ -209,6 +258,24 @@
     });
   }
 
+  // fillSelect for options whose value differs from their label (a
+  // pokemon_key value with a display-name label). pairs: [{value, label}].
+  function fillSelectPairs(select, pairs, allLabel) {
+    select.innerHTML = "";
+    if (allLabel) {
+      var allOption = document.createElement("option");
+      allOption.value = "";
+      allOption.textContent = allLabel;
+      select.appendChild(allOption);
+    }
+    pairs.forEach(function (pair) {
+      var opt = document.createElement("option");
+      opt.value = pair.value;
+      opt.textContent = pair.label;
+      select.appendChild(opt);
+    });
+  }
+
   function renderRows(tbody, rows, rowHtmlFn) {
     tbody.innerHTML = "";
     rows.forEach(function (row, index) {
@@ -329,10 +396,13 @@
     );
   }
 
+  // A Pokémon's sprite and name as one link to its profile (U1), so
+  // middle-click and long-press work everywhere a Pokémon appears.
   function pokemonCell(pokemonKey, pokemonName) {
     return (
-      '<div class="cell-with-icon">' + spriteImg(pokemonKey) + "<span>" +
-      escapeHtml(pokemonName) + "</span></div>"
+      '<a class="cell-with-icon pokemon-link" href="' + pokemonHref(pokemonKey) + '">' +
+      spriteImg(pokemonKey) + "<span>" +
+      escapeHtml(pokemonName || pokemonNames[pokemonKey] || pokemonKey) + "</span></a>"
     );
   }
 
@@ -357,11 +427,11 @@
           // composition still reads as six Pokémon rather than silently
           // shrinking to five.
           return (
-            '<span class="team-comp-slot" title="' +
+            '<a class="team-comp-slot" href="' + pokemonHref(key) + '" title="' +
             escapeHtml(pokemonNames[key] || key) +
             '">' +
             (img || '<span class="team-comp-blank"></span>') +
-            "</span>"
+            "</a>"
           );
         })
         .join("") +
@@ -539,7 +609,15 @@
               ? sprites[opts.keyFn(row)]
               : null
           : null;
-      var tile = document.createElement("div");
+      // A Pokémon-keyed tile is a link to that Pokémon (U1) unless it holds
+      // its own links (a team composition) or opts.hrefFn says otherwise.
+      var href = opts.hrefFn
+        ? opts.hrefFn(row)
+        : opts.keyFn && iconHtml == null && opts.link !== false
+          ? pokemonHref(opts.keyFn(row))
+          : null;
+      var tile = document.createElement(href ? "a" : "div");
+      if (href) tile.href = href;
       tile.className = "grid-6xn-tile" + (i === 0 && opts.showLeader !== false ? " is-leader" : "");
       // Type accent: a left-edge bar in the Pokémon's own type colors, on
       // tiles whose row carries type data. Purely additive — a row without
@@ -640,11 +718,16 @@
   // opts.needsMarts === false: renders from the inline payload alone.
   // opts.extraMarts: on-demand marts (DATA.mart_files.on_demand) the tab
   // reads beyond the core and regulation files.
+  // opts.onRoute(route): called once the tab is ready, and again on every
+  // later route change while it is in view (Back/Forward, a pasted link),
+  // so the tab can show the Pokémon/event/sub-tab the route names.
   var tabExtraMarts = {};
+  var tabReady = {};
   function registerTab(tabId, initFn, opts) {
     tabInitializers[tabId] = initFn;
     tabNeedsMarts[tabId] = !(opts && opts.needsMarts === false);
     tabExtraMarts[tabId] = (opts && opts.extraMarts) || [];
+    if (opts && opts.onRoute) routeHandlers[tabId] = opts.onRoute;
     // A tab registered after the page already opened on it (a #matchup
     // link, with matchup.js loading after app.js) initialises now.
     if (activeTabId === tabId) initTab(tabId);
@@ -661,6 +744,21 @@
   // (registerTab's extraMarts). Each file is fetched at most once.
   var shardPromises = {};
 
+  // The shard files omit display-name columns (build.py's
+  // _write_mart_shards); each row gets them back from the inline
+  // pokemon_key -> name map, so every view can keep reading
+  // row.pokemon_name.
+  function restoreNames(rows) {
+    var pairs = (DATA.mart_files && DATA.mart_files.name_fields) || [];
+    (rows || []).forEach(function (row) {
+      pairs.forEach(function (pair) {
+        var key = row[pair[0]];
+        if (key && row[pair[1]] === undefined) row[pair[1]] = pokemonNames[key] || key;
+      });
+    });
+    return rows;
+  }
+
   function fetchShard(path) {
     if (!shardPromises[path]) {
       shardPromises[path] = fetch(path)
@@ -672,7 +770,7 @@
           // Mutated in place, never reassigned: matchup.js and teams.js hold
           // a reference to this same object via window.DashboardApp.marts.
           Object.keys(loaded || {}).forEach(function (name) {
-            marts[name] = applyRegulationScope(loaded[name]);
+            marts[name] = restoreNames(applyRegulationScope(loaded[name]));
           });
           return marts;
         })
@@ -716,70 +814,279 @@
     panel.insertBefore(box, panel.firstChild);
   }
 
-  // Two-level navigation (docs/upgrade-plan-2026q4.md, B2): five section
-  // buttons, each owning a row of view buttons (.tab-btn[data-section]).
-  // Only the active section's row shows, and only when it has more than
-  // one view; the KPI strip shows on Meta only. The open view lives in the
-  // URL hash (#usage), so a link opens the same view and the regulation
-  // selector's reload keeps it. Each section remembers its last view.
-  function setupTabs(onActivate) {
-    var buttons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
-    var panels = document.querySelectorAll(".tab-panel");
-    var sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-btn"));
+  // ---------- routing (docs/upgrade-plan-2027q1.md, U1) ----------
+  // The whole view state lives in the hash, so Back, Forward and pasted
+  // links all route:
+  //   #/pokemon/garchomp/moves   #/compare/garchomp,kingambit
+  //   #/matchup/rillaboom/sneasler   #/teams/top?tier=regional
+  //   #/event/<event_id>   #/player/<player_id>   #/builder/<team>
+  // ?reg= in the query string stays the regulation. A route is
+  // {tab, args, query}: the tab is the panel shown, args are its path
+  // segments after the head. Navigating between views pushes a history
+  // entry; a tab refining its own view (a filter, a sub-tab) replaces the
+  // current one, so Back always means "the previous view".
+  var ROUTE_HEADS = {
+    overview: "overview",
+    tiers: "tiers",
+    usage: "usage",
+    "speed-tiers": "speed",
+    "pokemon-profile": "pokemon",
+    compare: "compare",
+    matchup: "matchup",
+    "top-teams": "teams",
+    events: "events",
+    event: "event",
+    archetypes: "archetypes",
+    "core-explorer": "cores",
+    players: "players",
+    player: "player",
+    "team-builder": "builder",
+    "data-sources": "data",
+  };
+  var TAB_BY_HEAD = {};
+  Object.keys(ROUTE_HEADS).forEach(function (tab) {
+    TAB_BY_HEAD[ROUTE_HEADS[tab]] = tab;
+  });
+  var DEFAULT_TAB = "overview";
+
+  // Commas and dots are part of route segments (#/compare/a,b and the
+  // Builder's #/builder/rillaboom.1,...), so they stay readable.
+  function encodeSegment(value) {
+    return encodeURIComponent(String(value)).replace(/%2C/gi, ",");
+  }
+
+  function parseRoute(hash) {
+    var raw = String(hash || "").replace(/^#/, "");
+    var query = {};
+    var queryIndex = raw.indexOf("?");
+    if (queryIndex >= 0) {
+      new URLSearchParams(raw.slice(queryIndex + 1)).forEach(function (value, key) {
+        query[key] = value;
+      });
+      raw = raw.slice(0, queryIndex);
+    }
+    if (raw.charAt(0) !== "/") {
+      // Pre-routing links were bare tab ids (#usage); they still open.
+      if (raw && ROUTE_HEADS[raw]) return { tab: raw, args: [], query: query, legacy: true };
+      return null;
+    }
+    var segments = raw.slice(1).split("/").filter(Boolean).map(function (part) {
+      try {
+        return decodeURIComponent(part);
+      } catch (e) {
+        return part;
+      }
+    });
+    var tab = TAB_BY_HEAD[segments[0]];
+    if (!tab) return null;
+    return { tab: tab, args: segments.slice(1), query: query };
+  }
+
+  function routeHash(tab, args, query) {
+    var parts = (args || []).filter(function (a) {
+      return a !== null && a !== undefined && a !== "";
+    });
+    var hash = "#/" + (ROUTE_HEADS[tab] || ROUTE_HEADS[DEFAULT_TAB]) +
+      (parts.length ? "/" + parts.map(encodeSegment).join("/") : "");
+    var keys = Object.keys(query || {}).filter(function (k) {
+      return query[k] !== null && query[k] !== undefined && query[k] !== "";
+    });
+    if (keys.length) {
+      hash += "?" + keys.map(function (k) {
+        return encodeURIComponent(k) + "=" + encodeSegment(query[k]);
+      }).join("&");
+    }
+    return hash;
+  }
+
+  function pokemonHref(key) {
+    return routeHash("pokemon-profile", [key]);
+  }
+
+  // Before routing, Compare and the Core Explorer kept their state in the
+  // query string (?tab=compare&a=..&b=..). Those links are rewritten to
+  // their routes once, at load; ?reg= is kept.
+  function legacyQueryRoute() {
+    var params;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch (e) {
+      return null;
+    }
+    var tab = params.get("tab");
+    if (!tab) return null;
+    var route = null;
+    if (tab === "compare") {
+      route = routeHash("compare", [params.get("a") && params.get("b") ? params.get("a") + "," + params.get("b") : ""]);
+    } else if (tab === "core-explorer") {
+      route = routeHash("core-explorer", [params.get("core"), params.get("size")]);
+    } else if (ROUTE_HEADS[tab]) {
+      route = routeHash(tab, []);
+    }
+    ["tab", "a", "b", "core", "size"].forEach(function (k) {
+      params.delete(k);
+    });
+    var search = params.toString();
+    return { search: search ? "?" + search : "", hash: route };
+  }
+
+  // History URLs are always absolute paths: a fragment-only URL ("#/x")
+  // would silently keep whatever query string the page has.
+  function urlWithHash(search, hash) {
+    return window.location.pathname + search + hash;
+  }
+
+  var currentRoute = { tab: DEFAULT_TAB, args: [], query: {} };
+  var appliedHash = null;
+  var lastHashByTab = {};
+  var routeHandlers = {};
+
+  function sameArgs(a, b) {
+    return JSON.stringify(a || []) === JSON.stringify(b || []);
+  }
+
+  // Five sections, each owning a row of view buttons (.tab-btn[data-section]).
+  // Only the active section's row shows, and only when it has more than one
+  // view; the KPI strip shows on Meta only. Detail views (an event, a
+  // player) carry their section on the panel itself (data-section).
+  var tabButtons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
+  var tabPanels = Array.prototype.slice.call(document.querySelectorAll(".tab-panel"));
+  var sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-btn"));
+  var lastTabBySection = {};
+  var onTabActivate = null;
+
+  function sectionOf(tabId) {
+    var panel = tabPanels.filter(function (p) { return p.getAttribute("data-panel") === tabId; })[0];
+    if (panel && panel.getAttribute("data-section")) return panel.getAttribute("data-section");
+    var btn = tabButtons.filter(function (b) { return b.getAttribute("data-tab") === tabId; })[0];
+    return btn ? btn.getAttribute("data-section") : null;
+  }
+
+  function showTab(tabId) {
+    var section = sectionOf(tabId);
+    var hasButton = tabButtons.some(function (b) { return b.getAttribute("data-tab") === tabId; });
+    if (hasButton) lastTabBySection[section] = tabId;
+    var inSection = 0;
     var tabRow = document.querySelector(".tabs");
+    tabButtons.forEach(function (btn) {
+      var mine = btn.getAttribute("data-section") === section;
+      btn.hidden = !mine;
+      if (mine) inSection += 1;
+      var selected = btn.getAttribute("data-tab") === tabId;
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      if (selected && btn.scrollIntoView && tabRow && tabRow.scrollWidth > tabRow.clientWidth) {
+        btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    });
+    if (tabRow) tabRow.hidden = inSection < 2;
+    sectionButtons.forEach(function (btn) {
+      if (btn.getAttribute("data-section") === section) btn.setAttribute("aria-current", "true");
+      else btn.removeAttribute("aria-current");
+    });
     var kpiStrip = document.getElementById("kpi-strip");
-    var lastTabBySection = {};
+    if (kpiStrip) kpiStrip.hidden = tabId !== "overview";
+    tabPanels.forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-panel") !== tabId;
+    });
+    if (onTabActivate) onTabActivate(tabId);
+  }
 
-    function sectionOf(tabId) {
-      var btn = buttons.filter(function (b) { return b.getAttribute("data-tab") === tabId; })[0];
-      return btn ? btn.getAttribute("data-section") : null;
-    }
+  // Hands a route to its tab once the tab is initialised (initTab), and
+  // again on every later route change while it stays in view.
+  function dispatchRoute(route) {
+    var handler = routeHandlers[route.tab];
+    if (!handler || !initialized[route.tab] || !tabReady[route.tab]) return;
+    handler(route);
+  }
 
-    function activate(tabId) {
-      var section = sectionOf(tabId);
-      lastTabBySection[section] = tabId;
-      var inSection = 0;
-      buttons.forEach(function (btn) {
-        var mine = btn.getAttribute("data-section") === section;
-        btn.hidden = !mine;
-        if (mine) inSection += 1;
-        btn.setAttribute("aria-selected", btn.getAttribute("data-tab") === tabId ? "true" : "false");
-      });
-      if (tabRow) tabRow.hidden = inSection < 2;
-      sectionButtons.forEach(function (btn) {
-        if (btn.getAttribute("data-section") === section) btn.setAttribute("aria-current", "true");
-        else btn.removeAttribute("aria-current");
-      });
-      if (kpiStrip) kpiStrip.hidden = section !== "meta";
-      panels.forEach(function (panel) {
-        panel.hidden = panel.getAttribute("data-panel") !== tabId;
-      });
-      if (onActivate) onActivate(tabId);
-    }
+  function applyRoute(route) {
+    var tabChanged = route.tab !== currentRoute.tab;
+    currentRoute = route;
+    lastHashByTab[route.tab] = routeHash(route.tab, route.args, route.query);
+    showTab(route.tab);
+    if (!tabChanged || initialized[route.tab]) dispatchRoute(route);
+  }
 
-    function go(tabId) {
-      activate(tabId);
-      if (window.history && window.history.replaceState) {
-        window.history.replaceState(null, "", window.location.search + "#" + tabId);
+  function onLocationChange() {
+    if (window.location.hash === appliedHash) return;
+    var route = parseRoute(window.location.hash);
+    if (!route || route.legacy) {
+      // An unknown hash opens the default view; a legacy #tab link becomes
+      // its route, replacing (not adding) the history entry.
+      route = route || { tab: DEFAULT_TAB, args: [], query: {} };
+      var canonical = routeHash(route.tab, route.args, route.query);
+      if (window.location.hash && window.history.replaceState) {
+        window.history.replaceState(window.history.state, "", urlWithHash(window.location.search, canonical));
       }
     }
+    appliedHash = window.location.hash;
+    applyRoute(route);
+  }
 
-    buttons.forEach(function (btn) {
+  // Navigates to a view (a history entry). opts.replace rewrites the current
+  // entry instead.
+  function navigate(hash, opts) {
+    opts = opts || {};
+    if (hash === window.location.hash) {
+      onLocationChange();
+      return;
+    }
+    var url = urlWithHash(window.location.search, hash);
+    if (window.history && window.history.pushState) {
+      if (opts.replace) window.history.replaceState(null, "", url);
+      else window.history.pushState(null, "", url);
+      onLocationChange();
+    } else {
+      window.location.hash = hash;
+    }
+    if (!opts.keepScroll && !opts.replace) window.scrollTo(0, 0);
+  }
+
+  // For a tab recording a change it has already rendered (a new Pokémon
+  // picked, a filter): updates the address bar without re-dispatching.
+  // opts.push adds a history entry, for changes a reader would expect Back
+  // to undo (another Pokémon); filters and sub-tabs replace.
+  function setRoute(tab, args, query, opts) {
+    opts = opts || {};
+    if (tab !== currentRoute.tab) return;
+    var hash = routeHash(tab, args, query);
+    lastHashByTab[tab] = hash;
+    if (hash === window.location.hash) return;
+    currentRoute = parseRoute(hash);
+    appliedHash = hash;
+    var url = urlWithHash(window.location.search, hash);
+    if (window.history && window.history.pushState) {
+      if (opts.push) window.history.pushState(null, "", url);
+      else window.history.replaceState(null, "", url);
+    }
+  }
+
+  function openTab(tabId) {
+    navigate(lastHashByTab[tabId] || routeHash(tabId, []));
+  }
+
+  function setupNavigation(onActivate) {
+    onTabActivate = onActivate;
+    tabButtons.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        go(btn.getAttribute("data-tab"));
+        openTab(btn.getAttribute("data-tab"));
       });
     });
     sectionButtons.forEach(function (btn) {
       btn.addEventListener("click", function () {
         var section = btn.getAttribute("data-section");
-        var first = buttons.filter(function (b) { return b.getAttribute("data-section") === section; })[0];
+        var first = tabButtons.filter(function (b) { return b.getAttribute("data-section") === section; })[0];
         var target = lastTabBySection[section] || (first && first.getAttribute("data-tab"));
-        if (target) go(target);
-        window.scrollTo(0, 0);
+        if (target) openTab(target);
       });
     });
-    var fromHash = window.location.hash.replace(/^#/, "");
-    activate(sectionOf(fromHash) ? fromHash : "overview");
+    window.addEventListener("popstate", onLocationChange);
+    window.addEventListener("hashchange", onLocationChange);
+    var legacy = legacyQueryRoute();
+    if (legacy && window.history.replaceState) {
+      window.history.replaceState(null, "", urlWithHash(legacy.search, legacy.hash || window.location.hash));
+    }
+    onLocationChange();
   }
 
   // ---------- sub-tabs ----------
@@ -789,11 +1096,22 @@
   // rate-leaders, Pokémon Profile's Items/Ability/Moves/Team Cores.
   // buttons/panels are NodeLists or arrays; buttons carry data-subtab,
   // panels carry data-subpanel, matched by that id. Defaults to the first
-  // button. Distinct from setupTabs (the page's nine top-level tabs).
-  function setupSubTabs(buttons, panels, onActivate) {
+  // button.
+  //
+  // opts.route = {tab, argIndex} puts the open sub-tab in the URL: each
+  // button's data-route (or its data-subtab id) becomes route arg
+  // argIndex, a click replaces the current history entry, and the returned
+  // object's fromRoute(route) opens whichever sub-tab a route names.
+  function setupSubTabs(buttons, panels, onActivate, opts) {
     buttons = Array.prototype.slice.call(buttons);
     panels = Array.prototype.slice.call(panels);
+    opts = opts || {};
+    var activeId = null;
+    function slugOf(btn) {
+      return btn.getAttribute("data-route") || btn.getAttribute("data-subtab");
+    }
     function activate(id) {
+      activeId = id;
       buttons.forEach(function (btn) {
         btn.setAttribute("aria-selected", btn.getAttribute("data-subtab") === id ? "true" : "false");
       });
@@ -802,12 +1120,35 @@
       });
       if (onActivate) onActivate(id);
     }
+    function idForSlug(slug) {
+      var match = buttons.filter(function (btn) { return slugOf(btn) === slug; })[0];
+      return match ? match.getAttribute("data-subtab") : null;
+    }
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
         activate(btn.getAttribute("data-subtab"));
+        if (opts.route && currentRoute.tab === opts.route.tab) {
+          var args = currentRoute.args.slice();
+          while (args.length < opts.route.argIndex) args.push(opts.route.fill ? opts.route.fill(args.length) : "");
+          args[opts.route.argIndex] = btn === buttons[0] ? "" : slugOf(btn);
+          setRoute(opts.route.tab, args, currentRoute.query);
+        }
       });
     });
-    if (buttons.length) activate(buttons[0].getAttribute("data-subtab"));
+    var initial = opts.route && currentRoute.tab === opts.route.tab
+      ? idForSlug(currentRoute.args[opts.route.argIndex])
+      : null;
+    if (buttons.length) activate(initial || buttons[0].getAttribute("data-subtab"));
+    return {
+      fromRoute: function (route) {
+        var id = idForSlug(route.args[opts.route.argIndex]) ||
+          (buttons[0] && buttons[0].getAttribute("data-subtab"));
+        if (id && id !== activeId) activate(id);
+      },
+      active: function () {
+        return activeId;
+      },
+    };
   }
 
   // ---------- per-tab setup (each called once, on first activation) ----------
@@ -822,9 +1163,10 @@
         deltaHtml = '<span class="mover-delta ' + (delta > 0 ? "is-up" : "is-down") + '">' +
           sign + (delta * 100).toFixed(1) + " pts</span>";
       }
-      return "<li>" + spriteImg(r.pokemon_key, ICON_SIZES.sm) +
+      return '<li><a class="mover-link" href="' + pokemonHref(r.pokemon_key) + '">' +
+        spriteImg(r.pokemon_key, ICON_SIZES.sm) +
         '<span class="mover-name">' + escapeHtml(r.pokemon_name || r.pokemon_key) + "</span>" +
-        '<span class="mover-share">' + formatPercent(r.usage_share) + "</span>" + deltaHtml + "</li>";
+        '<span class="mover-share">' + formatPercent(r.usage_share) + "</span>" + deltaHtml + "</a></li>";
     }).join("") + "</ol>";
   }
 
@@ -930,33 +1272,19 @@
           wrHtml = '<span class="tier-wr' + cls + '" title="' + win.record_count + ' recorded results">' +
             formatPercent(win.win_rate) + "</span>";
         }
-        return '<button type="button" class="tier-chip" data-pokemon="' + escapeHtml(r.pokemon_name) + '">' +
+        return '<a class="tier-chip" href="' + pokemonHref(r.pokemon_key) + '">' +
           spriteImg(r.pokemon_key, ICON_SIZES.sm) + escapeHtml(r.pokemon_name) +
-          ' <span class="set-share">' + formatPercent(r.usage_share) + "</span>" + wrHtml + "</button>";
+          ' <span class="set-share">' + formatPercent(r.usage_share) + "</span>" + wrHtml + "</a>";
       }).join("");
       return '<div class="tier-row"><div class="tier-label tier-' + tier.id + '">' + tier.label +
         "<small>" + members.length + "</small></div>" +
         '<div class="tier-members">' + chips + "</div></div>";
     }).join("") || '<p class="empty-state">No usage data for this regulation yet.</p>';
-    body.addEventListener("click", function (e) {
-      var chip = e.target.closest(".tier-chip");
-      if (!chip) return;
-      openProfile(chip.getAttribute("data-pokemon"));
-    });
   }
 
-  // Opens the Pokémon Profile on a given display name (the profile
-  // select's option values), from any view.
-  function openProfile(pokemonName) {
-    var tab = document.querySelector('.tab-btn[data-tab="pokemon-profile"]');
-    if (tab) tab.click();
-    ensureData().then(function () {
-      var select = document.getElementById("pokemon-profile-filter");
-      if (!select) return;
-      select.value = pokemonName;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-      window.scrollTo(0, 0);
-    });
+  // Opens a Pokémon's profile from any view (a history entry, like a link).
+  function openProfile(pokemonKey) {
+    navigate(pokemonHref(pokemonKey));
   }
 
   function setupUsage() {
@@ -1090,11 +1418,14 @@
     setupUsageSuccess();
     setupUsageTrends();
 
-    setupSubTabs(
+    usageSubTabs = setupSubTabs(
       document.querySelectorAll('.tab-panel[data-panel="usage"] .subtab-btn'),
-      document.querySelectorAll('.tab-panel[data-panel="usage"] .subtab-panel')
+      document.querySelectorAll('.tab-panel[data-panel="usage"] .subtab-panel'),
+      null,
+      { route: { tab: "usage", argIndex: 0 } }
     );
   }
+  var usageSubTabs = null;
 
   // Success subtab (backlog #8's pokemon_placement_weighted_usage): the
   // "popular vs. successful" split. rank_movement is computed here rather
@@ -1323,10 +1654,12 @@
     var sortedProfiles = profileRows.slice().sort(function (a, b) {
       return (b.usage_share || 0) - (a.usage_share || 0);
     });
-    fillSelect(
+    // Option values are pokemon_keys, the same id the route carries
+    // (#/pokemon/<key>); the label is the display name.
+    fillSelectPairs(
       select,
       sortedProfiles.map(function (r) {
-        return r.pokemon_name;
+        return { value: r.pokemon_key, label: r.pokemon_name };
       }),
       "Select a Pokémon…"
     );
@@ -1492,9 +1825,9 @@
       }).join("") + '<p class="stat-legend">Tick marks the median across the legal pool.</p></div>';
     }
 
-    function topRow(rows, name) {
+    function topRow(rows, key) {
       return rows
-        .filter(function (r) { return r.pokemon_name === name; })
+        .filter(function (r) { return r.pokemon_key === key; })
         .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
     }
 
@@ -1509,10 +1842,10 @@
     // never have appeared together. Labelled as such, and there is no EV
     // line because no source publishes spreads.
     function commonSetHtml(profile) {
-      var item = topRow(itemRows, profile.pokemon_name)[0];
-      var ability = topRow(abilityRows, profile.pokemon_name)[0];
-      var nature = topRow(natureRows, profile.pokemon_name)[0];
-      var moves = topRow(moveRows, profile.pokemon_name).slice(0, 4);
+      var item = topRow(itemRows, profile.pokemon_key)[0];
+      var ability = topRow(abilityRows, profile.pokemon_key)[0];
+      var nature = topRow(natureRows, profile.pokemon_key)[0];
+      var moves = topRow(moveRows, profile.pokemon_key).slice(0, 4);
       if (!item && !ability && !moves.length) return "";
       var paste = [showdownName(profile.pokemon_key) + (item ? " @ " + item.item_name : "")];
       if (ability) paste.push("Ability: " + ability.ability);
@@ -1522,7 +1855,7 @@
         return "<dt>" + label + "</dt><dd>" + escapeHtml(value) +
           (share != null ? ' <span class="set-share">' + formatPercent(share) + "</span>" : "") + "</dd>";
       }
-      var slots = item ? itemRows.filter(function (r) { return r.pokemon_name === profile.pokemon_name; })
+      var slots = item ? itemRows.filter(function (r) { return r.pokemon_key === profile.pokemon_key; })
         .reduce(function (sum, r) { return sum + (r.usage_count || 0); }, 0) : 0;
       var sampleNote = slots
         ? '<p class="set-sample' + (slots < MIN_SET_SAMPLE ? " is-thin" : "") + '">From ' + slots.toLocaleString() +
@@ -1549,9 +1882,9 @@
 
     var setEl = document.getElementById("pokemon-profile-set");
 
-    function render(chosenName) {
+    function render(chosenKey) {
       var profile = sortedProfiles.filter(function (r) {
-        return r.pokemon_name === chosenName;
+        return r.pokemon_key === chosenKey;
       })[0];
 
       if (statsEl) {
@@ -1613,10 +1946,10 @@
         }
       }
 
-      var items = chosenName
+      var items = chosenKey
         ? itemRows
             .filter(function (r) {
-              return r.pokemon_name === chosenName;
+              return r.pokemon_key === chosenKey;
             })
             .sort(function (a, b) {
               return a.usage_rank - b.usage_rank;
@@ -1638,10 +1971,10 @@
         },
       });
 
-      var abilities = chosenName
+      var abilities = chosenKey
         ? abilityRows
             .filter(function (r) {
-              return r.pokemon_name === chosenName;
+              return r.pokemon_key === chosenKey;
             })
             .sort(function (a, b) {
               return a.usage_rank - b.usage_rank;
@@ -1660,10 +1993,10 @@
         },
       });
 
-      var moves = chosenName
+      var moves = chosenKey
         ? moveRows
             .filter(function (r) {
-              return r.pokemon_name === chosenName;
+              return r.pokemon_key === chosenKey;
             })
             .sort(function (a, b) {
               return a.usage_rank - b.usage_rank;
@@ -1704,8 +2037,27 @@
       });
     }
 
+    var profileKeys = {};
+    sortedProfiles.forEach(function (r) {
+      profileKeys[r.pokemon_key] = true;
+    });
+    var subTabs = setupSubTabs(
+      document.querySelectorAll('.tab-panel[data-panel="pokemon-profile"] .subtab-btn'),
+      document.querySelectorAll('.tab-panel[data-panel="pokemon-profile"] .subtab-panel'),
+      null,
+      {
+        route: {
+          tab: "pokemon-profile",
+          argIndex: 1,
+          fill: function () { return select.value; },
+        },
+      }
+    );
+
+    // Picking another Pokémon is a navigation (Back returns to the last one).
     select.addEventListener("change", function () {
       render(select.value);
+      setRoute("pokemon-profile", [select.value], {}, { push: true });
     });
     if (coreMetricSelect) {
       coreMetricSelect.addEventListener("change", function () {
@@ -1717,14 +2069,20 @@
         render(select.value);
       });
     }
-    if (sortedProfiles.length) select.value = sortedProfiles[0].pokemon_name;
-    render(select.value);
 
-    setupSubTabs(
-      document.querySelectorAll('.tab-panel[data-panel="pokemon-profile"] .subtab-btn'),
-      document.querySelectorAll('.tab-panel[data-panel="pokemon-profile"] .subtab-panel')
-    );
+    profileRoute = function (route) {
+      var key = route.args[0];
+      if (!key || !profileKeys[key]) key = sortedProfiles.length ? sortedProfiles[0].pokemon_key : "";
+      if (key !== select.value || !statsEl.innerHTML) {
+        select.value = key;
+        select.dispatchEvent(new Event("pokemon-sync"));
+        render(key);
+      }
+      subTabs.fromRoute(route);
+    };
   }
+
+  var profileRoute = function () {};
 
   function setupDetectedArchetypes() {
     var rows = (marts.detected_archetype_summary || [])
@@ -1877,11 +2235,14 @@
   function setupPlayers() {
     setupPlayerRegions();
     setupPlayerSignatures();
-    setupSubTabs(
+    playersSubTabs = setupSubTabs(
       document.querySelectorAll('.tab-panel[data-panel="players"] .subtab-btn'),
-      document.querySelectorAll('.tab-panel[data-panel="players"] .subtab-panel')
+      document.querySelectorAll('.tab-panel[data-panel="players"] .subtab-panel'),
+      null,
+      { route: { tab: "players", argIndex: 0 } }
     );
   }
+  var playersSubTabs = null;
 
   function setupPlayerRegions() {
     var countryRows = marts.pokemon_usage_by_country || [];
@@ -2216,8 +2577,9 @@
 
     var subtabs = document.querySelectorAll('[data-panel="data-sources"] .subtab-btn');
     var subpanels = document.querySelectorAll('[data-panel="data-sources"] .subtab-panel');
-    setupSubTabs(subtabs, subpanels);
+    dataSubTabs = setupSubTabs(subtabs, subpanels, null, { route: { tab: "data-sources", argIndex: 0 } });
   }
+  var dataSubTabs = null;
 
   // ---------- Pokémon search combobox ----------
   // Type-ahead search with sprites, layered over an existing Pokémon
@@ -2372,6 +2734,9 @@
       input.value = selectedText();
     });
     select.addEventListener("change", syncInput);
+    // A route sets the select without a "change" (which would record a new
+    // history entry); "pokemon-sync" just refreshes the label.
+    select.addEventListener("pokemon-sync", syncInput);
     // Tabs fill and preselect their selects after setup; poll the label
     // cheaply until the first real selection appears.
     var tries = 0;
@@ -2399,8 +2764,7 @@
     var tag = (document.activeElement && document.activeElement.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
     e.preventDefault();
-    var profileTab = document.querySelector('.tab-btn[data-tab="pokemon-profile"]');
-    if (profileTab) profileTab.click();
+    if (currentRoute.tab !== "pokemon-profile") openTab("pokemon-profile");
     setTimeout(function () {
       var input = document.querySelector('[data-panel="pokemon-profile"] .combo-input');
       if (input) input.focus();
@@ -2413,12 +2777,41 @@
   // dashboard once sat on Reg M-A data for four months after M-C began).
   var STALE_AFTER_DAYS = 21;
 
+  // The regulation whose [start_date, end_date) holds todayIso; past every
+  // registered set, the latest one that has started (the next set hasn't
+  // been added to the registry yet). Mirrors data.py's regulation_in_force.
   function regulationInForce(regulations, todayIso) {
     var inForce = null;
+    var started = null;
     (regulations || []).forEach(function (r) {
       if (r.start_date <= todayIso && todayIso < r.end_date) inForce = r;
+      if (r.start_date <= todayIso) started = r;
     });
-    return inForce;
+    return inForce || started;
+  }
+
+  function shortRegulation(code) {
+    return code === ALL_SCOPE ? "All regulations" : "Reg " + String(code || "").toUpperCase();
+  }
+
+  // "Reg M-D started 2026-12-02. Not enough results yet; showing M-C.
+  // Switch to M-D →" (docs/upgrade-plan-2027q1.md, U3).
+  function renderRolloverBanner() {
+    var banner = document.getElementById("rollover-banner");
+    if (!banner || !rolloverNotice) return;
+    var inForce = rolloverNotice.in_force;
+    var html = escapeHtml(shortRegulation(inForce.regulation_code)) + " started " +
+      escapeHtml(inForce.start_date) + ". Not enough results yet" +
+      (rolloverNotice.has_data ? " (" + rolloverNotice.team_count.toLocaleString() + " teams)" : "") +
+      "; showing " + escapeHtml(shortRegulation(rolloverNotice.shown.regulation_code)) + ".";
+    if (rolloverNotice.has_data) {
+      var params = new URLSearchParams(window.location.search);
+      params.set(SCOPE_PARAM, inForce.regulation_code);
+      html += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) + '">Switch to ' +
+        escapeHtml(shortRegulation(inForce.regulation_code)) + " &rarr;</a>";
+    }
+    banner.innerHTML = html;
+    banner.hidden = false;
   }
 
   function renderStalenessBanner() {
@@ -2446,6 +2839,7 @@
     banner.hidden = false;
   }
   renderStalenessBanner();
+  renderRolloverBanner();
 
   // Header Regulation selector and the per-scope KPI rows the template
   // renders (one .kpi-row[data-scope] per scope; only the selected shows).
@@ -2457,8 +2851,18 @@
     if (!select) return;
     select.value = regulationScope;
     select.addEventListener("change", function () {
+      var inForce = regulationInForce(DATA.regulations, TODAY_ISO);
       try {
-        localStorage.setItem(SCOPE_STORAGE_KEY, select.value);
+        // Remembered with the regulation in force when it was made, so the
+        // next set's arrival overrides it (resolveRegulationScope, step 2).
+        localStorage.setItem(
+          SCOPE_STORAGE_KEY,
+          JSON.stringify({
+            code: select.value,
+            in_force: inForce ? inForce.regulation_code : null,
+            chosen_on: TODAY_ISO,
+          })
+        );
       } catch (e) {
         // Storage blocked: the ?reg= link below still carries the choice.
       }
@@ -2496,27 +2900,79 @@
   }
   setupThemeToggle();
 
+  // The header's ⋯ menu (U2): the theme toggle and the Data links.
+  function setupMoreMenu() {
+    var button = document.getElementById("more-menu-btn");
+    var panel = document.getElementById("more-menu-panel");
+    if (!button || !panel) return;
+    function setOpen(open) {
+      panel.hidden = !open;
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    button.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setOpen(panel.hidden);
+    });
+    panel.addEventListener("click", function (e) {
+      if (e.target.closest("a")) setOpen(false);
+    });
+    document.addEventListener("click", function (e) {
+      if (!panel.hidden && !e.target.closest(".more-menu")) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        button.focus();
+      }
+    });
+  }
+  setupMoreMenu();
+
   // Overview reads only DATA.kpis, which is inlined — it renders with no
   // network round-trip, so the landing view is never waiting on data.json.
   registerTab("overview", setupOverview, { needsMarts: false });
-  registerTab("data-sources", setupDataSources);
+  registerTab("data-sources", setupDataSources, {
+    onRoute: function (route) {
+      if (dataSubTabs) dataSubTabs.fromRoute(route);
+    },
+  });
   registerTab("tiers", setupTiers);
-  registerTab("usage", setupUsage);
-  registerTab("pokemon-profile", setupPokemonProfile, { extraMarts: ["pokemon_team_core_triple_usage"] });
+  registerTab("usage", setupUsage, {
+    onRoute: function (route) {
+      if (usageSubTabs) usageSubTabs.fromRoute(route);
+    },
+  });
+  registerTab("pokemon-profile", setupPokemonProfile, {
+    extraMarts: ["pokemon_team_core_triple_usage"],
+    onRoute: function (route) {
+      profileRoute(route);
+    },
+  });
   registerTab("archetypes", setupDetectedArchetypes);
   registerTab("speed-tiers", setupSpeedTiers);
-  registerTab("players", setupPlayers, { extraMarts: ["player_signature_pokemon"] });
+  registerTab("players", setupPlayers, {
+    extraMarts: ["player_signature_pokemon"],
+    onRoute: function (route) {
+      if (playersSubTabs) playersSubTabs.fromRoute(route);
+    },
+  });
+
+  function runInitializer(tabId) {
+    tabInitializers[tabId](currentRoute.tab === tabId ? currentRoute : null);
+    tabReady[tabId] = true;
+    if (currentRoute.tab === tabId) dispatchRoute(currentRoute);
+  }
 
   function initTab(tabId) {
     if (initialized[tabId] || !tabInitializers[tabId]) return;
     initialized[tabId] = true;
     if (!tabNeedsMarts[tabId]) {
-      tabInitializers[tabId]();
+      runInitializer(tabId);
       return;
     }
     ensureData(tabExtraMarts[tabId]).then(
       function () {
-        tabInitializers[tabId]();
+        runInitializer(tabId);
       },
       function (error) {
         // Un-mark so a retry (re-clicking the tab) can try the fetch again
@@ -2527,7 +2983,7 @@
     );
   }
 
-  setupTabs(function (tabId) {
+  setupNavigation(function (tabId) {
     activeTabId = tabId;
     initTab(tabId);
   });
@@ -2581,5 +3037,17 @@
     scopeLabel: scopeLabel,
     attachPokemonCombobox: attachPokemonCombobox,
     openProfile: openProfile,
+    fillSelectPairs: fillSelectPairs,
+    // Routing (U1): navigate() adds a history entry, setRoute() records a
+    // tab's own state change, routeHash() builds a link.
+    navigate: navigate,
+    setRoute: setRoute,
+    routeHash: routeHash,
+    pokemonHref: pokemonHref,
+    openTab: openTab,
+    currentRoute: function () {
+      return currentRoute;
+    },
+    shortRegulation: shortRegulation,
   };
 })();

@@ -797,6 +797,52 @@ stale. See `docs/backlog.md` #25-#27 for the full write-ups.
   Champions and was removed (backlog #10 reopened), following the same
   precedent as the stat-change leaderboard and legal-pool trend sections.
 
+## 2027 Q1 upgrade plan — "Built for players"
+
+The entries proposed in `docs/upgrade-plan-2027q1.md`, promoted here on
+acceptance (backlog → todo). Each names its plan item; the plan's Status
+table tracks sprint progress.
+
+- [x] Routing: pushState + popstate, full view state in the hash, legacy `#tab` redirects (U1).
+  `static/app.js`'s router maps `#/pokemon/<key>/<subtab>`,
+  `#/compare/<a>,<b>`, `#/matchup/<a>/<b>`, `#/teams/<view>`,
+  `#/cores/<key>[/triple]`, `#/usage/<view>`, `#/players/<view>` and
+  `#/data/<view>` to views; every Pokémon name, sprite, tile and tier chip
+  is a real link. Old `#usage` and `?tab=compare&a=&b=` links are rewritten
+  in place.
+- [x] Compact sticky header; status pills to footer; drop duplicate panel headers; events/teams KPI (U2).
+  Content now starts 114px from the top on desktop and 110px on a 390px
+  phone. The first KPI reads "5 events · 3,770 teams" from the new
+  `tournament_event_summary` mart.
+- [x] Regulation-in-force beats a stale remembered choice; thin-new-regulation fallback; rollover fixture test (U3).
+  A remembered regulation is kept only if it was chosen while the same
+  regulation was in force; a regulation in force with fewer than 300 teams
+  opens on the previous one with a banner (`data.py`'s
+  `default_scope_for` and `app.js`'s `resolveRegulationScope` apply the
+  same rule). Covered by `tests/unit/dashboard/test_data.py` and
+  `tests/browser/test_regulation_rollover.py` against a fixture M-D row.
+- [ ] Copy pass, glossary tooltips, denominators on every percentage (U4).
+- [ ] Shared sortable table component, adopted in Usage, Profile, Speed Tiers, Cores, Players (U5)
+- [ ] Type filter popover (U6); mobile sub-tab scroll cues, import moved to Builder (U7)
+- [x] Playwright route smoke test + payload budget in CI (U8).
+  `tests/browser/` builds the dashboard from synthetic marts, opens every
+  route at 1440px and 390px and fails on a console error or an empty
+  panel; it also covers Back/Forward, legacy links and the default view's
+  fetch count. The core payload (page, scripts, `core.json` and the default
+  regulation's shard) is held under 500KB compressed (448KB now). CI
+  installs Chromium for them.
+- [ ] `pokemon_set_variants` mart and real-set tabs on the profile (P1)
+- [ ] Pokémon hub v2: per-regulation trend, featuring teams, teammates, meta pressure (P2)
+- [ ] Calculator presets from real sets; "vs the meta" mode (P3)
+- [ ] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5)
+- [ ] Event pages and `pokemon_event_usage_vs_regulation` mart (C1)
+- [ ] Top Teams: record/placement headline, placement ranking, copy actions (C2)
+- [ ] Player pages (C3)
+- [ ] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4)
+- [ ] Publish 0.4.0 as a Release asset; update the release contract (D1)
+- [ ] Data section table cards and a generated data dictionary (D2)
+- [ ] Regulation rollover playbook and M-D dry run (D3)
+
 ## Release readiness (v1 definition of done)
 
 All release gates pass as of this writing (see

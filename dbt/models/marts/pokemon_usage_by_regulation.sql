@@ -39,15 +39,32 @@ joined as (
   left join regulation_usage
     on regulation_usage.pokemon_key = legal_by_regulation.pokemon_key
     and regulation_usage.regulation_code = legal_by_regulation.regulation_code
+),
+-- win_rate/record_count (docs/upgrade-plan-2027q1.md, P2): the same
+-- regulation's pokemon_win_rate_summary partition, so the Pokémon
+-- profile's per-regulation trend can show usage and win rate side by side
+-- with its sample size. Null where the Pokémon has no recorded results in
+-- that regulation.
+win as (
+  select regulation_scope as regulation_code, pokemon_key, win_rate, record_count
+  from {{ ref('pokemon_win_rate_summary') }}
+  where regulation_scope != 'all'
 )
 select
-  regulation_code,
-  pokemon_key,
-  usage_count,
+  joined.regulation_code,
+  joined.pokemon_key,
+  joined.usage_count,
   round(
-    usage_count::double / nullif(sum(usage_count) over (partition by regulation_code), 0),
+    joined.usage_count::double / nullif(sum(joined.usage_count) over (partition by joined.regulation_code), 0),
     4
   ) as usage_share,
-  row_number() over (partition by regulation_code order by usage_count desc, pokemon_key) as usage_rank
+  row_number() over (
+    partition by joined.regulation_code order by joined.usage_count desc, joined.pokemon_key
+  ) as usage_rank,
+  win.win_rate,
+  win.record_count
 from joined
-order by regulation_code, usage_count desc
+left join win
+  on win.regulation_code = joined.regulation_code
+  and win.pokemon_key = joined.pokemon_key
+order by joined.regulation_code, joined.usage_count desc

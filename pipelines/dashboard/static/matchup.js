@@ -182,9 +182,9 @@
     (marts.pokemon_matchup_summary || []).forEach(function (r) {
       summaryByKey[r.pokemon_key] = r;
     });
-    var byName = {};
+    var byKey = {};
     profileRows.forEach(function (r) {
-      byName[r.pokemon_name] = r;
+      byKey[r.pokemon_key] = r;
     });
 
     var attackerSelect = document.getElementById("matchup-attacker-select");
@@ -210,16 +210,15 @@
     var sortedProfiles = profileRows.slice().sort(function (a, b) {
       return (b.usage_share || 0) - (a.usage_share || 0);
     });
-    var names = sortedProfiles.map(function (r) {
-      return r.pokemon_name;
+    // Values are pokemon_keys, the ids #/matchup/<attacker>/<defender> carries.
+    var pairs = sortedProfiles.map(function (r) {
+      return { value: r.pokemon_key, label: r.pokemon_name };
     });
-    App.fillSelect(attackerSelect, names, "Select a Pokémon…");
-    App.fillSelect(defenderSelect, names, "Select a Pokémon…");
-    attackerSelect.removeChild(attackerSelect.firstChild); // no blank "Select a Pokémon…" for required pickers
-    defenderSelect.removeChild(defenderSelect.firstChild);
-    if (names.length) {
-      attackerSelect.value = names[0];
-      defenderSelect.value = names[Math.min(1, names.length - 1)];
+    App.fillSelectPairs(attackerSelect, pairs);
+    App.fillSelectPairs(defenderSelect, pairs);
+    if (pairs.length) {
+      attackerSelect.value = pairs[0].value;
+      defenderSelect.value = pairs[Math.min(1, pairs.length - 1)].value;
     }
 
     var attackerStages = { atk: 0, spa: 0 };
@@ -283,7 +282,7 @@
     }
 
     function refreshMoveOptions() {
-      var attacker = byName[attackerSelect.value];
+      var attacker = byKey[attackerSelect.value];
       var moves = attacker
         ? moveRows
             .filter(function (r) {
@@ -467,8 +466,8 @@
     }
 
     function updateAll() {
-      var attacker = byName[attackerSelect.value];
-      var defender = byName[defenderSelect.value];
+      var attacker = byKey[attackerSelect.value];
+      var defender = byKey[defenderSelect.value];
       App.renderTypeBadgeRow(attackerTypeEl, attacker && attacker.type_1, attacker && attacker.type_2, false);
       App.renderTypeBadgeRow(defenderTypeEl, defender && defender.type_1, defender && defender.type_2, false);
       if (attackerStatsEl) attackerStatsEl.textContent = statLine(attacker);
@@ -515,17 +514,50 @@
         (result.stab > 1 ? result.stab + "× STAB" : "no STAB") + "</div>";
     }
 
+    function recordRoute() {
+      App.setRoute("matchup", [attackerSelect.value, defenderSelect.value], {}, { push: true });
+    }
     attackerSelect.addEventListener("change", function () {
       refreshMoveOptions();
       updateAll();
+      recordRoute();
     });
-    defenderSelect.addEventListener("change", updateAll);
+    defenderSelect.addEventListener("change", function () {
+      updateAll();
+      recordRoute();
+    });
     moveSelect.addEventListener("change", updateAll);
     if (weatherSelect) weatherSelect.addEventListener("change", updateAll);
 
     refreshMoveOptions();
     updateAll();
+
+    // #/matchup/<attacker>/<defender>: either side may be omitted.
+    matchupRoute = function (route) {
+      var attacker = route.args[0];
+      var defender = route.args[1];
+      var changed = false;
+      if (attacker && byKey[attacker] && attacker !== attackerSelect.value) {
+        attackerSelect.value = attacker;
+        attackerSelect.dispatchEvent(new Event("pokemon-sync"));
+        refreshMoveOptions();
+        changed = true;
+      }
+      if (defender && byKey[defender] && defender !== defenderSelect.value) {
+        defenderSelect.value = defender;
+        defenderSelect.dispatchEvent(new Event("pokemon-sync"));
+        changed = true;
+      }
+      if (changed) updateAll();
+    };
   }
 
-  App.registerTab("matchup", setupMatchup, { extraMarts: ["pokemon_head_to_head"] });
+  var matchupRoute = function () {};
+
+  App.registerTab("matchup", setupMatchup, {
+    extraMarts: ["pokemon_head_to_head"],
+    onRoute: function (route) {
+      matchupRoute(route);
+    },
+  });
 })();

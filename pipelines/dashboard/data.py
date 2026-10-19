@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from pipelines.regulations import current_regulation, load_regulations
+from pipelines.regulations import Regulation, load_regulations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MARTS_DIR = REPO_ROOT / "data" / "marts"
@@ -101,7 +102,10 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("usage_count", "top_cut_usage_count", "weighted_usage_rank"),
         ("top_cut_usage_share", "placement_weighted_score", "weighted_usage_share"),
     ),
-    "pokemon_usage_by_regulation": (("usage_count", "usage_rank"), ("usage_share",)),
+    "pokemon_usage_by_regulation": (
+        ("usage_count", "usage_rank", "record_count"),
+        ("usage_share", "win_rate"),
+    ),
     "pokemon_build_concentration": (
         ("item_count", "ability_count"),
         ("item_hhi", "ability_hhi"),
@@ -199,6 +203,40 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ),
         (),
     ),
+    # docs/upgrade-plan-2027q1.md's event, team, set and player marts.
+    "tournament_event_summary": (
+        (
+            "team_count",
+            "player_count",
+            "recorded_team_count",
+            "match_count",
+            "winner_record_wins",
+            "winner_record_losses",
+            "recency_rank",
+        ),
+        (),
+    ),
+    "tournament_team_results": (
+        ("placement", "event_team_count", "record_wins", "record_losses", "roster_size"),
+        ("win_rate",),
+    ),
+    "tournament_team_sheets": (("slot_number",), ()),
+    "pokemon_set_variants": (
+        (
+            "set_rank",
+            "team_count",
+            "pokemon_slot_count",
+            "total_wins",
+            "total_losses",
+            "record_count",
+        ),
+        ("share_of_pokemon", "win_rate", "wilson_lower_bound"),
+    ),
+    "pokemon_event_usage_vs_regulation": (
+        ("usage_count", "event_slot_count", "event_team_count", "total_wins", "total_losses"),
+        ("event_usage_share", "regulation_usage_share", "usage_share_delta"),
+    ),
+    "player_archetype_record": (("matches_played", "wins", "losses"), ("win_rate",)),
 }
 
 # Two of the marts above are far larger than anything the dashboard can
@@ -286,7 +324,41 @@ def _slice_detected_archetypes(rows: list[dict[str, Any]]) -> list[dict[str, Any
     ]
 
 
+# tournament_team_results holds every Champions team, several thousand
+# rows. The event's name, tier and date are already in
+# tournament_event_summary, which every view reading team results also
+# loads, so the browser copy drops them rather than repeating each one per
+# team. The CSV mart keeps them for local queries.
+_TEAM_RESULT_BROWSER_DROP = ("event_name", "event_tier", "event_date", "roster_size")
+
+
+def _slice_team_results(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{k: v for k, v in row.items() if k not in _TEAM_RESULT_BROWSER_DROP} for row in rows]
+
+
+# The profile shows a Pokémon's top 3 real sets per level
+# (docs/upgrade-plan-2027q1.md, P1); the mart keeps 5 for local queries.
+MAX_SET_VARIANTS_SHOWN = 3
+
+
+def _slice_set_variants(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if (row.get("set_rank") or 0) <= MAX_SET_VARIANTS_SHOWN]
+
+
+# Top Teams, event pages and a profile's "Teams featuring" list only show
+# top-16 finishes, so they read this derived slice of
+# tournament_team_results (a few hundred rows, in the core shard) instead
+# of fetching every team. Player pages fetch the full mart.
+TOP_CUT_PLACEMENT = 16
+
+
+def top_cut_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in team_results if r.get("placement") and r["placement"] <= TOP_CUT_PLACEMENT]
+
+
 MART_SLICERS = {
+    "pokemon_set_variants": _slice_set_variants,
+    "tournament_team_results": _slice_team_results,
     "pokemon_team_synergy": _slice_team_synergy,
     "pokemon_team_core_usage": _slice_team_core_usage,
     "pokemon_team_core_triple_usage": _slice_team_core_triples,
@@ -536,7 +608,7 @@ def load_release_history(manifests_dir: Path = DEFAULT_MANIFESTS_DIR) -> list[di
 # <key column> -> <display-name column> pairs resolved against the
 # pokemon_key -> display name map (see display_name), so every mart row carries a
 # ready-to-render name rather than each view looking it up client-side.
-_NAME_JOINS = (
+NAME_JOINS = (
     ("pokemon_key", "pokemon_name"),
     ("partner_pokemon_key", "partner_pokemon_name"),
     ("opponent_pokemon_key", "opponent_pokemon_name"),
@@ -556,7 +628,7 @@ def _join_pokemon_names(
     for mart_name, rows in marts.items():
         joined_rows = []
         for row in rows:
-            for key_field, name_field in _NAME_JOINS:
+            for key_field, name_field in NAME_JOINS:
                 key = row.get(key_field)
                 if key:
                     row = {**row, name_field: pokemon_names.get(key, key)}
@@ -571,6 +643,158 @@ ALL_SCOPE = "all"
 # mostly noise, so the "What changed" panel shows counts but no deltas.
 MIN_MOVER_TEAMS = 100
 MAX_MOVERS_PER_LIST = 6
+
+# docs/upgrade-plan-2027q1.md, U3: a regulation in force with fewer teams
+# than this on record isn't a usable default yet -- the first week of a new
+# set has one small event at most -- so the page opens on the previous
+# regulation instead and says so. static/app.js applies the same rule
+# against the viewer's own date (MIN_DEFAULT_SCOPE_TEAMS there).
+MIN_DEFAULT_SCOPE_TEAMS = 300
+
+# Event tiers, most prestigious first, for ranking by placement within tier
+# (docs/upgrade-plan-2027q1.md, C2 and P5). Unknown tiers sort last.
+EVENT_TIER_ORDER = ("Worlds", "International", "Special", "Regional")
+MAX_STARTER_TEAMS = 3
+
+
+def regulation_in_force(regulations: list[Regulation], today: date) -> Regulation | None:
+    """The regulation whose [start_date, end_date) contains `today`, else
+    the latest one when today is past every registered set (the next one
+    hasn't been added yet), else None. Mirrors
+    pipelines.regulations.current_regulation, over an explicit list so tests
+    can pass a fixture registry."""
+    if not regulations:
+        return None
+    for regulation in regulations:
+        if regulation.start_date <= today < regulation.end_date:
+            return regulation
+    later = [r for r in regulations if r.start_date <= today]
+    return later[-1] if later else regulations[0]
+
+
+def _tier_rank(tier: str | None) -> int:
+    return EVENT_TIER_ORDER.index(tier) if tier in EVENT_TIER_ORDER else len(EVENT_TIER_ORDER)
+
+
+def _events_in_scope(marts: dict[str, list[dict[str, Any]]], scope: str) -> list[dict[str, Any]]:
+    events = marts.get("tournament_event_summary", [])
+    if scope == ALL_SCOPE:
+        return list(events)
+    return [e for e in events if e.get("regulation_code") == scope]
+
+
+def _truthy(value: Any) -> bool:
+    return str(value).lower() == "true"
+
+
+def starter_teams(
+    marts: dict[str, list[dict[str, Any]]], scope: str, limit: int = MAX_STARTER_TEAMS
+) -> list[dict[str, Any]]:
+    """docs/upgrade-plan-2027q1.md, P5: the top-placing fully reported
+    teams of a scope, with their full sheets, for the Overview's "Copy and
+    play" strip. Ranked by placement, then event tier, then the event's
+    size and recency, so a regional win doesn't outrank a Worlds win. Only
+    teams whose sheet lists six complete sets qualify: a starter team a
+    player can't paste into Showdown as published is no use to them."""
+    events = {e["event_id"]: e for e in _events_in_scope(marts, scope)}
+    sheets: dict[str, list[dict[str, Any]]] = {}
+    for row in marts.get("tournament_team_sheets", []):
+        sheets.setdefault(row["team_id"], []).append(row)
+    candidates = [
+        r
+        for r in marts.get("tournament_team_results", [])
+        if r.get("event_id") in events
+        and _truthy(r.get("is_fully_reported"))
+        and r.get("placement")
+        and r["team_id"] in sheets
+    ]
+    # Two stable sorts: newest event first as the final tie-break, then the
+    # ranking proper.
+    candidates.sort(
+        key=lambda r: (events[r["event_id"]].get("event_date") or "", r["team_id"]), reverse=True
+    )
+    candidates.sort(
+        key=lambda r: (
+            r["placement"],
+            _tier_rank(events[r["event_id"]].get("event_tier")),
+            -(events[r["event_id"]].get("team_count") or 0),
+        )
+    )
+    out = []
+    for row in candidates[:limit]:
+        event = events[row["event_id"]]
+        out.append(
+            {
+                "team_id": row["team_id"],
+                "event_id": row["event_id"],
+                "event_name": event.get("event_name"),
+                "event_date": event.get("event_date"),
+                "event_tier": event.get("event_tier"),
+                "event_team_count": event.get("team_count"),
+                "player_id": row.get("player_id"),
+                "player_name": row.get("player_name"),
+                "player_country": row.get("player_country"),
+                "placement": row.get("placement"),
+                "record_wins": row.get("record_wins"),
+                "record_losses": row.get("record_losses"),
+                "pokemon_keys": row.get("pokemon_keys"),
+                "sets": [
+                    {
+                        "pokemon_key": slot["pokemon_key"],
+                        "item_name": slot.get("item_name"),
+                        "ability": slot.get("ability"),
+                        "nature": slot.get("nature"),
+                        "moves": slot.get("moves"),
+                    }
+                    for slot in sorted(sheets[row["team_id"]], key=lambda s: s["slot_number"] or 0)
+                ],
+            }
+        )
+    return out
+
+
+_EVENT_NAME_NOISE = re.compile(
+    r"^\d{4}\s+|\bPok(?:é|e)mon\b|\bVGC\b|\bChampionships?\b|\bChampions\b", re.IGNORECASE
+)
+
+
+def short_event_name(event_name: str | None) -> str:
+    """A compact event label for cards and tables: "2027 Louisville Pokémon
+    VGC Regional Championships" -> "Louisville Regional". The season year,
+    the game and "Championships" repeat on every event, so they carry no
+    information in a list of them. Pages titled by the event keep the full
+    name. static/app.js's shortEventName mirrors this."""
+    if not event_name:
+        return ""
+    short = " ".join(_EVENT_NAME_NOISE.sub(" ", event_name).split())
+    if short.lower() == "world":
+        return "World Championships"
+    return short or event_name
+
+
+def _latest_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The newest event in a scope, for the Overview's "Latest event" card
+    (docs/upgrade-plan-2027q1.md, C1)."""
+    if not events:
+        return None
+    newest = max(events, key=lambda e: (e.get("event_date") or "", e.get("event_id") or ""))
+    keys = (
+        "event_id",
+        "event_name",
+        "event_date",
+        "event_tier",
+        "regulation_code",
+        "team_count",
+        "winner_player_name",
+        "winner_player_country",
+        "winner_record_wins",
+        "winner_record_losses",
+        "winner_pokemon_keys",
+    )
+    return {
+        **{key: newest.get(key) for key in keys},
+        "short_name": short_event_name(newest.get("event_name")),
+    }
 
 
 def marts_for_scope(
@@ -644,17 +868,17 @@ def _current_regulation_kpi(
     legal_pool_by_regulation: list[dict[str, Any]],
     today: date | None,
     regulation_code: str | None = None,
+    regulations: list[Regulation] | None = None,
 ) -> dict[str, Any] | None:
     """A regulation from dbt/seeds/champions_regulations.csv and its
     legal-pool size: `regulation_code` if given, otherwise the one in force
     today. This is what the header and the legal-pool KPI lead with, so the
     page always says which format it's describing."""
+    regulations = load_regulations() if regulations is None else regulations
     if regulation_code is not None:
-        regulation = next(
-            (r for r in load_regulations() if r.regulation_code == regulation_code), None
-        )
+        regulation = next((r for r in regulations if r.regulation_code == regulation_code), None)
     else:
-        regulation = current_regulation(today)
+        regulation = regulation_in_force(regulations, today or date.today())
     if regulation is None:
         return None
     legal_count = next(
@@ -678,6 +902,7 @@ def compute_kpis(
     marts: dict[str, list[dict[str, Any]]],
     today: date | None = None,
     scope: str = ALL_SCOPE,
+    regulations: list[Regulation] | None = None,
 ) -> dict[str, Any]:
     """KPIs for one regulation scope. `marts` is expected to be cut down to
     that scope already (marts_for_scope); `scope` picks which regulation the
@@ -735,12 +960,24 @@ def compute_kpis(
     ]
     top_12_pokemon = ranked_usage[:12]
 
+    # docs/upgrade-plan-2027q1.md, U2: "5 events · 3,770 teams" tells every
+    # reader how much data the page rests on, so it replaced the
+    # distinct-Pokémon count as the first KPI.
+    events = _events_in_scope(marts, scope)
+
     return {
         "latest_snapshot_date": latest_snapshot_date,
         "legal_pool_by_regulation": legal_pool_by_regulation,
         "scope": scope,
+        "event_count": len(events),
+        "team_count": sum(e.get("team_count") or 0 for e in events),
+        "latest_event": _latest_event(events),
+        "starter_teams": starter_teams(marts, scope),
         "current_regulation": _current_regulation_kpi(
-            legal_pool_by_regulation, today, None if scope == ALL_SCOPE else scope
+            legal_pool_by_regulation,
+            today,
+            None if scope == ALL_SCOPE else scope,
+            regulations,
         ),
         "movers": (
             None
@@ -765,26 +1002,49 @@ def compute_kpis(
     }
 
 
+def default_scope_for(
+    by_scope: dict[str, dict[str, Any]],
+    regulations: list[Regulation],
+    today: date,
+) -> str:
+    """The scope the page opens on (docs/upgrade-plan-2027q1.md, U3): the
+    regulation in force today when it has at least MIN_DEFAULT_SCOPE_TEAMS
+    teams on record; otherwise the newest earlier regulation with data (the
+    first weeks of a new set); otherwise the newest regulation with data;
+    otherwise "all". static/app.js re-applies this against the viewer's
+    date, so a page built before a rollover still opens correctly after it."""
+    with_data = [r for r in regulations if r.regulation_code in by_scope]
+    in_force = regulation_in_force(regulations, today)
+    if in_force is not None:
+        kpis = by_scope.get(in_force.regulation_code)
+        if kpis and (kpis.get("team_count") or 0) >= MIN_DEFAULT_SCOPE_TEAMS:
+            return in_force.regulation_code
+        earlier = [r for r in with_data if r.start_date < in_force.start_date]
+        if earlier:
+            return earlier[-1].regulation_code
+        if kpis:
+            return in_force.regulation_code
+    if with_data:
+        return with_data[-1].regulation_code
+    return ALL_SCOPE
+
+
 def compute_kpis_by_scope(
-    marts: dict[str, list[dict[str, Any]]], today: date | None = None
+    marts: dict[str, list[dict[str, Any]]],
+    today: date | None = None,
+    regulations: list[Regulation] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], str]:
     """KPIs for every regulation with usage data plus "all", and the scope
-    the page should open on: the regulation in force today if it has data,
-    otherwise the newest regulation that does, otherwise "all"."""
+    the page should open on (see default_scope_for)."""
+    regulations = load_regulations() if regulations is None else regulations
     usage_scopes = {r.get("regulation_scope") for r in marts.get("pokemon_usage_summary", [])}
-    regulations = [r for r in load_regulations() if r.regulation_code in usage_scopes]
-    scopes = [r.regulation_code for r in regulations] + [ALL_SCOPE]
+    with_data = [r for r in regulations if r.regulation_code in usage_scopes]
+    scopes = [r.regulation_code for r in with_data] + [ALL_SCOPE]
     by_scope = {
-        scope: compute_kpis(marts_for_scope(marts, scope), today, scope) for scope in scopes
+        scope: compute_kpis(marts_for_scope(marts, scope), today, scope, regulations)
+        for scope in scopes
     }
-    in_force = current_regulation(today)
-    if in_force is not None and in_force.regulation_code in by_scope:
-        default_scope = in_force.regulation_code
-    elif regulations:
-        default_scope = regulations[-1].regulation_code
-    else:
-        default_scope = ALL_SCOPE
-    return by_scope, default_scope
+    return by_scope, default_scope_for(by_scope, regulations, today or date.today())
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -889,11 +1149,15 @@ def build_payload(
     reports_dir: Path = DEFAULT_REPORTS_DIR,
     staging_dir: Path = DEFAULT_STAGING_DIR,
     manifests_dir: Path = DEFAULT_MANIFESTS_DIR,
+    regulations: list[Regulation] | None = None,
+    today: date | None = None,
 ) -> dict[str, Any]:
+    regulations = load_regulations() if regulations is None else regulations
     marts = load_marts(marts_dir)
     pokemon_names = load_pokemon_names(normalized_dir)
     marts = _join_pokemon_names(marts, pokemon_names)
-    kpis_by_scope, default_scope = compute_kpis_by_scope(marts)
+    marts["tournament_top_cut_teams"] = top_cut_teams(marts.get("tournament_team_results", []))
+    kpis_by_scope, default_scope = compute_kpis_by_scope(marts, today, regulations)
     return {
         "generated_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         # The page swaps DATA.kpis for kpis_by_scope[<selected scope>] on
@@ -920,6 +1184,9 @@ def build_payload(
                 "start_date": r.start_date.isoformat(),
                 "end_date": r.end_date.isoformat(),
             }
-            for r in load_regulations()
+            for r in regulations
         ],
+        # static/app.js's rollover rule reads the same threshold the build
+        # used (see default_scope_for), rather than restating the number.
+        "min_default_scope_teams": MIN_DEFAULT_SCOPE_TEAMS,
     }

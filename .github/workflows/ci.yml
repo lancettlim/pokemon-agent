@@ -49,6 +49,12 @@ jobs:
       - name: Lint
         run: make lint
 
+      # tests/browser drives the built dashboard in headless Chromium
+      # (docs/upgrade-plan-2027q1.md, U8). Without a browser those tests
+      # skip, so this step is what makes them count in CI.
+      - name: Install Chromium for the browser tests
+        run: uv run playwright install --with-deps chromium
+
       - name: Test
         run: make test
 

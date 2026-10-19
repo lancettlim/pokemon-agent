@@ -870,34 +870,45 @@
 
     var ttSubtabs = document.querySelectorAll('[data-panel="top-teams"] .subtab-btn');
     var ttSubpanels = document.querySelectorAll('[data-panel="top-teams"] .subtab-panel');
-    App.setupSubTabs(ttSubtabs, ttSubpanels);
+    topTeamsSubTabs = App.setupSubTabs(ttSubtabs, ttSubpanels, null, {
+      route: { tab: "top-teams", argIndex: 0 },
+    });
 
+    renderProTeamGallery();
+  }
+  var topTeamsSubTabs = null;
+
+  // The pokepaste import sits in the Builder (docs/upgrade-plan-2027q1.md,
+  // U7): importing a team is building one, not browsing Top Teams.
+  function setupPokepasteImport() {
     var input = document.getElementById("pokepaste-input");
     var loadBtn = document.getElementById("pokepaste-load");
     var statusEl = document.getElementById("pokepaste-status");
-    if (loadBtn && input) {
-      loadBtn.addEventListener("click", function () {
-        var parsed = parsePokepaste(input.value || "");
-        if (!parsed.resolvedSlots.length) {
-          if (statusEl) statusEl.textContent = "No recognizable Pokémon found in that paste.";
-          return;
-        }
-        ensureTeamBuilder().loadTeam(parsed.resolvedSlots);
-        if (statusEl) {
-          statusEl.textContent =
-            "Loaded " + parsed.resolvedSlots.length + " Pokémon into Team Builder" +
-            (parsed.unresolvedNames.length
-              ? " (" + parsed.unresolvedNames.length + " not recognized: " + parsed.unresolvedNames.join(", ") + ")"
-              : ".");
-        }
-      });
-    }
-
-    renderProTeamGallery();
+    if (!loadBtn || !input) return;
+    loadBtn.addEventListener("click", function () {
+      var parsed = parsePokepaste(input.value || "");
+      if (!parsed.resolvedSlots.length) {
+        if (statusEl) statusEl.textContent = "No recognizable Pokémon found in that paste.";
+        return;
+      }
+      ensureTeamBuilder().loadTeam(parsed.resolvedSlots);
+      if (statusEl) {
+        statusEl.textContent =
+          "Loaded " + parsed.resolvedSlots.length + " Pokémon into Team Builder" +
+          (parsed.unresolvedNames.length
+            ? " (" + parsed.unresolvedNames.length + " not recognized: " + parsed.unresolvedNames.join(", ") + ")"
+            : ".");
+      }
+    });
   }
 
   App.registerTab("team-builder", function () {
     ensureTeamBuilder();
+    setupPokepasteImport();
   });
-  App.registerTab("top-teams", setupTopTeams);
+  App.registerTab("top-teams", setupTopTeams, {
+    onRoute: function (route) {
+      if (topTeamsSubTabs) topTeamsSubTabs.fromRoute(route);
+    },
+  });
 })();

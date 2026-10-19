@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pokémon Champions — Analytics Dashboard</title>
+{# No favicon file to fetch: an inline one keeps the console free of 404s. #}
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23e3323c'/%3E%3Crect y='7' width='16' height='2' fill='%2312131a'/%3E%3Ccircle cx='8' cy='8' r='2.5' fill='%23fff' stroke='%2312131a'/%3E%3C/svg%3E">
 <script>
   // Apply a saved Light/Dark choice before first paint (no flash of the
   // wrong theme). "auto" or nothing saved follows prefers-color-scheme.
@@ -178,21 +180,82 @@
     background: var(--bg);
     color: var(--navy);
   }
-  header {
+  /* One sticky 56px bar (docs/upgrade-plan-2027q1.md, U2). */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0 max(16px, calc((100vw - 1100px) / 2 + 24px));
     background: var(--panel-dark);
     color: #fff;
-    padding: 24px;
-    text-align: center;
   }
-  header h1 {
-    margin: 0;
-    font-size: 1.6rem;
+  .brand {
+    flex: 0 0 auto;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-weight: 800;
+    white-space: nowrap;
   }
-  header p { margin: 4px 0 0; color: #b8bdd1; font-size: 0.9rem; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .brand-sub { color: var(--accent-gold); }
+  .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+  .more-menu { position: relative; }
+  .more-menu-btn {
+    min-width: 44px;
+    min-height: 40px;
+    font: inherit;
+    font-size: 1.3rem;
+    line-height: 1;
+    color: #fff;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .more-menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 220px;
+    padding: var(--space-1);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  }
+  .more-menu-panel[hidden] { display: none; }
+  .more-menu-panel a, .more-menu-panel button {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    text-align: left;
+    font: inherit;
+    color: var(--navy);
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .more-menu-panel a:hover, .more-menu-panel button:hover { background: var(--light-blue); }
+  main { max-width: 1100px; margin: 0 auto; padding: var(--space-4) 24px 24px; }
+  a { color: var(--blue); }
+  /* Pokémon names and sprites are real links (U1), styled as the text they
+     replace. */
+  a.pokemon-link, a.grid-6xn-tile, a.tier-chip, a.mover-link, a.team-comp-slot { color: inherit; text-decoration: none; }
+  a.pokemon-link:hover span, a.mover-link:hover .mover-name { text-decoration: underline; }
+  /* "How this is computed": the intro line stays one sentence; the method
+     sits behind a disclosure (U2). */
+  .method { margin: 0 0 var(--space-4); font-size: var(--font-sm); color: var(--muted); }
+  .method summary { cursor: pointer; font-weight: 600; color: var(--blue); }
+  .method[open] summary { margin-bottom: var(--space-2); }
+  .method p { margin: 0 0 var(--space-2); }
   /* Components that set their own display (grid/flex) would otherwise
      override the hidden attribute app.js toggles. */
   .kpi-row[hidden], .movers-panel[hidden] { display: none; }
@@ -242,14 +305,12 @@
   .set-share { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 720px) { .profile-layout { grid-template-columns: 1fr; } }
-  /* Phones: the header keeps its title and the Regulation picker only. */
+  /* Phones: the bar keeps the brand, the regulation select and the ⋯ menu. */
   @media (max-width: 480px) {
-    header { padding: 14px 12px; }
-    header h1 { font-size: 1.1rem; }
-    header > p, .header-meta .header-chip:not(.regulation-picker) { display: none; }
+    .brand-sub { display: none; }
     .kpi-card .kpi-sprite { display: none; }
     .kpi-card .sub { display: none; }
-    .kpi-card .value { font-size: 1.05rem; }
+    .kpi-card .value { font-size: 0.95rem; }
   }
   /* Pokémon search combobox (app.js attachPokemonCombobox). The original
      <select> stays in the DOM as the source of truth, visually hidden. */
@@ -285,13 +346,16 @@
   .combo-list[hidden] { display: none; }
   .combo-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   .theme-toggle { font: inherit; cursor: pointer; background: transparent; color: inherit; }
-  .regulation-picker { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .regulation-picker { display: inline-flex; align-items: center; }
   .regulation-picker select {
+    min-height: 40px;
     font: inherit;
     font-weight: 700;
+    color: var(--navy);
+    background: var(--surface);
     border-radius: var(--radius-sm);
     border: 1px solid #b8bdd1;
-    padding: 2px 6px;
+    padding: 4px 8px;
   }
   .movers-panel {
     border: 2px solid var(--border);
@@ -303,7 +367,8 @@
   .movers-panel h4 { margin: var(--space-3) 0 var(--space-2); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
   .mover-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
   .mover-list { list-style: none; margin: 0; padding: 0; }
-  .mover-list li { display: flex; align-items: center; gap: var(--space-2); padding: 2px 0; }
+  .mover-list li { padding: 2px 0; }
+  .mover-list .mover-link { display: flex; align-items: center; gap: var(--space-2); }
   .mover-name { flex: 1; font-weight: 600; min-width: 0; }
   .mover-share { color: var(--muted); font-variant-numeric: tabular-nums; }
   .mover-delta { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 5.5em; text-align: right; }
@@ -318,28 +383,31 @@
     font-weight: 600;
   }
 
+  /* Compact KPI strip (U2): one ~70px row, so content starts within 200px. */
   .kpi-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 32px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
   }
   .kpi-card {
     background: var(--surface);
-    border: 2px solid var(--border);
-    border-radius: 10px;
-    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
+    min-width: 0;
   }
-  .kpi-card .kpi-sprite { width: var(--icon-lg); height: var(--icon-lg); object-fit: contain; flex: 0 0 auto; }
+  .kpi-card .kpi-sprite { width: 48px; height: 48px; object-fit: contain; flex: 0 0 auto; }
   .kpi-card .kpi-body { min-width: 0; }
-  .kpi-card .label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .kpi-card .label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
   /* Names wrap only between words ("Mega Charizard Y"); break-word used to
      split long single-word names mid-word. */
-  .kpi-card .value { font-size: 1.35rem; line-height: 1.2; font-weight: 700; margin-top: 4px; overflow-wrap: normal; word-break: normal; }
-  .kpi-card .sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .kpi-card .value { font-size: 1.05rem; line-height: 1.2; font-weight: 700; margin-top: 2px; overflow-wrap: normal; word-break: normal; }
+  .kpi-card .value a { color: inherit; text-decoration: none; }
+  .kpi-card .sub { font-size: 0.78rem; color: var(--muted); margin-top: 1px; }
 
   /* --- Tabs --- */
   /* Wraps onto a second row on wide screens, so no tab is ever clipped
@@ -351,33 +419,28 @@
     gap: 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
     border-bottom: 2px solid var(--border);
-    margin-bottom: 20px;
-  }
-  .sections {
-    position: sticky;
-    top: env(safe-area-inset-top, 0px);
-    z-index: 20;
-    display: flex;
-    gap: var(--space-1);
     background: var(--bg);
-    padding: var(--space-2) 0;
-    margin-bottom: var(--space-1);
   }
+  .sections { display: flex; gap: var(--space-1); }
   .section-btn {
     flex: 0 0 auto;
+    min-height: 40px;
     font: inherit;
     font-weight: 700;
-    font-size: 1rem;
-    color: var(--navy);
-    background: var(--surface);
-    border: 2px solid var(--border);
-    border-radius: var(--radius-pill);
-    padding: 8px 18px;
+    font-size: 0.95rem;
+    color: #b8bdd1;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    padding: 6px 14px;
     cursor: pointer;
   }
-  .section-btn:hover { border-color: var(--blue); }
-  .section-btn[aria-current="true"] { background: var(--panel-dark); border-color: var(--panel-dark); color: #fff; }
+  .section-btn:hover { color: #fff; }
+  .section-btn[aria-current="true"] { color: #fff; background: rgba(255, 255, 255, 0.14); }
   .tab-btn[hidden], .tabs[hidden], #kpi-strip[hidden] { display: none; }
   .tab-btn {
     flex: 0 0 auto;
@@ -430,10 +493,14 @@
     background: var(--surface);
     border: 2px solid var(--border);
     border-radius: 10px;
-    padding: 0 var(--space-8) var(--space-8);
+    padding: var(--space-5) var(--space-6) var(--space-6);
     margin-bottom: var(--space-6);
     overflow: hidden;
   }
+  /* A panel's own title repeats the tab label right above it, so it is
+     kept for screen readers only (U2). */
+  .tab-panel > h2.panel-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; padding: 0; }
+  .lead { margin: 0 0 var(--space-2); color: var(--muted); }
   /* Broadcast color-block section header (docs/design-system.md) — bold,
      uppercase, letter-spaced, on a dark bar, replacing plain
      text-on-white section titles. */
@@ -610,23 +677,6 @@
     color: var(--muted);
   }
   .caveat-list strong { color: var(--navy); }
-  /* Freshness chip in the page header: dataset version + snapshot date,
-     visible without opening the Data & Sources tab. */
-  .header-meta {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
-  }
-  .header-chip {
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: var(--radius-pill);
-    padding: 2px var(--space-3);
-    font-size: var(--font-xs);
-    font-weight: 700;
-    letter-spacing: 0.02em;
-  }
   .badge-new { background: var(--accent-gold-bg); color: var(--warning); }
 
   /* --- Type badge (Pokémon Profile header, Matchup tab pickers) — the
@@ -882,7 +932,7 @@
       background: var(--panel-dark);
       box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
     }
-    .section-btn { flex: 1 1 0; padding: 8px 4px; font-size: 0.85rem; background: transparent; border: none; color: #b8bdd1; border-radius: var(--radius-sm); }
+    .section-btn { flex: 1 1 0; min-height: 44px; padding: 8px 4px; font-size: 0.85rem; background: transparent; border: none; color: #b8bdd1; border-radius: var(--radius-sm); }
     .section-btn[aria-current="true"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
     body { padding-bottom: 64px; }
     .team-builder-grid { grid-template-columns: 1fr; }
@@ -900,68 +950,88 @@
   .link-button { border:0; background:none; color:var(--blue); padding:0; cursor:pointer; text-decoration:underline; }
   .source-note { color:var(--muted); font-size:var(--font-sm); }
   @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }
-  footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px; }
+  .site-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; color: var(--muted); font-size: 0.8rem; padding: 24px; }
+  .site-footer span + span::before { content: none; }
 
   @media (max-width: 720px) {
-    main { padding: 16px; }
-    .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .kpi-card { padding: 12px; }
-    .kpi-card .value { font-size: 1.2rem; }
+    main { padding: var(--space-3) 16px 16px; }
+    .tabs { padding: 0 16px; }
+    .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-bottom: var(--space-3); }
+    .kpi-card { padding: 6px 10px; }
   }
 
   @media (max-width: 480px) {
-    header h1 { font-size: 1.3rem; }
-    .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .kpi-card { flex-direction: column; align-items: flex-start; gap: 6px; }
     .controls select { width: 100%; }
     section { padding: var(--space-4); }
     section h2 { margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: var(--space-3) var(--space-4); }
     .grid-6xn { grid-template-columns: repeat(2, 1fr); }
   }
-
-  @media (max-width: 360px) {
-    .kpi-row { grid-template-columns: 1fr; }
-  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Pokémon Champions — Analytics Dashboard</h1>
-  <p>Generated {{ payload.kpis.latest_snapshot_date or "—" }} · built {{ payload.generated_at_utc }}</p>
-  {# Freshness/provenance chips: which dataset version and snapshot this
-     page was built from, and whether its release gates passed — visible
-     without opening the Data & Sources tab. #}
-  <div class="header-meta">
-    <button type="button" class="header-chip theme-toggle" id="theme-toggle" aria-label="Color theme">Theme: Auto</button>
+{# One sticky 56px bar (docs/upgrade-plan-2027q1.md, U2): the brand, the
+   five sections, the regulation select and a ⋯ menu. The dataset version,
+   snapshot and gate status moved to the footer and the Data section, so
+   content starts within 200px of the top. On phones the section buttons
+   become a bottom navigation bar (the .sections rules in the max-width
+   720px block). #}
+<header class="topbar">
+  <a class="brand" href="#/overview" aria-label="Pokémon Champions data: home">Champions<span class="brand-sub"> Data</span></a>
+  <nav class="sections" aria-label="Sections">
+    <button type="button" class="section-btn" data-section="meta" aria-current="true">Meta</button>
+    <button type="button" class="section-btn" data-section="pokemon">Pokémon</button>
+    <button type="button" class="section-btn" data-section="teams">Teams</button>
+    <button type="button" class="section-btn" data-section="builder">Builder</button>
+    <button type="button" class="section-btn" data-section="data">Data</button>
+  </nav>
+  <div class="topbar-actions">
     {% if payload.kpis_by_scope %}
       {# Which regulation every figure on the page describes. static/app.js
          sets the selected option from ?reg= and reloads on change. #}
-      <label class="header-chip regulation-picker">Regulation
+      <label class="regulation-picker"><span class="visually-hidden">Regulation</span>
         <select id="regulation-scope" aria-label="Regulation shown on this page">
           {% for scope in payload.kpis_by_scope %}
             {% set reg = payload.regulations | selectattr("regulation_code", "equalto", scope) | first %}
             <option value="{{ scope }}"{% if scope == payload.default_scope %} selected{% endif %}>
-              {%- if reg %}{{ reg.regulation_name }}{% if scope == payload.default_scope %} (current){% endif %}{% else %}All Champions regulations{% endif -%}
+              {%- if reg %}Reg {{ scope | upper }}{% else %}All regulations{% endif -%}
             </option>
           {% endfor %}
         </select>
       </label>
     {% endif %}
-    {% if payload.provenance.dataset_version %}
-      <span class="header-chip">dataset {{ payload.provenance.dataset_version }}</span>
-    {% endif %}
-    {% if payload.kpis.latest_snapshot_date %}
-      <span class="header-chip">snapshot {{ payload.kpis.latest_snapshot_date }}</span>
-    {% endif %}
-    {% if payload.provenance.validation_available %}
-      <span class="header-chip">{% if payload.provenance.release_blocking_findings %}{{ payload.provenance.release_blocking_findings | length }} gate failure(s){% else %}all gates passing{% endif %}</span>
-    {% endif %}
+    <div class="more-menu">
+      <button type="button" class="more-menu-btn" id="more-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-panel" aria-label="More options">&#8943;</button>
+      <div class="more-menu-panel" id="more-menu-panel" hidden>
+        <button type="button" class="theme-toggle" id="theme-toggle">Theme: Auto</button>
+        <a href="#/data/how-to-read">How to read this page</a>
+        <a href="#/data">Data &amp; sources</a>
+      </div>
+    </div>
   </div>
 </header>
 {# Filled in by static/app.js (renderStalenessBanner) when the newest
    tournament is over three weeks old, or when no tournament in the data
    was played under the regulation in force today. #}
 <div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
+{# Filled in by static/app.js (renderRolloverBanner) during the first weeks
+   of a new regulation, when the page opens on the previous one
+   (docs/upgrade-plan-2027q1.md, U3). #}
+<div id="rollover-banner" class="staleness-banner rollover-banner" role="status" hidden></div>
+<nav class="tabs" role="tablist" aria-label="Views in this section">
+  <button class="tab-btn" role="tab" data-section="meta" data-tab="overview" aria-selected="true">Overview</button>
+  <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
+  <button class="tab-btn" role="tab" data-section="meta" data-tab="usage" aria-selected="false">Usage</button>
+  <button class="tab-btn" role="tab" data-section="meta" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
+  <button class="tab-btn" role="tab" data-section="pokemon" data-tab="pokemon-profile" aria-selected="false">Profile</button>
+  <button class="tab-btn" role="tab" data-section="pokemon" data-tab="compare" aria-selected="false">Compare</button>
+  <button class="tab-btn" role="tab" data-section="pokemon" data-tab="matchup" aria-selected="false">Matchup</button>
+  <button class="tab-btn" role="tab" data-section="teams" data-tab="top-teams" aria-selected="false">Top Teams</button>
+  <button class="tab-btn" role="tab" data-section="teams" data-tab="archetypes" aria-selected="false">Archetypes</button>
+  <button class="tab-btn" role="tab" data-section="teams" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
+  <button class="tab-btn" role="tab" data-section="teams" data-tab="players" aria-selected="false">Players</button>
+  <button class="tab-btn" role="tab" data-section="builder" data-tab="team-builder" aria-selected="false">Team Builder</button>
+  <button class="tab-btn" role="tab" data-section="data" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
+</nav>
 <main>
   <div id="kpi-strip">
   {# One KPI row per regulation scope; app.js shows the selected one. The
@@ -970,93 +1040,74 @@
   <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
       <div class="kpi-body">
-        <div class="label">Distinct Pokémon Used</div>
-        <div class="value">{{ scope_kpis.distinct_pokemon_used }}</div>
+        <div class="label">Sample</div>
+        <div class="value">{{ scope_kpis.event_count or 0 }} event{% if scope_kpis.event_count != 1 %}s{% endif %} · {{ "{:,}".format(scope_kpis.team_count or 0) }} teams</div>
+        {% if scope_kpis.latest_event %}
+          <div class="sub">Latest: <a href="#/event/{{ scope_kpis.latest_event.event_id }}" title="{{ scope_kpis.latest_event.event_name }}">{{ scope_kpis.latest_event.short_name }}</a>, {{ scope_kpis.latest_event.event_date }}</div>
+        {% endif %}
       </div>
     </div>
     <div class="kpi-card">
       {% set top_used = scope_kpis.top_used_pokemon %}
-      {% set top_used_art = payload.hero_art.get(top_used.pokemon_key) or payload.sprites.get(top_used.pokemon_key) if top_used %}
+      {% set top_used_art = payload.sprites.get(top_used.pokemon_key) if top_used %}
       {% if top_used_art %}
-        <img class="kpi-sprite" src="{{ top_used_art }}" alt="" width="96" height="96" decoding="async">
+        <img class="kpi-sprite" src="{{ top_used_art }}" alt="" width="48" height="48" decoding="async">
       {% endif %}
       <div class="kpi-body">
-        <div class="label">Most Used</div>
-        <div class="value">{% if top_used %}{{ top_used.pokemon_name }}{% else %}—{% endif %}</div>
-        <div class="sub">{% if top_used %}{{ top_used.usage_count }} roster appearances{% if top_used.usage_share is not none %} ({{ "%.1f"|format(top_used.usage_share * 100) }}% of meta){% endif %}{% endif %}</div>
+        <div class="label">Most used</div>
+        <div class="value">{% if top_used %}<a href="#/pokemon/{{ top_used.pokemon_key }}">{{ top_used.pokemon_name }}</a>{% else %}—{% endif %}</div>
+        <div class="sub">{% if top_used %}{% if top_used.usage_share is not none %}{{ "%.1f"|format(top_used.usage_share * 100) }}% of roster slots · {% endif %}{{ "{:,}".format(top_used.usage_count) }} teams{% endif %}</div>
       </div>
     </div>
     <div class="kpi-card">
       {% set top_win = scope_kpis.top_win_rate_pokemon %}
-      {% set top_win_art = payload.hero_art.get(top_win.pokemon_key) or payload.sprites.get(top_win.pokemon_key) if top_win %}
+      {% set top_win_art = payload.sprites.get(top_win.pokemon_key) if top_win %}
       {% if top_win_art %}
-        <img class="kpi-sprite" src="{{ top_win_art }}" alt="" width="96" height="96" decoding="async">
+        <img class="kpi-sprite" src="{{ top_win_art }}" alt="" width="48" height="48" decoding="async">
       {% endif %}
       <div class="kpi-body">
-        <div class="label">Top Win Rate</div>
-        <div class="value">{% if top_win %}{{ top_win.pokemon_name }}{% else %}—{% endif %}</div>
-        <div class="sub">{% if top_win %}{{ "%.1f"|format(top_win.win_rate * 100) }}% ({{ top_win.record_count }} recorded matches){% endif %}</div>
+        <div class="label">Top win rate</div>
+        <div class="value">{% if top_win %}<a href="#/pokemon/{{ top_win.pokemon_key }}">{{ top_win.pokemon_name }}</a>{% else %}—{% endif %}</div>
+        <div class="sub">{% if top_win %}{{ "%.1f"|format(top_win.win_rate * 100) }}% across {{ "{:,}".format(top_win.record_count) }} teams{% endif %}</div>
       </div>
     </div>
     <div class="kpi-card">
       {% set current_reg = scope_kpis.current_regulation %}
       <div class="kpi-body">
-        <div class="label">Legal Pool{% if current_reg %} · {{ current_reg.regulation_code | upper }}{% endif %}</div>
+        <div class="label">Legal pool{% if current_reg %} · {{ current_reg.regulation_code | upper }}{% endif %}</div>
         <div class="value">{% if current_reg and current_reg.legal_pokemon_count is not none %}{{ current_reg.legal_pokemon_count }} Pokémon{% else %}—{% endif %}</div>
-        <div class="sub">
-          {% for r in scope_kpis.legal_pool_by_regulation %}{{ r.regulation_code | upper }} {{ r.legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
-          {% if scope_kpis.latest_snapshot_date %}<br>as of {{ scope_kpis.latest_snapshot_date }}{% endif %}
-        </div>
+        <div class="sub">{% if current_reg %}{{ current_reg.start_date }} to {{ current_reg.end_date }}{% endif %}</div>
       </div>
     </div>
   </div>
   {% endfor %}
   </div>
 
-  {# Five sections, each with its own row of views (docs/upgrade-plan-
-     2026q4.md, B2). The view buttons keep the .tab-btn/data-tab contract
-     every script already uses; data-section groups them, and app.js shows
-     only the active section's row. On narrow screens the section bar
-     becomes a bottom navigation bar. #}
-  <nav class="sections" aria-label="Sections">
-    <button class="section-btn" data-section="meta" aria-current="true">Meta</button>
-    <button class="section-btn" data-section="pokemon">Pokémon</button>
-    <button class="section-btn" data-section="teams">Teams</button>
-    <button class="section-btn" data-section="builder">Builder</button>
-    <button class="section-btn" data-section="data">Data</button>
-  </nav>
-  <nav class="tabs" role="tablist" aria-label="Views in this section">
-    <button class="tab-btn" role="tab" data-section="meta" data-tab="overview" aria-selected="true">Overview</button>
-    <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
-    <button class="tab-btn" role="tab" data-section="meta" data-tab="usage" aria-selected="false">Usage</button>
-    <button class="tab-btn" role="tab" data-section="meta" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
-    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="pokemon-profile" aria-selected="false">Profile</button>
-    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="compare" aria-selected="false">Compare</button>
-    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="matchup" aria-selected="false">Matchup</button>
-    <button class="tab-btn" role="tab" data-section="teams" data-tab="top-teams" aria-selected="false">Top Teams</button>
-    <button class="tab-btn" role="tab" data-section="teams" data-tab="archetypes" aria-selected="false">Archetypes</button>
-    <button class="tab-btn" role="tab" data-section="teams" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
-    <button class="tab-btn" role="tab" data-section="teams" data-tab="players" aria-selected="false">Players &amp; Regions</button>
-    <button class="tab-btn" role="tab" data-section="builder" data-tab="team-builder" aria-selected="false">Team Builder</button>
-    <button class="tab-btn" role="tab" data-section="data" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
-  </nav>
-
-  <section class="tab-panel" data-panel="overview">
-    <h2>Overview</h2>
+  <section class="tab-panel" data-panel="overview" data-section="meta">
+    <h2 class="panel-title">Overview</h2>
     <section class="movers-panel" id="movers-panel" hidden></section>
-    <p class="sub" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
+    <div class="overview-row" id="overview-row" hidden>
+      <div id="overview-latest-event"></div>
+      <div id="overview-starters"></div>
+    </div>
+    <h3>Most used</h3>
+    <p class="lead" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
     <div class="grid-6xn" id="overview-top-12"></div>
   </section>
 
-  <section class="tab-panel" data-panel="tiers" hidden>
-    <h2>Tier List</h2>
-    <p class="sub" id="tiers-method"></p>
+  <section class="tab-panel" data-panel="tiers" data-section="meta" hidden>
+    <h2 class="panel-title">Tier List</h2>
+    <p class="lead">Bands by share of roster slots; the chip beside each Pokémon is its win rate.</p>
+    <details class="method"><summary>How this is computed</summary><p id="tiers-method"></p></details>
     <div id="tiers-body"></div>
   </section>
 
-  <section class="tab-panel" data-panel="usage" hidden>
-    <h2>Usage</h2>
-    <p class="sub">Real Pokémon Champions tournament data (MunchStats) — every usage and win-rate figure below is computed from actual recorded rosters, not a blend with other sources.</p>
+  <section class="tab-panel" data-panel="usage" data-section="meta" hidden>
+    <h2 class="panel-title">Usage</h2>
+    <p class="lead">How often each Pokémon is brought, and how its teams do, in Champions tournaments.</p>
+    <details class="method"><summary>How this is computed</summary>
+      <p>Every figure is computed from the team sheets of Champions-format tournaments only (MunchStats), never blended with standard VGC events. Usage is a Pokémon's share of all roster slots; a team contributes six.</p>
+    </details>
     <div class="controls">
       <label>Tier
         <select id="usage-tier-filter"></select>
@@ -1091,10 +1142,10 @@
 
     <h3>Leaderboards</h3>
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="usage-leaders" aria-selected="true">Usage leaders</button>
-      <button class="subtab-btn" role="tab" data-subtab="win-rate-leaders" aria-selected="false">Win rate leaders</button>
-      <button class="subtab-btn" role="tab" data-subtab="usage-success" aria-selected="false">Success</button>
-      <button class="subtab-btn" role="tab" data-subtab="usage-trends" aria-selected="false">Trends</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-leaders" data-route="leaders" aria-selected="true">Usage leaders</button>
+      <button class="subtab-btn" role="tab" data-subtab="win-rate-leaders" data-route="win-rate" aria-selected="false">Win rate leaders</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-success" data-route="success" aria-selected="false">Success</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-trends" data-route="trends" aria-selected="false">Trends</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-leaders">
@@ -1128,19 +1179,11 @@
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-success" hidden>
-      <p class="sub">
-        Popular is not the same as successful. Raw usage counts a last-place
-        team's roster slot exactly like a winner's; these two views weight it
-        by where the team actually finished
-        (<code>tournament_team.placement</code>).
-        <strong>Top cut</strong> counts only appearances on a team that placed
-        1&#8211;8; <strong>placement-weighted</strong> weights every appearance
-        by 1/placement, so a win counts far more than a 200th with no cutoff
-        cliff. The <strong>Movement</strong> column is how many places a
-        Pokémon gains or loses versus its raw usage rank — a positive number is
-        a quiet top-cut staple, a negative one is a crowd favourite that
-        underperforms.
-      </p>
+      <p class="lead">Popular is not the same as successful: usage weighted by where each team finished.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Raw usage counts a last-place team's roster slot exactly like a winner's. <strong>Top cut</strong> counts only appearances on a team that placed 1&#8211;8; <strong>placement-weighted</strong> weights every appearance by 1/placement, so a win counts far more than a 200th with no cutoff cliff.</p>
+        <p>The <strong>Movement</strong> column is how many places a Pokémon gains or loses versus its raw usage rank. A positive number is a quiet top-cut staple; a negative one is a crowd favourite that underperforms.</p>
+      </details>
       <div class="controls">
         <label>Ranked by
           <select id="usage-success-metric">
@@ -1159,7 +1202,7 @@
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-trends" hidden>
-      <p class="sub">Usage by tournament date (<code>tournament_event.event_date</code>), not by extraction snapshot — this shows how usage shifted across events actually played. Change is versus the previous tournament date in the data, not a fixed time window.</p>
+      <p class="lead">Usage at each tournament date, against the tournament date before it.</p>
       <div class="controls">
         <label>Tournament date
           <select id="usage-trend-date-filter"></select>
@@ -1175,8 +1218,8 @@
     </div>
   </section>
 
-  <section class="tab-panel" data-panel="pokemon-profile" hidden>
-    <h2>Pokémon Profile</h2>
+  <section class="tab-panel" data-panel="pokemon-profile" data-section="pokemon" hidden>
+    <h2 class="panel-title">Pokémon Profile</h2>
     <div class="controls">
       <label>Pokémon
         <select id="pokemon-profile-filter"></select>
@@ -1189,10 +1232,10 @@
     </div>
 
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="profile-items" aria-selected="true">Items</button>
-      <button class="subtab-btn" role="tab" data-subtab="profile-ability">Ability</button>
-      <button class="subtab-btn" role="tab" data-subtab="profile-moves">Moves</button>
-      <button class="subtab-btn" role="tab" data-subtab="profile-team-cores">Team Cores</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-items" data-route="items" aria-selected="true">Items</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-ability" data-route="abilities">Ability</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-moves" data-route="moves">Moves</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-team-cores" data-route="cores">Team Cores</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-items">
@@ -1227,15 +1270,10 @@
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-team-cores" hidden>
-      <p class="sub">
-        Which Pokémon most often share a team with this Pokémon.
-        <strong>Co-occurrence</strong> is the raw pairing rate, which mostly
-        re-ranks whoever is individually popular; <strong>synergy</strong>
-        ranks by lift — how much more often the pair appears together than
-        their individual popularity alone predicts (&times;1.0 is exactly
-        chance). Synergy is restricted to pairs seen on at least 5 real teams,
-        since lift is noisy below that.
-      </p>
+      <p class="lead">Which Pokémon most often share a team with this one.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p><strong>Co-occurrence</strong> is the raw pairing rate, which mostly re-ranks whoever is individually popular. <strong>Synergy</strong> ranks by lift: how much more often the pair appears together than their individual popularity alone predicts (&times;1.0 is exactly chance). Synergy only counts pairs seen on at least 5 real teams, since lift is noisy below that.</p>
+      </details>
       <div class="controls">
         <label>Core size
           <select id="profile-team-core-size">
@@ -1254,29 +1292,22 @@
     </div>
   </section>
 
-  <section class="tab-panel" data-panel="archetypes" hidden>
-    <h2>Detected Archetypes</h2>
-    <p class="sub">
-      Experimental, data-derived team identities anchored by three-Pokémon
-      cores from real Champions rosters. Qualifying cores appear on at least
-      five teams and have above-chance three-way and average pair lift. Cores
-      sharing two members consolidate under their strongest neighbour; teams
-      receive one primary assignment and may retain one near-tied secondary
-      assignment. Neutral core names are deliberate—composition alone does
-      not prove an editorial label such as “Rain” or “Balance.”
-    </p>
+  <section class="tab-panel" data-panel="archetypes" data-section="teams" hidden>
+    <h2 class="panel-title">Detected Archetypes</h2>
+    <p class="lead">Experimental team identities, each anchored by a three-Pokémon core that recurs across events.</p>
+    <details class="method"><summary>How this is computed</summary>
+      <p>Qualifying cores appear on at least five teams and have above-chance three-way and average pair lift. Cores sharing two members consolidate under their strongest neighbour; each team gets one primary assignment and may keep one near-tied secondary one.</p>
+      <p>The names are neutral on purpose: composition alone does not prove an editorial label such as “Rain” or “Balance.”</p>
+    </details>
     <div class="grid-6xn" id="detected-archetype-grid"></div>
   </section>
 
-  <section class="tab-panel" data-panel="speed-tiers" hidden>
-    <h2>Speed tiers</h2>
-    <p class="sub">
-      Who actually moves first, under the scenario you pick. Everything but
-      "Base stat" is <strong>max Speed investment</strong> at Level 50 (252
-      EVs, a beneficial nature, a 31 IV) — the documented convention in
-      <code>pokemon_champions_profile</code>, since no source publishes real
-      per-roster EV spreads. Choose an opposing Speed to see who outruns it.
-    </p>
+  <section class="tab-panel" data-panel="speed-tiers" data-section="meta" hidden>
+    <h2 class="panel-title">Speed tiers</h2>
+    <p class="lead">Who moves first under the scenario you pick. Enter an opposing Speed to see who outruns it.</p>
+    <details class="method"><summary>How this is computed</summary>
+      <p>Everything but "Base stat" assumes <strong>max Speed investment</strong> at level 50 (252 EVs, a beneficial nature, a 31 IV). That's a convention, not data: no source publishes the EV spreads teams actually run.</p>
+    </details>
     <div class="controls">
       <label>Scenario
         <select id="speed-tiers-scenario">
@@ -1323,15 +1354,13 @@
     </div>
   </section>
 
-  <section class="tab-panel" data-panel="matchup" hidden>
-    <h2>Matchup</h2>
-    <p class="sub">
-      Real head-to-head records, type effectiveness, teammate co-usage, and a
-      stats/setup/weather-aware damage calculator — see
-      docs/design-system.md's "Matchup tab" for what this does and doesn't
-      model. Head-to-head is measured <strong>team vs team</strong>: no source
-      publishes which Pokémon were actually brought to a given match.
-    </p>
+  <section class="tab-panel" data-panel="matchup" data-section="pokemon" hidden>
+    <h2 class="panel-title">Matchup</h2>
+    <p class="lead">A damage estimate, type effectiveness and real head-to-head records for two Pokémon.</p>
+    <details class="method"><summary>How this is computed</summary>
+      <p>The calculator assumes level 50 with full investment in the attacking and defending stat (no source publishes EV spreads). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
+      <p>Head-to-head is measured <strong>team vs team</strong>: no source publishes which Pokémon were brought to a given match.</p>
+    </details>
     <div class="matchup-picker-grid">
       <div class="matchup-side">
         <h4>Attacker</h4>
@@ -1391,13 +1420,21 @@
     <div class="grid-6xn" id="matchup-co-usage-grid"></div>
   </section>
 
-  <section class="tab-panel" data-panel="team-builder" hidden>
-    <h2>Team builder</h2>
-    <p class="sub">
-      Build a roster of up to 6 from the current legal pool, with each
-      pick's stats, top move, and top ability shown right on its slot. Your
-      team is saved in this browser (not shared or uploaded anywhere).
-    </p>
+  <section class="tab-panel" data-panel="team-builder" data-section="builder" hidden>
+    <h2 class="panel-title">Team builder</h2>
+    <p class="lead">Build a team of six from the legal pool. It's saved in this browser only.</p>
+    {# Pokepaste import lives here, not under Teams (docs/upgrade-plan-2027q1.md, U7). #}
+    <details class="method import-team" id="import-team">
+      <summary>Import team</summary>
+      <p>Paste a Showdown or pokepast.es team export. Parsing happens in your browser; nothing is uploaded.</p>
+      <div class="pokepaste-box">
+        <textarea id="pokepaste-input" placeholder="Paste a Showdown-format team export here…"></textarea>
+        <div class="pokepaste-actions">
+          <button class="btn btn-primary btn-sm" id="pokepaste-load" type="button">Load into Team Builder</button>
+          <span class="pokepaste-status" id="pokepaste-status" role="status"></span>
+        </div>
+      </div>
+    </details>
     <div class="team-builder-grid">
       <div class="roster-picker">
         <h3>Legal pool</h3>
@@ -1475,64 +1512,40 @@
     </div>
   </section>
 
-  <section class="tab-panel" data-panel="top-teams" hidden>
-    <h2>Import a team</h2>
-    <p class="sub">
-      Paste a Showdown/pokepast.es-format team export below (the same text
-      you'd paste to create a pokepast.es paste) to load it into Team
-      Builder. Nothing is uploaded — parsing happens in your browser.
-    </p>
-    <div class="pokepaste-box">
-      <textarea id="pokepaste-input" placeholder="Paste a Showdown-format team export here…"></textarea>
-      <div class="pokepaste-actions">
-        <button class="btn btn-primary btn-sm" id="pokepaste-load" type="button">Load into Team Builder</button>
-        <span class="pokepaste-status" id="pokepaste-status"></span>
-      </div>
-    </div>
-
-    <h2>Top Teams</h2>
+  <section class="tab-panel" data-panel="top-teams" data-section="teams" hidden>
+    <h2 class="panel-title">Top Teams</h2>
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="tt-leaderboard" aria-selected="true">By win rate</button>
-      <button class="subtab-btn" role="tab" data-subtab="tt-converged" aria-selected="false">Converged lists</button>
+      <button class="subtab-btn" role="tab" data-subtab="tt-leaderboard" data-route="top" aria-selected="true">By win rate</button>
+      <button class="subtab-btn" role="tab" data-subtab="tt-converged" data-route="converged" aria-selected="false">Converged lists</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="tt-leaderboard">
-      <p class="sub">Real Pokémon Champions tournament teams (MunchStats), ranked by reported win rate — distinct from the curated Pro Team Gallery below.</p>
+      <p class="lead">Champions tournament teams ranked by reported win rate.</p>
       <div class="grid-6xn" id="top-teams-grid"></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="tt-converged" hidden>
-      <p class="sub">
-        Whole team compositions the field independently converged on
-        (Limitless VGC), ranked by how many distinct players fielded the
-        same six Pokémon. <strong>Day-2 cut only</strong> — Limitless
-        publishes the teams that made the cut, about 93 distinct Pokémon
-        against 203 across the full Champions roster, so this shows what
-        converged at the top of the field rather than the meta as a whole.
-      </p>
+      <p class="lead">Whole teams several players independently brought, ranked by how many did.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>From Limitless VGC team lists, which cover the <strong>day-2 cut only</strong>, so this shows what converged at the top of the field rather than the meta as a whole.</p>
+      </details>
       <div class="grid-6xn" id="converged-lists-grid"></div>
     </div>
 
     <h3>Pro Team Gallery</h3>
-    <p class="sub">
-      Curated real tournament teams for reference/inspiration — not part of
-      your saved roster. "Load into my builder" copies a gallery team's
-      Pokémon into Team Builder (skipping any no longer in the legal pool).
-    </p>
+    <p class="lead">Hand-picked real tournament teams. "Load into my builder" copies one into the Team Builder.</p>
     <div class="gallery-grid" id="pro-team-gallery"></div>
   </section>
 
-  <section class="tab-panel" data-panel="players" hidden>
-    <h2>Players &amp; Regions</h2>
-    <p class="sub">
-      Who plays what. Both views are computed across a player's or a
-      country's <em>entire</em> recorded Champions history, not a single
-      event. Country codes are MunchStats' own two-letter codes, and a team
-      only appears here if its player reported one.
-    </p>
+  <section class="tab-panel" data-panel="players" data-section="teams" hidden>
+    <h2 class="panel-title">Players &amp; Regions</h2>
+    <p class="lead">Who plays what, across each player's or country's whole Champions history.</p>
+    <details class="method"><summary>How this is computed</summary>
+      <p>Country codes are the two-letter codes the source publishes, and a team only counts toward a country if its player reported one.</p>
+    </details>
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="players-regions" aria-selected="true">By region</button>
-      <button class="subtab-btn" role="tab" data-subtab="players-signature" aria-selected="false">By player</button>
+      <button class="subtab-btn" role="tab" data-subtab="players-regions" data-route="regions" aria-selected="true">By region</button>
+      <button class="subtab-btn" role="tab" data-subtab="players-signature" data-route="signatures" aria-selected="false">By player</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="players-regions">
@@ -1552,14 +1565,10 @@
     </div>
 
     <div class="subtab-panel" data-subpanel="players-signature" hidden>
-      <p class="sub">
-        A player's most-fielded Pokémon across every team of theirs on record.
-        Restricted to players with at least 2 recorded teams — a "signature"
-        claim from someone with a single recorded team is just that team's
-        roster. Only three Champions events exist anywhere, so two is a
-        meaningful bar here rather than a low one: exactly one player in the
-        whole dataset has three.
-      </p>
+      <p class="lead">A player's most-fielded Pokémon across every team of theirs on record.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Only players with at least 2 recorded teams are listed: a "signature" claim from a single team is just that team's roster.</p>
+      </details>
       <div class="controls">
         <label>Player
           <select id="players-player-filter"></select>
@@ -1568,13 +1577,7 @@
       <p class="sub" id="players-player-note"></p>
       <div class="grid-6xn" id="players-signature-grid"></div>
       <h3>Most committed specialists</h3>
-      <p class="sub">
-        Players who brought their top pick to the largest share of their own
-        recorded <em>teams</em> — 100% means it was on every team they
-        fielded. Deliberately not ranked by share of roster slots: a Pokémon
-        can only appear once per six-slot team, so that share is capped at
-        16.7% and ties everyone who is fully committed.
-      </p>
+      <p class="lead">Players who brought their top pick to the largest share of their own teams; 100% means every team.</p>
       <div class="table-scroll">
         <table id="players-specialists-table">
           <thead><tr><th>Rank</th><th>Player</th><th>Country</th><th>Signature Pokémon</th><th class="sortable" data-sort-key="team_share">Share of their teams</th><th>Fielded in</th></tr></thead>
@@ -1585,9 +1588,9 @@
   </section>
 
 
-  <section class="tab-panel" data-panel="compare" hidden>
-    <h2>Compare Pokémon</h2>
-    <p class="section-intro">Compare sourced competitive profiles side by side, then share the exact view with a URL.</p>
+  <section class="tab-panel" data-panel="compare" data-section="pokemon" hidden>
+    <h2 class="panel-title">Compare Pokémon</h2>
+    <p class="lead">Two Pokémon side by side. The address bar links to exactly this comparison.</p>
     <div class="filters">
       <label>Pokémon A <select id="compare-a"></select></label>
       <label>Pokémon B <select id="compare-b"></select></label>
@@ -1595,32 +1598,29 @@
     </div>
     <div id="compare-results"></div>
   </section>
-  <section class="tab-panel" data-panel="core-explorer" hidden>
-    <h2>Team Core Explorer</h2>
-    <p class="section-intro">Search observed pair and triple composition patterns, with sample size and lift kept visible.</p>
+  <section class="tab-panel" data-panel="core-explorer" data-section="teams" hidden>
+    <h2 class="panel-title">Team Core Explorer</h2>
+    <p class="lead">Pairs and triples that recur on real teams, with sample size and lift.</p>
     <div class="filters">
       <label>Anchor Pokémon <select id="core-anchor"></select></label>
       <label>Core size <select id="core-size"><option value="pair">Pairs</option><option value="triple">Triples</option></select></label>
     </div>
     <div id="core-results"></div>
   </section>
-  <section class="tab-panel" data-panel="data-sources" hidden>
-    <h2>Data &amp; Sources</h2>
-    <p class="sub">
-      Where every number on this dashboard comes from, and whether it passed
-      the release gates in <code>docs/dataset-spec.md</code>. Provenance is
-      mandatory in this dataset — every record carries its source, URL,
-      upstream record id and extraction timestamp — so it is reported here
-      rather than left implicit.
-    </p>
+  <section class="tab-panel" data-panel="data-sources" data-section="data" hidden>
+    <h2 class="panel-title">Data &amp; Sources</h2>
+    <p class="lead">Where every number on this site comes from, and whether it passed the dataset's release gates.</p>
+    <details class="method"><summary>About provenance</summary>
+      <p>Every record in the dataset carries its source, source URL, upstream record id and extraction time. Records without a traceable source never ship.</p>
+    </details>
 
     <div class="subtabs" role="tablist">
-      <button class="subtab-btn" role="tab" data-subtab="ds-sources" aria-selected="true">Sources</button>
-      <button class="subtab-btn" role="tab" data-subtab="ds-gates" aria-selected="false">Release gates</button>
-      <button class="subtab-btn" role="tab" data-subtab="ds-assets" aria-selected="false">Image coverage</button>
-      <button class="subtab-btn" role="tab" data-subtab="ds-agreement" aria-selected="false">Source agreement</button>
-      <button class="subtab-btn" role="tab" data-subtab="ds-history" aria-selected="false">History</button>
-      <button class="subtab-btn" role="tab" data-subtab="ds-caveats" aria-selected="false">Caveats</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-sources" data-route="sources" aria-selected="true">Sources</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-gates" data-route="gates" aria-selected="false">Release gates</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-assets" data-route="images" aria-selected="false">Image coverage</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-agreement" data-route="agreement" aria-selected="false">Source agreement</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-history" data-route="history" aria-selected="false">History</button>
+      <button class="subtab-btn" role="tab" data-subtab="ds-caveats" data-route="caveats" aria-selected="false">Caveats</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="ds-sources">
@@ -1743,7 +1743,17 @@
   </section>
 
 </main>
-<footer>Pokémon Champions Competitive Data Platform · static dashboard built by pipelines/dashboard/</footer>
+{# Provenance in one line (docs/upgrade-plan-2027q1.md, U2): which dataset
+   version and snapshot the page was built from, and whether its release
+   gates passed. #}
+<footer class="site-footer">
+  <span>Pokémon Champions Data Platform</span>
+  {% if payload.provenance.dataset_version %}<span>dataset {{ payload.provenance.dataset_version }}</span>{% endif %}
+  {% if payload.kpis.latest_snapshot_date %}<span>snapshot {{ payload.kpis.latest_snapshot_date }}</span>{% endif %}
+  {% if payload.provenance.validation_available %}<span>{% if payload.provenance.release_blocking_findings %}{{ payload.provenance.release_blocking_findings | length }} gate failure(s){% else %}all release gates passing{% endif %}</span>{% endif %}
+  <span>built {{ payload.generated_at_utc[:10] }}</span>
+  <a href="#/data">Data &amp; sources</a>
+</footer>
 
 <script>window.DASHBOARD_DATA = {{ data_json | safe }};</script>
 <script src="app.js"></script>

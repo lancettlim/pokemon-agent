@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from pipelines.dashboard import data, sprites
+from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
 from pipelines.render import template as render_template
@@ -90,6 +92,7 @@ _CRITICAL_PAYLOAD_KEYS = (
     "regulations",
     "kpis_by_scope",
     "default_scope",
+    "min_default_scope_teams",
     "mart_files",
 )
 
@@ -107,6 +110,14 @@ ON_DEMAND_MARTS = (
     "pokemon_head_to_head",
     "pokemon_team_core_triple_usage",
     "player_signature_pokemon",
+    # Event-, team- and player-grain marts (docs/upgrade-plan-2027q1.md,
+    # C1-C4): only the event, team, player and Builder views and the
+    # event-window filter read them. Keeping them out of core.json holds
+    # the core payload under its 500KB budget (tests/browser).
+    "pokemon_event_usage_vs_regulation",
+    "tournament_team_results",
+    "tournament_team_sheets",
+    "player_archetype_record",
 )
 
 
@@ -124,8 +135,19 @@ def _write_mart_shards(
     for stale in shard_dir.glob("*.json"):
         stale.unlink()
 
+    # Display-name columns (pokemon_name, partner_pokemon_name, ...) repeat
+    # one of a few hundred names on every row, and the page already holds
+    # the full pokemon_key -> name map inline. They are dropped from the
+    # shard files and restored client-side from "name_fields" (static/
+    # app.js's fetchShard), which keeps the core payload within its budget.
+    name_fields = [name for _key, name in data.NAME_JOINS]
+
+    def without_names(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [{k: v for k, v in row.items() if k not in name_fields} for row in rows]
+
     def write(name: str, content: dict[str, Any]) -> str:
-        (shard_dir / f"{name}.json").write_text(json.dumps(content, default=str), encoding="utf-8")
+        slim = {mart: without_names(rows) for mart, rows in content.items()}
+        (shard_dir / f"{name}.json").write_text(json.dumps(slim, default=str), encoding="utf-8")
         return f"{SHARD_DIR}/{name}.json"
 
     scoped_names = [n for n, rows in marts.items() if rows and "regulation_scope" in rows[0]]
@@ -134,7 +156,12 @@ def _write_mart_shards(
         for name, rows in marts.items()
         if name not in scoped_names and name not in ON_DEMAND_MARTS
     }
-    index: dict[str, Any] = {"core": write("core", core), "scopes": {}, "on_demand": {}}
+    index: dict[str, Any] = {
+        "core": write("core", core),
+        "scopes": {},
+        "on_demand": {},
+        "name_fields": [list(pair) for pair in data.NAME_JOINS],
+    }
     for scope in scopes:
         index["scopes"][scope] = write(
             f"scope-{scope}",
@@ -330,6 +357,8 @@ def build(
     item_icon_cache_dir: Path = DEFAULT_ITEM_ICON_CACHE_DIR,
     reference_teams_dir: Path = DEFAULT_REFERENCE_TEAMS_DIR,
     fetch_icons: bool = True,
+    regulations: list[Regulation] | None = None,
+    today: date | None = None,
 ) -> dict[str, Any]:
     """Renders templates/index.html.jinja with the marts payload baked in,
     copies static/app.js alongside it, and populates output_dir/images/
@@ -338,8 +367,10 @@ def build(
 
     fetch_icons controls whether item icons are fetched over the network
     (see _resolve_item_icons); pass False for offline/test builds.
+    regulations/today override the regulation registry and build date, for
+    tests that exercise a regulation rollover.
     """
-    payload = data.build_payload(marts_dir, normalized_dir)
+    payload = data.build_payload(marts_dir, normalized_dir, regulations=regulations, today=today)
 
     referenced_keys = _referenced_pokemon_keys(payload["marts"])
     payload["sprites"] = sprites.copy_sprites(

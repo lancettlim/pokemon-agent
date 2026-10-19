@@ -14,8 +14,12 @@ labelled everywhere it appears, and the site stays static with no backend.
 
 | Item | State |
 |---|---|
-| U1–U4 Shell fixes | Not started |
-| U5–U8 Data presentation | Not started |
+| U1 Real routing | Done (Sprint 5) |
+| U2 Compact chrome | Done (Sprint 5): content starts at 114px desktop, 110px phone |
+| U3 Regulation rollover | Done (Sprint 5), with unit and browser fixture tests |
+| U4 Copy pass | Repo paths and internal names removed (Sprint 5); glossary and denominators not started |
+| U5–U7 Data presentation | Not started |
+| U8 Browser smoke tests + budget | Done (Sprint 5): core payload 448KB compressed |
 | P1–P5 Player features | Not started |
 | C1–C4 Event, team and player features | Not started |
 | D1–D3 Data access and operations | Not started |

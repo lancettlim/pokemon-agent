@@ -8,7 +8,7 @@ with its source. This guards against that drift directly, independent of
 
 from pipelines.dashboard import build
 
-SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js")
+SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js")
 
 
 def test_committed_dashboard_scripts_match_static_source():
