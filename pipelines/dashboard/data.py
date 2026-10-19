@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+from pipelines.regulations import current_regulation, load_regulations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MARTS_DIR = REPO_ROOT / "data" / "marts"
@@ -56,6 +58,7 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     ),
     "pokemon_item_usage": (("usage_count", "usage_rank"), ("item_share",)),
     "pokemon_ability_usage": (("usage_count", "usage_rank"), ("ability_share",)),
+    "pokemon_nature_usage": (("usage_count", "usage_rank"), ("nature_share",)),
     "pokemon_move_usage": (
         ("usage_count", "usage_rank", "power", "accuracy", "priority", "pp"),
         ("move_share",),
@@ -104,6 +107,27 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("item_hhi", "ability_hhi"),
     ),
     "pokemon_team_synergy": (("pair_team_count", "lift_rank"), ("lift",)),
+    "pokemon_regulation_movers": (
+        (
+            "usage_count",
+            "usage_rank",
+            "previous_usage_count",
+            "previous_usage_rank",
+            "rank_change",
+            "record_count",
+            "previous_record_count",
+            "team_count",
+            "previous_team_count",
+        ),
+        (
+            "usage_share",
+            "previous_usage_share",
+            "usage_share_delta",
+            "win_rate",
+            "previous_win_rate",
+            "win_rate_delta",
+        ),
+    ),
     "pokemon_team_core_triple_usage": (
         (
             "triple_team_count",
@@ -193,6 +217,10 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
 # docs/local-queries.md's ad-hoc querying.
 MIN_SYNERGY_PAIR_TEAMS = 5
 MAX_SYNERGY_PARTNERS_PER_POKEMON = 12
+# The Core Explorer lists at most 24 partners per Pokémon, and the Profile's
+# Team Cores tab fewer. pokemon_team_core_usage is every co-occurring pair
+# in every regulation scope, most of it one-off pairings no view shows.
+MAX_CORE_PARTNERS_PER_POKEMON = 24
 MIN_TRIPLE_CORE_TEAMS = 5
 MAX_DETECTED_ARCHETYPES = 24
 # Deliberately 2, not a larger "established player" number: only three
@@ -206,17 +234,31 @@ MIN_SIGNATURE_PLAYER_TEAMS = 2
 MAX_SIGNATURE_PICKS_PER_PLAYER = 6
 
 
-def _slice_team_synergy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    kept = [r for r in rows if (r.get("pair_team_count") or 0) >= MIN_SYNERGY_PAIR_TEAMS]
-    per_anchor: dict[str, int] = {}
+def _top_per_anchor(rows: list[dict[str, Any]], *, metric: str, limit: int) -> list[dict[str, Any]]:
+    """The `limit` highest-`metric` rows per (regulation_scope, pokemon_key)."""
+    per_anchor: dict[tuple[str, str], int] = {}
     out = []
-    for row in sorted(kept, key=lambda r: (r["pokemon_key"], -(r.get("lift") or 0))):
-        seen = per_anchor.get(row["pokemon_key"], 0)
-        if seen >= MAX_SYNERGY_PARTNERS_PER_POKEMON:
+    ordered = sorted(
+        rows,
+        key=lambda r: (r.get("regulation_scope", ""), r["pokemon_key"], -(r.get(metric) or 0)),
+    )
+    for row in ordered:
+        anchor = (row.get("regulation_scope", ""), row["pokemon_key"])
+        seen = per_anchor.get(anchor, 0)
+        if seen >= limit:
             continue
-        per_anchor[row["pokemon_key"]] = seen + 1
+        per_anchor[anchor] = seen + 1
         out.append(row)
     return out
+
+
+def _slice_team_synergy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kept = [r for r in rows if (r.get("pair_team_count") or 0) >= MIN_SYNERGY_PAIR_TEAMS]
+    return _top_per_anchor(kept, metric="lift", limit=MAX_SYNERGY_PARTNERS_PER_POKEMON)
+
+
+def _slice_team_core_usage(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _top_per_anchor(rows, metric="co_occurrence_count", limit=MAX_CORE_PARTNERS_PER_POKEMON)
 
 
 def _slice_player_signature(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -246,25 +288,119 @@ def _slice_detected_archetypes(rows: list[dict[str, Any]]) -> list[dict[str, Any
 
 MART_SLICERS = {
     "pokemon_team_synergy": _slice_team_synergy,
+    "pokemon_team_core_usage": _slice_team_core_usage,
     "pokemon_team_core_triple_usage": _slice_team_core_triples,
     "detected_archetype_summary": _slice_detected_archetypes,
     "player_signature_pokemon": _slice_player_signature,
 }
 
 
-def to_pascal_case(slug: str) -> str:
-    """Converts a hyphen-delimited PokéAPI form slug (e.g.
-    "landorus-therian", "charizard-mega-x") into a PascalCase display name
-    ("LandorusTherian", "CharizardMegaX") per the dashboard design system's
-    Pokémon-naming convention (docs/design-system.md). Applied to
-    pokemon_key/form_name rather than the raw species-only pokemon_name
-    column, since form_name is what's actually unique per row — using the
-    bare species name would collide across forms (e.g. Landorus-Incarnate
-    and Landorus-Therian both reporting as "landorus")."""
-    parts = [part for part in slug.split("-") if part]
-    if not parts:
-        return slug
-    return "".join(part.capitalize() for part in parts)
+# Species whose display name isn't the title-cased slug: punctuation,
+# accents, or letters that the slug folds away.
+_SPECIES_NAME_OVERRIDES = {
+    "mr-mime": "Mr. Mime",
+    "mr-rime": "Mr. Rime",
+    "mime-jr": "Mime Jr.",
+    "farfetchd": "Farfetch\u2019d",
+    "sirfetchd": "Sirfetch\u2019d",
+    "type-null": "Type: Null",
+    "ho-oh": "Ho-Oh",
+    "porygon-z": "Porygon-Z",
+    "jangmo-o": "Jangmo-o",
+    "hakamo-o": "Hakamo-o",
+    "kommo-o": "Kommo-o",
+    "nidoran-f": "Nidoran\u2640",
+    "nidoran-m": "Nidoran\u2642",
+    "flabebe": "Flab\u00e9b\u00e9",
+    "wo-chien": "Wo-Chien",
+    "chien-pao": "Chien-Pao",
+    "ting-lu": "Ting-Lu",
+    "chi-yu": "Chi-Yu",
+}
+
+# Regional form suffix -> adjective that goes before the species name.
+_REGIONAL_PREFIXES = {
+    "alola": "Alolan",
+    "galar": "Galarian",
+    "hisui": "Hisuian",
+    "paldea": "Paldean",
+}
+
+# Gendered forms render as a symbol after the name rather than a word.
+_GENDER_SYMBOLS = {"male": "\u2642", "female": "\u2640"}
+
+
+def _title_words(slug: str) -> str:
+    return " ".join(part.capitalize() for part in slug.split("-") if part)
+
+
+def _infer_species(pokemon_key: str, known_species: set[str]) -> str:
+    """The longest known species slug that prefixes pokemon_key, falling
+    back to the first token when the species list isn't available."""
+    parts = pokemon_key.split("-")
+    for end in range(len(parts), 0, -1):
+        candidate = "-".join(parts[:end])
+        if candidate in known_species:
+            return candidate
+    return parts[0]
+
+
+def display_name(pokemon_key: str, species: str | None = None) -> str:
+    """A player-facing name for a pokemon_key (PokéAPI form slug):
+
+        charizard-mega-y     -> Mega Charizard Y
+        absol-mega-z         -> Mega Absol Z
+        meowstic-male-mega   -> Mega Meowstic \u2642
+        basculegion-male     -> Basculegion \u2642
+        ninetales-alola      -> Alolan Ninetales
+        tauros-paldea-aqua-breed -> Paldean Tauros (Aqua)
+        landorus-therian     -> Landorus (Therian)
+        great-tusk           -> Great Tusk
+        farfetchd            -> Farfetch\u2019d
+
+    `species` is PokéAPI's species slug (data/normalized/pokemon.csv's
+    pokemon_name). It's what separates the species from the form suffix
+    for multi-word species like great-tusk. Without it, the first hyphen
+    token is assumed to be the species.
+
+    This replaced the PascalCase convention ("CharizardMegaY",
+    "BasculegionMale"): those names read as internal identifiers, and long
+    ones broke mid-word in the KPI cards (docs/upgrade-plan-2026q4.md, B1).
+    """
+    if not pokemon_key:
+        return pokemon_key
+    species = species or pokemon_key.split("-")[0]
+    if not pokemon_key.startswith(species):
+        species = pokemon_key.split("-")[0]
+    base = _SPECIES_NAME_OVERRIDES.get(species, _title_words(species))
+    form_parts = [p for p in pokemon_key[len(species) :].split("-") if p]
+    if not form_parts:
+        return base
+
+    prefix = ""
+    suffix_tokens: list[str] = []
+    if "mega" in form_parts:
+        prefix = "Mega "
+        form_parts.remove("mega")
+    elif "gmax" in form_parts:
+        prefix = "Gigantamax "
+        form_parts.remove("gmax")
+    if form_parts and form_parts[0] in _REGIONAL_PREFIXES:
+        prefix += _REGIONAL_PREFIXES[form_parts.pop(0)] + " "
+        if form_parts and form_parts[-1] == "breed":
+            form_parts.pop()
+    gender = ""
+    if form_parts and form_parts[0] in _GENDER_SYMBOLS:
+        gender = " " + _GENDER_SYMBOLS[form_parts.pop(0)]
+    # A lone trailing letter after "mega" is the X/Y/Z variant letter.
+    if prefix.startswith("Mega") and len(form_parts) == 1 and len(form_parts[0]) == 1:
+        suffix_tokens.append(form_parts.pop().upper())
+    name = prefix + base + gender
+    if suffix_tokens:
+        name += " " + " ".join(suffix_tokens)
+    if form_parts:
+        name += f" ({' '.join(p.capitalize() for p in form_parts)})"
+    return name
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -299,14 +435,19 @@ def load_mart(marts_dir: Path, mart_name: str) -> list[dict[str, Any]]:
 
 
 def load_pokemon_names(normalized_dir: Path = DEFAULT_NORMALIZED_DIR) -> dict[str, str]:
-    """pokemon_key -> PascalCase display name, for friendlier labels than
-    raw keys. Derived from pokemon_key itself (== form_name) via
-    to_pascal_case rather than the CSV's own pokemon_name column, which is
-    species-only and collides across a species' multiple forms. Returns {}
-    gracefully if data/normalized/pokemon.csv isn't present."""
+    """pokemon_key -> player-facing display name (see display_name). The
+    name comes from pokemon_key (== form_name), using the CSV's species-only
+    pokemon_name column only to split species from form, so a species'
+    forms never collide. Returns {} gracefully if
+    data/normalized/pokemon.csv isn't present."""
+    rows = _read_csv_rows(normalized_dir / "pokemon.csv")
+    known_species = {row.get("pokemon_name", "") for row in rows}
     return {
-        row["pokemon_key"]: to_pascal_case(row["pokemon_key"])
-        for row in _read_csv_rows(normalized_dir / "pokemon.csv")
+        row["pokemon_key"]: display_name(
+            row["pokemon_key"],
+            row.get("pokemon_name") or _infer_species(row["pokemon_key"], known_species),
+        )
+        for row in rows
     }
 
 
@@ -393,7 +534,7 @@ def load_release_history(manifests_dir: Path = DEFAULT_MANIFESTS_DIR) -> list[di
 
 
 # <key column> -> <display-name column> pairs resolved against the
-# pokemon_key -> PascalCase name map, so every mart row carries a
+# pokemon_key -> display name map (see display_name), so every mart row carries a
 # ready-to-render name rather than each view looking it up client-side.
 _NAME_JOINS = (
     ("pokemon_key", "pokemon_name"),
@@ -424,7 +565,123 @@ def _join_pokemon_names(
     return joined
 
 
-def compute_kpis(marts: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+ALL_SCOPE = "all"
+
+# Below this many teams on either side, a regulation-to-regulation delta is
+# mostly noise, so the "What changed" panel shows counts but no deltas.
+MIN_MOVER_TEAMS = 100
+MAX_MOVERS_PER_LIST = 6
+
+
+def marts_for_scope(
+    marts: dict[str, list[dict[str, Any]]], scope: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Marts cut down to one regulation_scope ("m-c" or "all"). Marts with
+    no regulation_scope column (head-to-head, cores, legality, ...) pass
+    through unchanged."""
+    scoped = {}
+    for name, rows in marts.items():
+        if rows and "regulation_scope" in rows[0]:
+            scoped[name] = [r for r in rows if r.get("regulation_scope") == scope]
+        else:
+            scoped[name] = rows
+    return scoped
+
+
+def _mover_row(row: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "pokemon_key",
+        "pokemon_name",
+        "usage_share",
+        "previous_usage_share",
+        "usage_share_delta",
+        "usage_rank",
+        "previous_usage_rank",
+        "win_rate",
+    )
+    return {key: row.get(key) for key in keys}
+
+
+def summarize_movers(
+    movers_rows: list[dict[str, Any]], regulation_code: str
+) -> dict[str, Any] | None:
+    """Risers, fallers and new arrivals for one regulation against the one
+    before it (pokemon_regulation_movers). `reliable` is false when either
+    side has fewer than MIN_MOVER_TEAMS teams; the UI then shows the sample
+    sizes and new arrivals but holds back the deltas."""
+    rows = [r for r in movers_rows if r.get("regulation_code") == regulation_code]
+    if not rows:
+        return None
+    team_count = rows[0].get("team_count") or 0
+    previous_team_count = rows[0].get("previous_team_count") or 0
+    is_new = [r for r in rows if str(r.get("is_new_to_format")).lower() == "true"]
+    carried = [r for r in rows if str(r.get("is_new_to_format")).lower() != "true"]
+    risers = sorted(
+        (r for r in carried if (r.get("usage_share_delta") or 0) > 0),
+        key=lambda r: -(r.get("usage_share_delta") or 0),
+    )
+    fallers = sorted(
+        (r for r in carried if (r.get("usage_share_delta") or 0) < 0),
+        key=lambda r: r.get("usage_share_delta") or 0,
+    )
+    arrivals = sorted(
+        (r for r in is_new if (r.get("usage_count") or 0) > 0),
+        key=lambda r: -(r.get("usage_share") or 0),
+    )
+    return {
+        "regulation_code": regulation_code,
+        "previous_regulation_code": rows[0].get("previous_regulation_code"),
+        "team_count": team_count,
+        "previous_team_count": previous_team_count,
+        "reliable": min(team_count, previous_team_count) >= MIN_MOVER_TEAMS,
+        "risers": [_mover_row(r) for r in risers[:MAX_MOVERS_PER_LIST]],
+        "fallers": [_mover_row(r) for r in fallers[:MAX_MOVERS_PER_LIST]],
+        "new_arrivals": [_mover_row(r) for r in arrivals[:MAX_MOVERS_PER_LIST]],
+    }
+
+
+def _current_regulation_kpi(
+    legal_pool_by_regulation: list[dict[str, Any]],
+    today: date | None,
+    regulation_code: str | None = None,
+) -> dict[str, Any] | None:
+    """A regulation from dbt/seeds/champions_regulations.csv and its
+    legal-pool size: `regulation_code` if given, otherwise the one in force
+    today. This is what the header and the legal-pool KPI lead with, so the
+    page always says which format it's describing."""
+    if regulation_code is not None:
+        regulation = next(
+            (r for r in load_regulations() if r.regulation_code == regulation_code), None
+        )
+    else:
+        regulation = current_regulation(today)
+    if regulation is None:
+        return None
+    legal_count = next(
+        (
+            r["legal_pokemon_count"]
+            for r in legal_pool_by_regulation
+            if r["regulation_code"] == regulation.regulation_code
+        ),
+        None,
+    )
+    return {
+        "regulation_code": regulation.regulation_code,
+        "regulation_name": regulation.regulation_name,
+        "start_date": regulation.start_date.isoformat(),
+        "end_date": regulation.end_date.isoformat(),
+        "legal_pokemon_count": legal_count,
+    }
+
+
+def compute_kpis(
+    marts: dict[str, list[dict[str, Any]]],
+    today: date | None = None,
+    scope: str = ALL_SCOPE,
+) -> dict[str, Any]:
+    """KPIs for one regulation scope. `marts` is expected to be cut down to
+    that scope already (marts_for_scope); `scope` picks which regulation the
+    legal-pool card describes and which movers summary is attached."""
     usage_rows = [r for r in marts["pokemon_usage_summary"] if not r.get("event_tier")]
     legality_rows = marts["legality_summary_by_regulation"]
     win_rate_rows = marts["pokemon_win_rate_summary"]
@@ -481,11 +738,53 @@ def compute_kpis(marts: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     return {
         "latest_snapshot_date": latest_snapshot_date,
         "legal_pool_by_regulation": legal_pool_by_regulation,
+        "scope": scope,
+        "current_regulation": _current_regulation_kpi(
+            legal_pool_by_regulation, today, None if scope == ALL_SCOPE else scope
+        ),
+        "movers": (
+            None
+            if scope == ALL_SCOPE
+            else summarize_movers(marts.get("pokemon_regulation_movers", []), scope)
+        ),
+        # Newest tournament the marts cover. The staleness banner compares
+        # this against the viewer's own clock (static/app.js), so a site
+        # nobody has rebuilt still says it's out of date.
+        "latest_event_date": max(
+            (
+                r["event_date"]
+                for r in marts.get("pokemon_usage_by_event_date", [])
+                if r.get("event_date")
+            ),
+            default=None,
+        ),
         "distinct_pokemon_used": len(usage_rows),
         "top_used_pokemon": top_used,
         "top_win_rate_pokemon": top_win_rate,
         "top_12_pokemon": top_12_pokemon,
     }
+
+
+def compute_kpis_by_scope(
+    marts: dict[str, list[dict[str, Any]]], today: date | None = None
+) -> tuple[dict[str, dict[str, Any]], str]:
+    """KPIs for every regulation with usage data plus "all", and the scope
+    the page should open on: the regulation in force today if it has data,
+    otherwise the newest regulation that does, otherwise "all"."""
+    usage_scopes = {r.get("regulation_scope") for r in marts.get("pokemon_usage_summary", [])}
+    regulations = [r for r in load_regulations() if r.regulation_code in usage_scopes]
+    scopes = [r.regulation_code for r in regulations] + [ALL_SCOPE]
+    by_scope = {
+        scope: compute_kpis(marts_for_scope(marts, scope), today, scope) for scope in scopes
+    }
+    in_force = current_regulation(today)
+    if in_force is not None and in_force.regulation_code in by_scope:
+        default_scope = in_force.regulation_code
+    elif regulations:
+        default_scope = regulations[-1].regulation_code
+    else:
+        default_scope = ALL_SCOPE
+    return by_scope, default_scope
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -594,9 +893,16 @@ def build_payload(
     marts = load_marts(marts_dir)
     pokemon_names = load_pokemon_names(normalized_dir)
     marts = _join_pokemon_names(marts, pokemon_names)
+    kpis_by_scope, default_scope = compute_kpis_by_scope(marts)
     return {
         "generated_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "kpis": compute_kpis(marts),
+        # The page swaps DATA.kpis for kpis_by_scope[<selected scope>] on
+        # load (static/app.js); kpis is the default scope's, so anything
+        # reading it directly (the template's first paint, tests) still
+        # gets a coherent single-scope view.
+        "kpis": kpis_by_scope[default_scope],
+        "kpis_by_scope": kpis_by_scope,
+        "default_scope": default_scope,
         "provenance": load_provenance(reports_dir, staging_dir, manifests_dir),
         "marts": marts,
         # Full pokemon_key -> display name map, needed client-side wherever
@@ -605,4 +911,15 @@ def build_payload(
         # and the pokepaste import/export + Matchup tab's ad-hoc species
         # lookups (docs/design-system.md's Top Teams / Matchup tabs).
         "pokemon_names": pokemon_names,
+        # The regulation registry, so the page can work out which set is in
+        # force on the day it's viewed, not the day it was built.
+        "regulations": [
+            {
+                "regulation_code": r.regulation_code,
+                "regulation_name": r.regulation_name,
+                "start_date": r.start_date.isoformat(),
+                "end_date": r.end_date.isoformat(),
+            }
+            for r in load_regulations()
+        ],
     }

@@ -162,3 +162,49 @@ def test_extract_retries_transient_error_then_succeeds(tmp_path, monkeypatch):
 
     assert len(rows) == 3
     assert len(session.requested_urls) == 3
+
+
+def _html_with_regulation_ordered_payload(pokemon: list[dict]) -> str:
+    """The page shape PokéBase switched to by 2026-10: the list sits under
+    data.pokemon, entries carry `dex` and `addedIn`, and a separate
+    `regulations` array gives release order."""
+    inner_json = json.dumps(
+        {
+            "data": {"pokemon": pokemon},
+            "regulations": [
+                {"slug": "m-a", "name": "M-A"},
+                {"slug": "m-b", "name": "M-B"},
+                {"slug": "m-c", "name": "M-C"},
+            ],
+        },
+        separators=(",", ":"),
+    )
+    escaped_inner_json = json.dumps(inner_json)
+    return (
+        "<html><body>"
+        f'<script>self.__next_f.push([1,"6:{escaped_inner_json[1:-1]}"])</script>'
+        "</body></html>"
+    )
+
+
+def test_regulation_ordered_shape_is_legal_from_added_in_onward(tmp_path):
+    pokemon = [
+        {"id": "v1", "name": "Venusaur", "slug": "venusaur", "dex": 3, "addedIn": "m-a"},
+        {"id": "a1", "name": "Mega Absol Z", "slug": "absol-mega-z", "dex": 359, "addedIn": "m-c"},
+        {"id": "x1", "name": "Unreleased", "slug": "unreleased", "dex": 9999},
+    ]
+    session = _FakeSession(_html_with_regulation_ordered_payload(pokemon))
+    output_path = tmp_path / "pokebase.csv"
+
+    pokebase.extract(output_path, dataset_version="0.1.0", session=session)
+
+    with output_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+
+    by_form = {}
+    for row in rows:
+        by_form.setdefault(row["form_name"], []).append(row["regulation_code"])
+    assert by_form == {"venusaur": ["m-a", "m-b", "m-c"], "absol-mega-z": ["m-c"]}
+    absol = next(r for r in rows if r["form_name"] == "absol-mega-z")
+    assert absol["pokemon_id"] == "359"
+    assert absol["source_record_id"] == "a1:m-c"

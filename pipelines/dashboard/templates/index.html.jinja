@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pokémon Champions — Analytics Dashboard</title>
+<script>
+  // Apply a saved Light/Dark choice before first paint (no flash of the
+  // wrong theme). "auto" or nothing saved follows prefers-color-scheme.
+  try {
+    var savedTheme = localStorage.getItem("dashboard-theme");
+    if (savedTheme === "light" || savedTheme === "dark") {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+  } catch (e) {}
+</script>
 <style>
   /* ---------------------------------------------------------------
    * Design tokens — see docs/design-system.md for the full token
@@ -95,6 +105,73 @@
     --font-2xl: 1.6rem;
   }
   * { box-sizing: border-box; }
+  /* Dark theme (docs/upgrade-plan-2026q4.md, B8): the same tokens, redefined.
+     Follows the OS setting unless the header toggle pinned Light or Dark
+     (data-theme on <html>). Type colors stay as they are: they're accents
+     on borders and pills and read on both backgrounds. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --navy: #e6e9f2;
+      --blue: #6c9bef;
+      --light-blue: #1f2a40;
+      --border: #3a4560;
+      --muted: #9aa6c2;
+      --bg: #0f1218;
+      --surface: #181c25;
+      --positive: #4fc27f;
+      --positive-bg: #12301f;
+      --warning: #e0a94a;
+      --warning-bg: #33280f;
+      --danger: #ef6b6b;
+      --danger-bg: #3a1717;
+      --panel-dark: #07080c;
+      --accent-red-bg: #3a1a1d;
+      --accent-gold-bg: #3a2f12;
+      --speed-blazing: #ef6b6b;
+      --speed-blazing-bg: #3a1717;
+      --speed-fast: #e0a94a;
+      --speed-fast-bg: #33280f;
+      --speed-average: #6c9bef;
+      --speed-average-bg: #1f2a40;
+      --speed-slow: #9aa6c2;
+      --speed-slow-bg: #252b38;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --navy: #e6e9f2;
+    --blue: #6c9bef;
+    --light-blue: #1f2a40;
+    --border: #3a4560;
+    --muted: #9aa6c2;
+    --bg: #0f1218;
+    --surface: #181c25;
+    --positive: #4fc27f;
+    --positive-bg: #12301f;
+    --warning: #e0a94a;
+    --warning-bg: #33280f;
+    --danger: #ef6b6b;
+    --danger-bg: #3a1717;
+    --panel-dark: #07080c;
+    --accent-red-bg: #3a1a1d;
+    --accent-gold-bg: #3a2f12;
+    --speed-blazing: #ef6b6b;
+    --speed-blazing-bg: #3a1717;
+    --speed-fast: #e0a94a;
+    --speed-fast-bg: #33280f;
+    --speed-average: #6c9bef;
+    --speed-average-bg: #1f2a40;
+    --speed-slow: #9aa6c2;
+    --speed-slow-bg: #252b38;
+    color-scheme: dark;
+  }
+
+  /* Keyboard focus is always visible; motion is cut for those who ask. */
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -116,6 +193,130 @@
   }
   header p { margin: 4px 0 0; color: #b8bdd1; font-size: 0.9rem; }
   main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  /* Components that set their own display (grid/flex) would otherwise
+     override the hidden attribute app.js toggles. */
+  .kpi-row[hidden], .movers-panel[hidden] { display: none; }
+  /* Team Builder suggested partners (teams.js renderSuggestions). */
+  .suggestion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }
+  .suggestion { display: flex; align-items: center; gap: var(--space-2); border: 2px solid var(--border); border-radius: 10px; padding: var(--space-2); background: var(--surface); }
+  .suggestion-body { flex: 1; min-width: 0; }
+  .suggestion-body strong { display: block; }
+  .suggestion-body small { color: var(--muted); }
+  /* Tier List (app.js setupTiers): usage bands, win-rate chip per Pokémon. */
+  .tier-row { display: grid; grid-template-columns: 64px 1fr; gap: var(--space-3); align-items: stretch; margin-bottom: var(--space-3); }
+  .tier-label { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; color: #fff; font-weight: 800; font-size: 1.6rem; line-height: 1; }
+  .tier-label small { font-size: 0.65rem; font-weight: 600; margin-top: 4px; opacity: 0.9; }
+  .tier-s { background: var(--accent-red); }
+  .tier-a { background: #e8622c; }
+  .tier-b { background: var(--accent-gold); color: var(--navy); }
+  .tier-c { background: var(--muted); }
+  .tier-members { display: flex; flex-wrap: wrap; gap: var(--space-2); border: 2px solid var(--border); border-radius: 10px; padding: var(--space-2); }
+  .tier-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--light-blue); font-weight: 600; font-size: 0.9rem; border: 0; cursor: pointer; font-family: inherit; color: var(--navy); }
+  .tier-chip:hover { outline: 2px solid var(--blue); }
+  .tier-wr { font-size: 0.75rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+  .tier-wr.is-strong { color: var(--positive); }
+  .tier-wr.is-weak { color: var(--danger); }
+  /* Pokémon Profile: stat bars against the format median, and the
+     most-common-set card beside them (app.js statBarsHtml/commonSetHtml). */
+  .profile-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-5); align-items: start; margin-bottom: var(--space-5); }
+  .profile-usage-line { margin: var(--space-1) 0 var(--space-3); color: var(--muted); }
+  .stat-bars { min-width: 260px; }
+  .stat-bar-row { display: grid; grid-template-columns: 2.5em 2.5em 1fr; align-items: center; gap: var(--space-2); margin: 3px 0; font-variant-numeric: tabular-nums; }
+  .stat-label { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+  .stat-value { font-weight: 700; text-align: right; }
+  .stat-track { position: relative; height: 10px; background: var(--light-blue); border-radius: 999px; }
+  .stat-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--blue); }
+  .stat-fill.is-high { background: var(--positive); }
+  .stat-fill.is-low { background: var(--warning); }
+  .stat-median { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--navy); }
+  .stat-legend { font-size: 0.8rem; color: var(--muted); margin: var(--space-2) 0 0; }
+  .common-set { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-4); background: var(--surface); }
+  .common-set-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+  .common-set h3 { margin: 0; font-size: 1rem; }
+  .common-set dl { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); margin: var(--space-3) 0; }
+  .common-set dt { color: var(--muted); font-weight: 600; }
+  .common-set dd { margin: 0; font-weight: 600; }
+  .set-moves { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px var(--space-3); }
+  .set-sample { font-size: 0.85rem; color: var(--muted); margin: 0 0 var(--space-2); }
+  .set-sample.is-thin { color: var(--warning); font-weight: 600; }
+  .set-share { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 720px) { .profile-layout { grid-template-columns: 1fr; } }
+  /* Phones: the header keeps its title and the Regulation picker only. */
+  @media (max-width: 480px) {
+    header { padding: 14px 12px; }
+    header h1 { font-size: 1.1rem; }
+    header > p, .header-meta .header-chip:not(.regulation-picker) { display: none; }
+    .kpi-card .kpi-sprite { display: none; }
+    .kpi-card .sub { display: none; }
+    .kpi-card .value { font-size: 1.05rem; }
+  }
+  /* Pokémon search combobox (app.js attachPokemonCombobox). The original
+     <select> stays in the DOM as the source of truth, visually hidden. */
+  .combo { position: relative; display: inline-block; min-width: 240px; }
+  .combo-input {
+    width: 100%;
+    font: inherit;
+    padding: 8px 10px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .combo-input:focus { outline: 3px solid var(--blue); outline-offset: 1px; }
+  .combo-list {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 360px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  }
+  .combo-list li { display: flex; align-items: center; gap: var(--space-2); padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+  .combo-list li[aria-selected="true"] { background: var(--light-blue); }
+  .combo-list .combo-empty { color: var(--muted); cursor: default; }
+  .combo-list[hidden] { display: none; }
+  .combo-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .theme-toggle { font: inherit; cursor: pointer; background: transparent; color: inherit; }
+  .regulation-picker { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .regulation-picker select {
+    font: inherit;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    border: 1px solid #b8bdd1;
+    padding: 2px 6px;
+  }
+  .movers-panel {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-5);
+  }
+  .movers-panel h3 { margin: 0 0 var(--space-1); }
+  .movers-panel h4 { margin: var(--space-3) 0 var(--space-2); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  .mover-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
+  .mover-list { list-style: none; margin: 0; padding: 0; }
+  .mover-list li { display: flex; align-items: center; gap: var(--space-2); padding: 2px 0; }
+  .mover-name { flex: 1; font-weight: 600; min-width: 0; }
+  .mover-share { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mover-delta { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 5.5em; text-align: right; }
+  .mover-delta.is-up { color: var(--positive); }
+  .mover-delta.is-down { color: var(--danger); }
+  .staleness-banner {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border-bottom: 2px solid var(--warning);
+    padding: var(--space-3) var(--space-5);
+    text-align: center;
+    font-weight: 600;
+  }
 
   .kpi-row {
     display: grid;
@@ -124,7 +325,7 @@
     margin-bottom: 32px;
   }
   .kpi-card {
-    background: #fff;
+    background: var(--surface);
     border: 2px solid var(--border);
     border-radius: 10px;
     padding: var(--space-5);
@@ -135,18 +336,49 @@
   .kpi-card .kpi-sprite { width: var(--icon-lg); height: var(--icon-lg); object-fit: contain; flex: 0 0 auto; }
   .kpi-card .kpi-body { min-width: 0; }
   .kpi-card .label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-  .kpi-card .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; overflow-wrap: break-word; }
+  /* Names wrap only between words ("Mega Charizard Y"); break-word used to
+     split long single-word names mid-word. */
+  .kpi-card .value { font-size: 1.35rem; line-height: 1.2; font-weight: 700; margin-top: 4px; overflow-wrap: normal; word-break: normal; }
   .kpi-card .sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
 
   /* --- Tabs --- */
+  /* Wraps onto a second row on wide screens, so no tab is ever clipped
+     off the right edge with no hint that it exists. Narrow screens keep
+     the single scrollable row (see the max-width:720px block). */
   .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     border-bottom: 2px solid var(--border);
     margin-bottom: 20px;
   }
+  .sections {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    display: flex;
+    gap: var(--space-1);
+    background: var(--bg);
+    padding: var(--space-2) 0;
+    margin-bottom: var(--space-1);
+  }
+  .section-btn {
+    flex: 0 0 auto;
+    font: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--navy);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-pill);
+    padding: 8px 18px;
+    cursor: pointer;
+  }
+  .section-btn:hover { border-color: var(--blue); }
+  .section-btn[aria-current="true"] { background: var(--panel-dark); border-color: var(--panel-dark); color: #fff; }
+  .tab-btn[hidden], .tabs[hidden], #kpi-strip[hidden] { display: none; }
   .tab-btn {
     flex: 0 0 auto;
     background: none;
@@ -195,7 +427,7 @@
   .subtab-panel[hidden] { display: none; }
 
   section {
-    background: #fff;
+    background: var(--surface);
     border: 2px solid var(--border);
     border-radius: 10px;
     padding: 0 var(--space-8) var(--space-8);
@@ -409,17 +641,20 @@
   /* Profile header's dual-type display — the one place a type icon uses
      --icon-xl instead of the sm/md/lg scale (see "Icon size scale" above). */
   .type-badge-row.type-badge-lg { gap: var(--space-3); margin: var(--space-2) 0; }
-  /* A --icon-md emblem in a ring of its own type color: enough presence to
-     read as hero-level information without competing with the Pokémon's
-     hero art beside it (see renderTypeBadgeRow in app.js). */
+  /* A labelled pill tinted with the type's own color: an icon plus the
+     type name reads faster than a bare emblem, and stays smaller than the
+     Pokémon's art beside it (see renderTypeBadgeRow in app.js). */
   .type-badge-lg .type-pill-lg {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    padding: var(--space-1);
-    border: 3px solid var(--pill-type-color, var(--type-unknown));
-    background: var(--surface);
+    gap: var(--space-2);
+    border-radius: 999px;
+    padding: 4px 12px 4px 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    color: #fff;
+    background: var(--pill-type-color, var(--type-unknown));
   }
 
   /* Crops static/icons/types/*.png (wide 200x40 "icon + type name" badges,
@@ -617,6 +852,23 @@
   .team-analysis .status-warn { color: var(--warning); font-weight: 700; }
 
   @media (max-width: 720px) {
+    .tabs { flex-wrap: nowrap; }
+    /* Bottom navigation: the five sections stay one thumb-reach away. */
+    .sections {
+      position: fixed;
+      top: auto;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      justify-content: space-around;
+      margin: 0;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      background: var(--panel-dark);
+      box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+    }
+    .section-btn { flex: 1 1 0; padding: 8px 4px; font-size: 0.85rem; background: transparent; border: none; color: #b8bdd1; border-radius: var(--radius-sm); }
+    .section-btn[aria-current="true"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
+    body { padding-bottom: 64px; }
     .team-builder-grid { grid-template-columns: 1fr; }
     .team-slots { grid-template-columns: repeat(2, 1fr); }
     .team-analysis-grid, .team-analysis-columns { grid-template-columns: 1fr; }
@@ -631,7 +883,8 @@
   .expansion-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
   .link-button { border:0; background:none; color:var(--blue); padding:0; cursor:pointer; text-decoration:underline; }
   .source-note { color:var(--muted); font-size:var(--font-sm); }
-  @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }\n  footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px; }
+  @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }
+  footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px; }
 
   @media (max-width: 720px) {
     main { padding: 16px; }
@@ -663,6 +916,21 @@
      page was built from, and whether its release gates passed — visible
      without opening the Data & Sources tab. #}
   <div class="header-meta">
+    <button type="button" class="header-chip theme-toggle" id="theme-toggle" aria-label="Color theme">Theme: Auto</button>
+    {% if payload.kpis_by_scope %}
+      {# Which regulation every figure on the page describes. static/app.js
+         sets the selected option from ?reg= and reloads on change. #}
+      <label class="header-chip regulation-picker">Regulation
+        <select id="regulation-scope" aria-label="Regulation shown on this page">
+          {% for scope in payload.kpis_by_scope %}
+            {% set reg = payload.regulations | selectattr("regulation_code", "equalto", scope) | first %}
+            <option value="{{ scope }}"{% if scope == payload.default_scope %} selected{% endif %}>
+              {%- if reg %}{{ reg.regulation_name }}{% if scope == payload.default_scope %} (current){% endif %}{% else %}All Champions regulations{% endif -%}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+    {% endif %}
     {% if payload.provenance.dataset_version %}
       <span class="header-chip">dataset {{ payload.provenance.dataset_version }}</span>
     {% endif %}
@@ -674,16 +942,24 @@
     {% endif %}
   </div>
 </header>
+{# Filled in by static/app.js (renderStalenessBanner) when the newest
+   tournament is over three weeks old, or when no tournament in the data
+   was played under the regulation in force today. #}
+<div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
 <main>
-  <div class="kpi-row">
+  <div id="kpi-strip">
+  {# One KPI row per regulation scope; app.js shows the selected one. The
+     whole strip shows on the Meta section only. #}
+  {% for scope, scope_kpis in (payload.kpis_by_scope or {"all": payload.kpis}).items() %}
+  <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
       <div class="kpi-body">
         <div class="label">Distinct Pokémon Used</div>
-        <div class="value">{{ payload.kpis.distinct_pokemon_used }}</div>
+        <div class="value">{{ scope_kpis.distinct_pokemon_used }}</div>
       </div>
     </div>
     <div class="kpi-card">
-      {% set top_used = payload.kpis.top_used_pokemon %}
+      {% set top_used = scope_kpis.top_used_pokemon %}
       {% set top_used_art = payload.hero_art.get(top_used.pokemon_key) or payload.sprites.get(top_used.pokemon_key) if top_used %}
       {% if top_used_art %}
         <img class="kpi-sprite" src="{{ top_used_art }}" alt="" width="96" height="96" decoding="async">
@@ -695,7 +971,7 @@
       </div>
     </div>
     <div class="kpi-card">
-      {% set top_win = payload.kpis.top_win_rate_pokemon %}
+      {% set top_win = scope_kpis.top_win_rate_pokemon %}
       {% set top_win_art = payload.hero_art.get(top_win.pokemon_key) or payload.sprites.get(top_win.pokemon_key) if top_win %}
       {% if top_win_art %}
         <img class="kpi-sprite" src="{{ top_win_art }}" alt="" width="96" height="96" decoding="async">
@@ -707,36 +983,59 @@
       </div>
     </div>
     <div class="kpi-card">
+      {% set current_reg = scope_kpis.current_regulation %}
       <div class="kpi-body">
-        <div class="label">Legal Pool (cumulative)</div>
-        <div class="value">
-          {% for r in payload.kpis.legal_pool_by_regulation %}{{ r.regulation_code }}: {{ r.cumulative_legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
-          {% if not payload.kpis.legal_pool_by_regulation %}—{% endif %}
+        <div class="label">Legal Pool{% if current_reg %} · {{ current_reg.regulation_code | upper }}{% endif %}</div>
+        <div class="value">{% if current_reg and current_reg.legal_pokemon_count is not none %}{{ current_reg.legal_pokemon_count }} Pokémon{% else %}—{% endif %}</div>
+        <div class="sub">
+          {% for r in scope_kpis.legal_pool_by_regulation %}{{ r.regulation_code | upper }} {{ r.legal_pokemon_count }}{% if not loop.last %} · {% endif %}{% endfor %}
+          {% if scope_kpis.latest_snapshot_date %}<br>as of {{ scope_kpis.latest_snapshot_date }}{% endif %}
         </div>
-        <div class="sub">as of {{ payload.kpis.latest_snapshot_date or "—" }}</div>
       </div>
     </div>
   </div>
+  {% endfor %}
+  </div>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab-btn" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button class="tab-btn" role="tab" data-tab="usage" aria-selected="false">Usage</button>
-    <button class="tab-btn" role="tab" data-tab="pokemon-profile" aria-selected="false">Pokémon Profile</button>
-    <button class="tab-btn" role="tab" data-tab="archetypes" aria-selected="false">Archetypes</button>
-    <button class="tab-btn" role="tab" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
-    <button class="tab-btn" role="tab" data-tab="matchup" aria-selected="false">Matchup</button>
-    <button class="tab-btn" role="tab" data-tab="team-builder" aria-selected="false">Team Builder</button>
-    <button class="tab-btn" role="tab" data-tab="top-teams" aria-selected="false">Top Teams</button>
-    <button class="tab-btn" role="tab" data-tab="players" aria-selected="false">Players &amp; Regions</button>
-
-    <button class="tab-btn" role="tab" data-tab="compare" aria-selected="false">Compare</button>
-    <button class="tab-btn" role="tab" data-tab="core-explorer" aria-selected="false">Core Explorer</button>\n    <button class="tab-btn" role="tab" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
+  {# Five sections, each with its own row of views (docs/upgrade-plan-
+     2026q4.md, B2). The view buttons keep the .tab-btn/data-tab contract
+     every script already uses; data-section groups them, and app.js shows
+     only the active section's row. On narrow screens the section bar
+     becomes a bottom navigation bar. #}
+  <nav class="sections" aria-label="Sections">
+    <button class="section-btn" data-section="meta" aria-current="true">Meta</button>
+    <button class="section-btn" data-section="pokemon">Pokémon</button>
+    <button class="section-btn" data-section="teams">Teams</button>
+    <button class="section-btn" data-section="builder">Builder</button>
+    <button class="section-btn" data-section="data">Data</button>
+  </nav>
+  <nav class="tabs" role="tablist" aria-label="Views in this section">
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="overview" aria-selected="true">Overview</button>
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="usage" aria-selected="false">Usage</button>
+    <button class="tab-btn" role="tab" data-section="meta" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
+    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="pokemon-profile" aria-selected="false">Profile</button>
+    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="compare" aria-selected="false">Compare</button>
+    <button class="tab-btn" role="tab" data-section="pokemon" data-tab="matchup" aria-selected="false">Matchup</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="top-teams" aria-selected="false">Top Teams</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="archetypes" aria-selected="false">Archetypes</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="core-explorer" aria-selected="false">Core Explorer</button>
+    <button class="tab-btn" role="tab" data-section="teams" data-tab="players" aria-selected="false">Players &amp; Regions</button>
+    <button class="tab-btn" role="tab" data-section="builder" data-tab="team-builder" aria-selected="false">Team Builder</button>
+    <button class="tab-btn" role="tab" data-section="data" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
   </nav>
 
   <section class="tab-panel" data-panel="overview">
     <h2>Overview</h2>
-    <p class="sub">Top 12 most-used Pokémon this dataset version, ranked by share of the meta.</p>
+    <section class="movers-panel" id="movers-panel" hidden></section>
+    <p class="sub" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
     <div class="grid-6xn" id="overview-top-12"></div>
+  </section>
+
+  <section class="tab-panel" data-panel="tiers" hidden>
+    <h2>Tier List</h2>
+    <p class="sub" id="tiers-method"></p>
+    <div id="tiers-body"></div>
   </section>
 
   <section class="tab-panel" data-panel="usage" hidden>
@@ -745,9 +1044,6 @@
     <div class="controls">
       <label>Tier
         <select id="usage-tier-filter"></select>
-      </label>
-      <label>Regulation
-        <select id="usage-regulation-filter"></select>
       </label>
       <label>Type
         <div class="type-filter-row" id="usage-type-filter"></div>
@@ -775,7 +1071,6 @@
         </div>
       </label>
     </div>
-    <p class="sub" id="usage-regulation-note" hidden></p>
     <div class="grid-6xn" id="usage-grid"></div>
 
     <h3>Leaderboards</h3>
@@ -872,7 +1167,10 @@
       </label>
     </div>
 
-    <div id="pokemon-profile-stats" class="empty-state"></div>
+    <div class="profile-layout">
+      <div id="pokemon-profile-stats" class="empty-state"></div>
+      <div id="pokemon-profile-set"></div>
+    </div>
 
     <div class="subtabs" role="tablist">
       <button class="subtab-btn" role="tab" data-subtab="profile-items" aria-selected="true">Items</button>
@@ -1119,12 +1417,19 @@
 
         <div class="stat-summary-row" id="team-builder-summary"></div>
 
+        <h3>Suggested partners</h3>
+        <p class="sub" id="team-builder-suggestions-note">
+          Pokémon that turn up alongside your picks more often than their
+          popularity alone predicts (synergy lift) in the selected regulation.
+        </p>
+        <div class="suggestion-list" id="team-builder-suggestions"></div>
+
         <div class="team-analysis" id="team-builder-analysis">
           <h3>Team analyst</h3>
           <p class="sub">
             Fast, source-backed checks for the current six. Coverage uses your
             selected recorded moves and the standard type chart; threat checks
-            use the most-used Pokémon in this dataset. These are screening
+            use the most-used Pokémon in the selected regulation. These are screening
             signals, not battle simulations.
           </p>
           <div class="team-analysis-grid" id="team-analysis-summary"></div>
@@ -1282,7 +1587,8 @@
       <label>Core size <select id="core-size"><option value="pair">Pairs</option><option value="triple">Triples</option></select></label>
     </div>
     <div id="core-results"></div>
-  </section>\n  <section class="tab-panel" data-panel="data-sources" hidden>
+  </section>
+  <section class="tab-panel" data-panel="data-sources" hidden>
     <h2>Data &amp; Sources</h2>
     <p class="sub">
       Where every number on this dashboard comes from, and whether it passed
@@ -1426,6 +1732,7 @@
 <script>window.DASHBOARD_DATA = {{ data_json | safe }};</script>
 <script src="app.js"></script>
 <script src="matchup.js"></script>
-<script src="teams.js"></script>\n<script src="expansions.js"></script>
+<script src="teams.js"></script>
+<script src="expansions.js"></script>
 </body>
 </html>

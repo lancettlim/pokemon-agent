@@ -6,7 +6,7 @@
     "Champions-menu sprite image manifest (Category:Champions_menu_sprites): one row per image with its local cache path and resolved CDN metadata"
   ],
   "fields": [
-    {"name": "bulbagarden_title", "type": "string", "required": true, "description": "Raw MediaWiki file title, e.g. \"File:Menu CP 0003-Mega.png\""},
+    {"name": "bulbagarden_title", "type": "string", "required": true, "description": "Raw MediaWiki file title, e.g. \"File:Menu Champs 0003-Mega.png\""},
     {"name": "pokedex_number_raw", "type": "string", "required": true, "description": "4-digit Pokédex number parsed from the title, prior to normalization"},
     {"name": "form_suffix_raw", "type": "string", "required": false, "description": "Form descriptor parsed from the title (e.g. \"Mega\", \"Paldea Aqua\"), prior to normalization; empty for base forms"},
     {"name": "image_kind", "type": "string", "required": true, "description": "Constant: menu_sprite"},

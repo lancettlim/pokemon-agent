@@ -87,7 +87,66 @@ _CRITICAL_PAYLOAD_KEYS = (
     "item_icons",
     "pokemon_names",
     "reference_teams",
+    "regulations",
+    "kpis_by_scope",
+    "default_scope",
+    "mart_files",
 )
+
+# The marts are split into shards so the page downloads only what the view
+# in front of it needs (docs/upgrade-plan-2026q4.md, B7). Once marts gained
+# a regulation_scope partition, one data.json holding everything reached
+# 22MB, most of it rows for scopes or tabs the viewer never opens.
+#   data/core.json            unscoped marts the common tabs read
+#   data/scope-<scope>.json   one regulation's rows of every scoped mart
+#   data/<mart>.json          the largest unscoped marts, each fetched only
+#                             by the tab that reads it (registerTab's
+#                             extraMarts in static/app.js)
+SHARD_DIR = "data"
+ON_DEMAND_MARTS = (
+    "pokemon_head_to_head",
+    "pokemon_team_core_triple_usage",
+    "player_signature_pokemon",
+)
+
+
+def _write_mart_shards(
+    marts: dict[str, list[dict[str, Any]]],
+    scopes: dict[str, Any],
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Writes the mart shards under output_dir/data/ and returns their
+    index ({"core": path, "scopes": {scope: path}, "on_demand": {mart:
+    path}}), paths relative to output_dir. Stale shards from a previous
+    build (a scope or mart that no longer exists) are removed first."""
+    shard_dir = output_dir / SHARD_DIR
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    for stale in shard_dir.glob("*.json"):
+        stale.unlink()
+
+    def write(name: str, content: dict[str, Any]) -> str:
+        (shard_dir / f"{name}.json").write_text(json.dumps(content, default=str), encoding="utf-8")
+        return f"{SHARD_DIR}/{name}.json"
+
+    scoped_names = [n for n, rows in marts.items() if rows and "regulation_scope" in rows[0]]
+    core = {
+        name: rows
+        for name, rows in marts.items()
+        if name not in scoped_names and name not in ON_DEMAND_MARTS
+    }
+    index: dict[str, Any] = {"core": write("core", core), "scopes": {}, "on_demand": {}}
+    for scope in scopes:
+        index["scopes"][scope] = write(
+            f"scope-{scope}",
+            {
+                name: [r for r in marts[name] if r.get("regulation_scope") == scope]
+                for name in scoped_names
+            },
+        )
+    for name in ON_DEMAND_MARTS:
+        if name in marts:
+            index["on_demand"][name] = write(name, {name: marts[name]})
+    return index
 
 
 def _asset_coverage(payload: dict[str, Any], referenced_keys: set[str]) -> list[dict[str, Any]]:
@@ -310,6 +369,10 @@ def build(
     # imagery has the same visible accounting as the numbers do.
     payload["provenance"]["asset_coverage"] = _asset_coverage(payload, referenced_keys)
 
+    payload["mart_files"] = _write_mart_shards(
+        payload["marts"], payload["kpis_by_scope"], output_dir
+    )
+
     env = _make_environment()
     template = env.get_template("index.html.jinja")
     html = template.render(payload=payload, data_json=_safe_json(_critical_payload(payload)))
@@ -318,13 +381,11 @@ def build(
     (output_dir / "index.html").write_text(html, encoding="utf-8")
     for script_name in ("app.js", "matchup.js", "teams.js", "expansions.js"):
         shutil.copyfile(STATIC_DIR / script_name, output_dir / script_name)
-    # backlog.md #32: a sibling JSON feed carrying the *complete* payload —
-    # both the critical keys index.html already inlines and the marts it
-    # doesn't. Keeping it complete preserves #32's contract (the data is
-    # scriptable via `curl | jq` or a notebook without re-running dbt or
-    # scraping the HTML) and doubles as the file app.js fetches for the
-    # marts; the few hundred KB of critical keys duplicated between the two
-    # is a rounding error against the ~8MB of marts.
-    (output_dir / "data.json").write_text(json.dumps(payload, default=str), encoding="utf-8")
+    # backlog.md #32's JSON feed: data.json carries every non-mart key plus
+    # `mart_files`, the index of the shard files holding the marts (see
+    # _write_mart_shards). Together they are the complete payload, still
+    # scriptable with curl/jq or a notebook without re-running dbt.
+    feed = {key: value for key, value in payload.items() if key != "marts"}
+    (output_dir / "data.json").write_text(json.dumps(feed, default=str), encoding="utf-8")
 
     return payload

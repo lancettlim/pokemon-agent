@@ -11,7 +11,7 @@ models:
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'event_tier']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'event_tier']
           config:
             meta: {category: mart_quality, table_name: pokemon_usage_summary}
     columns:
@@ -73,12 +73,15 @@ models:
       small-sample win rates more honestly than raw win_rate does (a 100%
       win rate over 3 matches no longer outranks 62% over 200). Written
       to data/marts/pokemon_win_rate_summary.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_win_rate_summary}
     columns:
       - name: pokemon_key
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: pokemon_win_rate_summary}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_win_rate_summary}
@@ -95,7 +98,7 @@ models:
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'item_name']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'item_name']
           config:
             meta: {category: mart_quality, table_name: pokemon_item_usage}
     columns:
@@ -120,7 +123,7 @@ models:
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'ability']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'ability']
           config:
             meta: {category: mart_quality, table_name: pokemon_ability_usage}
     columns:
@@ -134,6 +137,24 @@ models:
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_ability_usage}
+  - name: pokemon_nature_usage
+    description: >
+      Nature drill-down per Pokémon x nature (usage_count, nature_share,
+      usage_rank within the Pokémon), restricted to the current legal pool
+      and partitioned by regulation_scope. Feeds the Pokémon Profile's
+      most-common-set card. Written to data/marts/pokemon_nature_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'nature']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_nature_usage}
+    columns:
+      - name: pokemon_key
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_nature_usage}
   - name: pokemon_move_usage
     description: >
       Move drill-down for the Pokémon Profile tab's Moves section (top 15
@@ -147,7 +168,7 @@ models:
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'move_name']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'move_name']
           config:
             meta: {category: mart_quality, table_name: pokemon_move_usage}
     columns:
@@ -167,12 +188,15 @@ models:
       reported win/loss record, ranked by win_rate, with event context and
       full member roster (pokemon_keys, pipe-delimited in slot order).
       Written to data/marts/top_tournament_teams.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'team_id']
+          config:
+            meta: {category: mart_quality, table_name: top_tournament_teams}
     columns:
       - name: team_id
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: top_tournament_teams}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: top_tournament_teams}
@@ -215,7 +239,7 @@ models:
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'partner_pokemon_key']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'partner_pokemon_key']
           config:
             meta: {category: mart_quality, table_name: pokemon_team_core_usage}
     columns:
@@ -284,25 +308,26 @@ models:
       see pokemon_speed_tiers below for the full modified-speed bracket
       table built on top of it. Written to
       data/marts/pokemon_champions_profile.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_champions_profile}
     columns:
       - name: pokemon_key
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: pokemon_champions_profile}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_champions_profile}
   - name: pokemon_usage_by_regulation
     description: >
-      Usage x regulation cross-tab (backlog.md #12): pokemon_usage_summary's
-      overall usage_count cross-joined against legality_snapshot's
-      regulation membership at the latest snapshot_date, with usage_share/
-      usage_rank recomputed within each regulation_code partition. Not a
-      temporal "usage during regulation X" slice -- tournament_event
-      carries no regulation_code of its own -- but a way to filter/rank the
-      existing usage numbers down to a single regulation's legal pool
-      instead of the union across all regulations. Written to
+      Usage x regulation cross-tab (backlog.md #12): every Pokémon legal
+      under each regulation (legality_snapshot at the latest snapshot_date)
+      with its usage in events played under that regulation, 0 if unused.
+      usage_share/usage_rank are computed within each regulation_code. A
+      true temporal slice since tournament_event gained regulation_code
+      (docs/upgrade-plan-2026q4.md, A2). Written to
       data/marts/pokemon_usage_by_regulation.csv.
     data_tests:
       - unique_combination_of_columns:
@@ -321,6 +346,32 @@ models:
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_usage_by_regulation}
+  - name: pokemon_regulation_movers
+    description: >
+      Regulation-to-regulation "what changed" feed: per Pokémon, usage
+      share/rank and win rate in a regulation beside the regulation before
+      it (consecutive pairs from the champions_regulations seed), with
+      deltas, an is_new_to_format flag (not legal in the previous
+      regulation) and both regulations' team counts as sample size. Needs
+      no extraction-snapshot history (docs/upgrade-plan-2026q4.md, A4).
+      Written to data/marts/pokemon_regulation_movers.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_regulation_movers}
+    columns:
+      - name: pokemon_key
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_regulation_movers}
+      - name: regulation_code
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_regulation_movers}
   - name: pokemon_build_concentration
     description: >
       Item and ability build concentration (backlog.md #14): a
@@ -331,12 +382,15 @@ models:
       contested choices. item_count/ability_count is how many distinct
       items/abilities were observed at all. Written to
       data/marts/pokemon_build_concentration.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_build_concentration}
     columns:
       - name: pokemon_key
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: pokemon_build_concentration}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_build_concentration}
@@ -348,12 +402,15 @@ models:
       placement_weighted_score/weighted_usage_share use a continuous
       inverse-placement (1/placement) weight per appearance instead.
       Written to data/marts/pokemon_placement_weighted_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_placement_weighted_usage}
     columns:
       - name: pokemon_key
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: pokemon_placement_weighted_usage}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_placement_weighted_usage}
@@ -395,7 +452,7 @@ models:
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'partner_pokemon_key']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'partner_pokemon_key']
           config:
             meta: {category: mart_quality, table_name: pokemon_team_synergy}
     columns:
@@ -542,12 +599,15 @@ models:
       treatment already given to app.js's SPEED_TIERS thresholds and
       matchup.js's TYPE_CHART. Written to
       data/marts/pokemon_speed_tiers.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_speed_tiers}
     columns:
       - name: pokemon_key
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: pokemon_speed_tiers}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_speed_tiers}

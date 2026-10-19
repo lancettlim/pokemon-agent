@@ -98,6 +98,36 @@ The dashboard degrades gracefully in several ways:
 
 ## Tabs
 
+**Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
+B2): the views are grouped into five sections, each with its own row of
+views. **Meta** has Overview, Tier List, Usage and Speed Tiers. **Pokémon**
+has Profile, Compare and Matchup. **Teams** has Top Teams, Archetypes, Core
+Explorer and Players & Regions. **Builder** has Team Builder, and **Data**
+has Data & Sources. The section bar sticks to the top of the page, and on
+phones it becomes a bottom navigation bar. The KPI strip shows on Meta
+only. View buttons keep the `.tab-btn[data-tab]` contract, so scripts that
+click a tab still work. Every Pokémon picker (Profile, Compare, Core
+Explorer, Matchup) carries a type-ahead search with sprites
+(`attachPokemonCombobox`), and `/` jumps to the Profile search.
+
+- **Tier List** bands Pokémon by usage share in the selected regulation
+  (S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%), each with a win-rate chip coloured
+  only when the 95% Wilson interval sits clearly above or below 50%.
+  Clicking a Pokémon opens its profile.
+- **Team Builder** gains **Suggested partners**: Pokémon with a synergy
+  lift above 1 alongside the current picks in the selected regulation,
+  ranked by how many picks they pair with, then by average lift, each with
+  an Add button.
+- **Profile** now shows base stats as bars against the legal pool's median
+  and a **Most common set** card: the modal item, ability and nature
+  (`pokemon_nature_usage`) and top four moves, each counted separately,
+  with the sample size, a small-sample warning under 30 team sheets, and a
+  "Copy for Showdown" button.
+
+The notes below describe each view's contents from earlier passes. Where
+they mention the Usage tab's Regulation filter, that filter has been
+replaced by the page-wide Regulation selector.
+
 The page is a single scrolling KPI row plus eight tabs (client-side,
 vanilla JS — no routing library, no page reload). The competitive-UX
 redesign pass removed Archetypes and Regulations, added Matchup and Top
@@ -405,9 +435,9 @@ python -m http.server --directory docs/dashboard
 ```
 
 This used to work over `file://` too, because the entire payload was
-inlined into `index.html`. It no longer is: the marts are ~8MB and now live
-only in the sibling `data.json`, which `app.js` fetches on first use of a
-tab that needs it (see "Payload split" below). A browser refuses that fetch
+inlined into `index.html`. It no longer is: the marts live in shard files
+under `data/`, which `app.js` fetches on first use of a tab that needs them
+(see "Payload split" below). A browser refuses that fetch
 over `file://` as a cross-origin request, so a directly-opened page renders
 its header, KPI row and Overview tab — all of which read the inlined
 critical payload — and then shows an explanatory empty state on the deeper
@@ -416,26 +446,39 @@ tabs naming this command. The published GitHub Pages site is unaffected.
 ## Payload split
 
 `index.html` carries only the **critical payload** inline
-(`_CRITICAL_PAYLOAD_KEYS` in `build.py`): KPIs, provenance, the
-sprite/hero-art/type-icon/item-icon maps, type colors, display names and
-reference teams — a few hundred KB. The marts go into `data.json` alone.
+(`_CRITICAL_PAYLOAD_KEYS` in `build.py`): KPIs per regulation, provenance,
+the sprite/hero-art/type-icon/item-icon maps, type colors, display names,
+reference teams, the regulation registry and `mart_files`, about 45 KB
+compressed. Overview renders from it with no fetch.
 
-The reason is first paint. When everything was inlined, `index.html` was
-**8.18 MB** and the browser had to parse all of it before rendering
-anything; it is now **~140 KB**. `data.json` is still the *complete*
-payload, not the leftovers — that preserves backlog #32's contract (the
-data is scriptable via `curl | jq` or a notebook without re-running dbt or
-scraping HTML) and costs only the few hundred KB of critical keys appearing
-in both files, a rounding error against ~8MB of marts.
+The marts are split into **shard files under `docs/dashboard/data/`**
+(`_write_mart_shards`, docs/upgrade-plan-2026q4.md B7). Once the marts
+gained a `regulation_scope` partition, one `data.json` holding everything
+reached 22 MB:
 
-Client side, `app.js`'s `ensureData()` fetches `data.json` once, memoizes
-the promise, and merges the loaded marts **into the existing `marts`
-object** rather than reassigning it — `matchup.js` and `teams.js` hold a
-reference to that same object through `window.DashboardApp.marts`. Tabs
-registered with `{ needsMarts: false }` (only Overview today) skip the gate
-entirely and render straight from the inline payload, so the landing view
-never waits on a network round-trip. A failed fetch un-memoizes itself so
-re-clicking the tab retries.
+| File | Holds | Loaded |
+|---|---|---|
+| `data/core.json` | unscoped marts the common tabs read | first tab that needs marts |
+| `data/scope-<scope>.json` | the selected regulation's rows of every scoped mart | with core, for the page's regulation only |
+| `data/pokemon_head_to_head.json`, `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the three largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
+
+The default M-C view downloads about 400 KB compressed in total, against
+roughly 2 MB for the old single file.
+
+`data.json` remains backlog #32's JSON feed. It holds every non-mart key
+plus `mart_files`, the index of the shard paths, and together they are the
+complete payload, still scriptable with `curl`/`jq` or a notebook without
+re-running dbt. Since 2026-10 it no longer inlines the marts themselves.
+
+Client side, `app.js`'s `ensureData(extraMarts)` fetches each shard at
+most once and merges the loaded marts **into the existing `marts` object**
+rather than reassigning it, because `matchup.js` and `teams.js` hold a
+reference to that same object through `window.DashboardApp.marts`. Scoped
+marts are narrowed to the page's regulation as they load. Tabs registered
+with `{ needsMarts: false }` (only Overview today) skip the gate entirely.
+A failed fetch forgets itself, so re-clicking the tab retries. A tab
+registered by a later script (`matchup.js`, `expansions.js`, `teams.js`)
+initialises on registration if the page opened on it via a `#tab` link.
 
 ## Publishing (GitHub Pages)
 
@@ -443,12 +486,47 @@ Unlike other pipeline output in this repo (`data/normalized/`,
 `data/marts/`, `data/staging/` are all gitignored regenerated build
 output), **`docs/dashboard/index.html`, `docs/dashboard/app.js`,
 `docs/dashboard/matchup.js`, `docs/dashboard/teams.js`,
-`docs/dashboard/data.json`, and `docs/dashboard/images/` are committed to
-git.** There is still no CI/
-Actions workflow that *rebuilds* the dashboard (that would require live
-network access to all five extractors' upstream sources, which isn't
-something CI should do unsupervised) — after running `make dashboard`,
-`git add`/commit the regenerated files (including `images/`) as before.
+`docs/dashboard/data.json`, `docs/dashboard/data/` and
+`docs/dashboard/images/` are committed to git.** They can be rebuilt by hand (`make dashboard`, then commit the
+regenerated files including `images/`), and since 2026-10 a weekly
+workflow also rebuilds them.
+
+**Weekly refresh** (`.github/workflows/refresh-dashboard.yml`): every
+Monday, and on demand, it restores the staging cache that
+`scheduled-extraction.yml` fills, re-extracts PokéAPI and Bulbagarden (the
+two sources whose image bytes the site needs), runs `make validate`, builds
+the dashboard, and opens or updates an `automation/dashboard-refresh` pull
+request. Nothing reaches `main` without review, and a failed release gate
+stops the run before any PR is opened. Before this workflow existed the
+published site went four months without a rebuild while its data aged out
+of the current regulation. The repo needs "Allow GitHub Actions to create
+and approve pull requests" enabled (Settings → Actions → General).
+
+**Regulation selector**: every regulation-sensitive mart is partitioned
+by `regulation_scope` (each regulation plus `all`). The header's Regulation
+dropdown chooses one scope for the whole page. It opens on the regulation
+in force on the visitor's date (falling back to the newest one with data),
+or whatever `?reg=` names, and changing it reloads the page with the new
+`?reg=` so links are shareable. The open tab lives in the URL hash
+(`#usage`). `static/app.js` narrows each scoped mart to the selected scope
+once, as its shard loads (`applyRegulationScope`), so the tab code reads
+`marts.<name>` exactly as before. KPIs are precomputed per scope
+(`kpis_by_scope`) and the template renders one KPI row per scope. Marts
+without the column (head-to-head, triple cores, country, players) still
+cover all Champions regulations.
+
+**What changed panel**: the top of Overview compares the selected
+regulation with the one before it (`pokemon_regulation_movers`, summarised
+server-side by `summarize_movers` into risers, fallers and new arrivals).
+If either side has fewer than 100 teams it shows only new arrivals and the
+sample sizes.
+
+**Staleness banner**: the page compares the newest tournament date in its
+data (`kpis.latest_event_date`) with the visitor's own clock and the
+regulation registry (`payload.regulations`). It shows a warning strip under
+the header if the newest event predates the regulation in force today, or
+is more than 21 days old. The check runs in the browser, not at build time,
+so a site that stops being rebuilt still reports that it's stale.
 
 What *is* automated (`.github/workflows/deploy-dashboard.yml`) is
 *publishing* what's committed: a push to `main` touching anything under

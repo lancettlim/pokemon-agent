@@ -2,6 +2,7 @@ munchstats_pokemon_name,pokeapi_form_name
 Abomasnow,abomasnow
 Abomasnow-Mega,abomasnow-mega
 Absol,absol
+Absol-Mega-Z,absol-mega-z
 Aegislash,aegislash-shield
 Aerodactyl,aerodactyl
 Aerodactyl-Mega,aerodactyl-mega
@@ -24,19 +25,25 @@ Arcanine-Hisui,arcanine-hisui
 Archaludon,archaludon
 Ariados,ariados
 Armarouge,armarouge
+Aromatisse,aromatisse
 Articuno,articuno
 Articuno-Galar,articuno-galar
+Audino,audino
+Audino-Mega,audino-mega
 Aurorus,aurorus
 Avalugg,avalugg
+Avalugg-Hisui,avalugg-hisui
 Azelf,azelf
 Azumarill,azumarill
 Banette-Mega,banette-mega
+Barbaracle-Mega,barbaracle-mega
 Barraskewda,barraskewda
 Basculegion,basculegion-male
 Basculegion-F,basculegion-female
 Basculin,basculin-red-striped
 Bastiodon,bastiodon
 Baxcalibur,baxcalibur
+Baxcalibur-Mega,baxcalibur-mega
 Beartic,beartic
 Beedrill-Mega,beedrill-mega
 Bellibolt,bellibolt
@@ -44,6 +51,7 @@ Bisharp,bisharp
 Blastoise,blastoise
 Blastoise-Mega,blastoise-mega
 Blaziken,blaziken
+Blaziken-Mega,blaziken-mega
 Blissey,blissey
 Brambleghast,brambleghast
 Braviary,braviary
@@ -73,6 +81,7 @@ Chesnaught,chesnaught
 Chesnaught-Mega,chesnaught-mega
 Chi-Yu,chi-yu
 Chien-Pao,chien-pao
+Chimecho-Mega,chimecho-mega
 Cinccino,cinccino
 Cinderace,cinderace
 Clawitzer,clawitzer
@@ -88,6 +97,7 @@ Comfey,comfey
 Conkeldurr,conkeldurr
 Corviknight,corviknight
 Corvisquire,corvisquire
+Crabominable,crabominable
 Crabominable-Mega,crabominable-mega
 Cramorant,cramorant
 Crawdaunt,crawdaunt
@@ -107,6 +117,7 @@ Ditto,ditto
 Dodrio,dodrio
 Dondozo,dondozo
 Dragalge,dragalge
+Dragalge-Mega,dragalge-mega
 Dragapult,dragapult
 Dragonite,dragonite
 Dragonite-Mega,dragonite-mega
@@ -120,6 +131,7 @@ Dugtrio-Alola,dugtrio-alola
 Duraludon,duraludon
 Dusclops,dusclops
 Eelektross,eelektross
+Eelektross-Mega,eelektross-mega
 Electabuzz,electabuzz
 Electivire,electivire
 Electrode,electrode
@@ -139,6 +151,7 @@ Excadrill-Mega,excadrill-mega
 Exeggutor,exeggutor
 Exeggutor-Alola,exeggutor-alola
 Falinks,falinks
+Farfetch’d,farfetchd
 Farigiraf,farigiraf
 Feraligatr,feraligatr
 Feraligatr-Mega,feraligatr-mega
@@ -162,6 +175,7 @@ Gallade-Mega,gallade-mega
 Galvantula,galvantula
 Garchomp,garchomp
 Garchomp-Mega,garchomp-mega
+Garchomp-Mega-Z,garchomp-mega-z
 Gardevoir,gardevoir
 Gardevoir-Mega,gardevoir-mega
 Garganacl,garganacl
@@ -187,6 +201,8 @@ Gogoat,gogoat
 Golduck,golduck
 Golem,golem
 Golem-Alola,golem-alola
+Golisopod,golisopod
+Golisopod-Mega,golisopod-mega
 Golurk-Mega,golurk-mega
 Goodra,goodra
 Goodra-Hisui,goodra-hisui
@@ -195,6 +211,7 @@ Gothorita,gothorita
 Gouging Fire,gouging-fire
 Grafaiai,grafaiai
 Granbull,granbull
+Grapploct,grapploct
 Great Tusk,great-tusk
 Greninja,greninja
 Greninja-Mega,greninja-mega
@@ -213,6 +230,8 @@ Heracross-Mega,heracross-mega
 Hippowdon,hippowdon
 Hitmontop,hitmontop
 Ho-Oh,ho-oh
+Houndoom,houndoom
+Houndoom-Mega,houndoom-mega
 Houndstone,houndstone
 Hydrapple,hydrapple
 Hydreigon,hydreigon
@@ -261,6 +280,7 @@ Lokix,lokix
 Lopunny-Mega,lopunny-mega
 Lucario,lucario
 Lucario-Mega,lucario-mega
+Lucario-Mega-Z,lucario-mega-z
 Ludicolo,ludicolo
 Lugia,lugia
 Lumineon,lumineon
@@ -276,6 +296,7 @@ Magmar,magmar
 Magmortar,magmortar
 Magnezone,magnezone
 Malamar,malamar
+Malamar-Mega,malamar-mega
 Mamoswine,mamoswine
 Mandibuzz,mandibuzz
 Manectric,manectric
@@ -284,13 +305,16 @@ Marshtomp,marshtomp
 Masquerain,masquerain
 Maushold,maushold-family-of-four
 Maushold-Three,maushold-family-of-three
+Mawile-Mega,mawile-mega
 Medicham,medicham
 Medicham-Mega,medicham-mega
 Meganium,meganium
 Meganium-Mega,meganium-mega
 Meowscarada,meowscarada
 Meowstic,meowstic-male
+Meowstic-F-Mega,meowstic-female-mega
 Metagross,metagross
+Metagross-Mega,metagross-mega
 Mewtwo,mewtwo
 Mienshao,mienshao
 Milotic,milotic
@@ -307,6 +331,7 @@ Mudsdale,mudsdale
 Muk-Alola,muk-alola
 Munkidori,munkidori
 Murkrow,murkrow
+Musharna,musharna
 Naclstack,naclstack
 Necrozma-Dawn-Wings,necrozma-dawn
 Necrozma-Dusk-Mane,necrozma-dusk
@@ -336,6 +361,7 @@ Perrserker,perrserker
 Persian,persian
 Persian-Alola,persian-alola
 Phanpy,phanpy
+Pidgeot-Mega,pidgeot-mega
 Pikachu,pikachu
 Pincurchin,pincurchin
 Pinsir-Mega,pinsir-mega
@@ -348,6 +374,7 @@ Primarina,primarina
 Primeape,primeape
 Psyduck,psyduck
 Pyroar,pyroar-male
+Pyroar-Mega,pyroar-mega
 Quagsire,quagsire
 Quaquaval,quaquaval
 Quilava,quilava
@@ -355,6 +382,8 @@ Rabsca,rabsca
 Raging Bolt,raging-bolt
 Raichu,raichu
 Raichu-Alola,raichu-alola
+Raichu-Mega-X,raichu-mega-x
+Raichu-Mega-Y,raichu-mega-y
 Raikou,raikou
 Rampardos,rampardos
 Rayquaza,rayquaza
@@ -379,17 +408,23 @@ Rotom-Mow,rotom-mow
 Rotom-Wash,rotom-wash
 Runerigus,runerigus
 Sableye,sableye
+Sableye-Mega,sableye-mega
 Salamence,salamence
+Salamence-Mega,salamence-mega
 Salazzle,salazzle
 Samurott-Hisui,samurott-hisui
 Sandaconda,sandaconda
 Sandy Shocks,sandy-shocks
 Sceptile,sceptile
+Sceptile-Mega,sceptile-mega
 Scizor,scizor
 Scizor-Mega,scizor-mega
+Scolipede,scolipede
+Scolipede-Mega,scolipede-mega
 Scovillain,scovillain
 Scovillain-Mega,scovillain-mega
 Scrafty,scrafty
+Scrafty-Mega,scrafty-mega
 Scraggy,scraggy
 Scream Tail,scream-tail
 Scyther,scyther
@@ -398,6 +433,8 @@ Sharpedo-Mega,sharpedo-mega
 Shiftry,shiftry
 Simisear,simisear
 Sinistcha,sinistcha
+Sirfetch’d,sirfetchd
+Skarmory,skarmory
 Skarmory-Mega,skarmory-mega
 Skeledirge,skeledirge
 Skiddo,skiddo
@@ -410,6 +447,7 @@ Slowbro-Galar,slowbro-galar
 Slowbro-Mega,slowbro-mega
 Slowking,slowking
 Slowking-Galar,slowking-galar
+Slurpuff,slurpuff
 Smeargle,smeargle
 Sneasel,sneasel
 Sneasel-Hisui,sneasel-hisui
@@ -423,6 +461,7 @@ Spiritomb,spiritomb
 Squawkabilly,squawkabilly-green-plumage
 Stantler,stantler
 Staraptor,staraptor
+Staraptor-Mega,staraptor-mega
 Starmie-Mega,starmie-mega
 Steelix,steelix
 Steelix-Mega,steelix-mega
@@ -431,6 +470,7 @@ Stunfisk,stunfisk
 Suicune,suicune
 Sunflora,sunflora
 Swampert,swampert
+Swampert-Mega,swampert-mega
 Sylveon,sylveon
 Talonflame,talonflame
 Tandemaus,tandemaus
@@ -466,6 +506,7 @@ Typhlosion,typhlosion
 Typhlosion-Hisui,typhlosion-hisui
 Tyranitar,tyranitar
 Tyranitar-Mega,tyranitar-mega
+Tyrantrum,tyrantrum
 Umbreon,umbreon
 Ursaluna,ursaluna
 Ursaluna-Bloodmoon,ursaluna-bloodmoon
@@ -486,6 +527,7 @@ Volbeat,volbeat
 Volcarona,volcarona
 Walking Wake,walking-wake
 Wartortle,wartortle
+Watchog,watchog
 Weavile,weavile
 Weezing,weezing
 Weezing-Galar,weezing-galar
@@ -498,4 +540,5 @@ Zamazenta,zamazenta
 Zapdos,zapdos
 Zapdos-Galar,zapdos-galar
 Zebstrika,zebstrika
+Zoroark,zoroark
 Zoroark-Hisui,zoroark-hisui

@@ -26,6 +26,18 @@ for the large majority of entries (e.g. `charizard-mega-x`); the handful
 that don't (bare species names PokéAPI splits into named sub-forms with no
 default-equals-species-name entry) are resolved downstream by the
 pokebase_slug_to_pokeapi_form seed, same as OP.GG/MunchStats.
+
+Page shape as of 2026-10 (the "regulation-ordered" shape): PokéBase
+redesigned the page. The list now sits under `"data":{"pokemon":[...]}`,
+and each entry carries `dex` (instead of `nationalNumber`) and
+`addedIn: "m-c"` (the regulation it entered the pool in) instead of a
+`regulationSets` array. A separate `"regulations":[...]` array lists every
+set in release order. An entry is emitted as legal in its `addedIn`
+regulation and every later one, which gives true per-regulation membership:
+"legal in M-C" is the full M-C pool, not only M-C's additions. The page
+publishes no removals, the same positive-signal-only limitation
+legality_summary_by_regulation.sql already documents. The older
+`docs`/`regulationSets` shape is still parsed if PokéBase reverts.
 """
 
 from __future__ import annotations
@@ -57,6 +69,8 @@ FIELDNAMES = [
 ]
 
 _ARRAY_MARKER = '\\"data\\":{\\"docs\\":['
+_POKEMON_ARRAY_MARKER = '\\"data\\":{\\"pokemon\\":['
+_REGULATIONS_ARRAY_MARKER = '\\"regulations\\":['
 
 
 def _fetch_page_html(session: requests.Session) -> str:
@@ -87,30 +101,64 @@ def _find_array_end(text: str, open_bracket_index: int) -> int:
     raise ValueError("Unbalanced brackets while scanning embedded pokemon payload")
 
 
-def _extract_pokemon_payloads(html: str) -> list[dict]:
-    marker_index = html.find(_ARRAY_MARKER)
+def _extract_embedded_array(html: str, marker: str) -> list | None:
+    marker_index = html.find(marker)
     if marker_index == -1:
-        raise ValueError("Could not find embedded pokemon payload in PokéBase page HTML")
-    array_start = marker_index + len(_ARRAY_MARKER) - 1
+        return None
+    array_start = marker_index + len(marker) - 1
     array_end = _find_array_end(html, array_start)
     escaped_array = html[array_start : array_end + 1]
     unescaped_array = json.loads(f'"{escaped_array}"')
     return json.loads(unescaped_array)
 
 
-def _rows_from_pokemon(payload: dict, *, extracted_at_utc: str, dataset_version: str) -> list[dict]:
+def _extract_pokemon_payloads(html: str) -> list[dict]:
+    for marker in (_POKEMON_ARRAY_MARKER, _ARRAY_MARKER):
+        payloads = _extract_embedded_array(html, marker)
+        if payloads is not None:
+            return payloads
+    raise ValueError("Could not find embedded pokemon payload in PokéBase page HTML")
+
+
+def _extract_regulation_order(html: str) -> list[str]:
+    """Regulation slugs in release order, from the page's own
+    `regulations` array (empty for the older page shape, which doesn't need
+    it)."""
+    regulations = _extract_embedded_array(html, _REGULATIONS_ARRAY_MARKER) or []
+    return [regulation["slug"] for regulation in regulations]
+
+
+def _legal_regulations(payload: dict, regulation_order: list[str]) -> list[tuple[str, str]]:
+    """(regulation slug, source_record_id suffix) for every regulation
+    this entry is legal under, from whichever page shape it came from."""
+    if payload.get("regulationSets"):
+        return [(r["slug"], r["id"]) for r in payload["regulationSets"]]
+    added_in = payload.get("addedIn")
+    if not added_in or added_in not in regulation_order:
+        return []
+    return [(slug, slug) for slug in regulation_order[regulation_order.index(added_in) :]]
+
+
+def _rows_from_pokemon(
+    payload: dict,
+    *,
+    extracted_at_utc: str,
+    dataset_version: str,
+    regulation_order: list[str] | None = None,
+) -> list[dict]:
     rows = []
-    for regulation in payload.get("regulationSets") or []:
+    pokemon_id = payload.get("nationalNumber", payload.get("dex"))
+    for regulation_slug, record_suffix in _legal_regulations(payload, regulation_order or []):
         rows.append(
             {
-                "pokemon_id": payload["nationalNumber"],
+                "pokemon_id": pokemon_id,
                 "pokemon_name": payload["name"],
                 "form_name": payload["slug"],
-                "regulation_code": regulation["slug"],
+                "regulation_code": regulation_slug,
                 "is_legal": True,
                 "source_name": SOURCE_NAME,
                 "source_url": f"{PAGE_URL}/{payload['slug']}",
-                "source_record_id": f"{payload['id']}:{regulation['id']}",
+                "source_record_id": f"{payload['id']}:{record_suffix}",
                 "extracted_at_utc": extracted_at_utc,
                 "dataset_version": dataset_version,
             }
@@ -131,13 +179,17 @@ def extract(
     http = session if session is not None else requests.Session()
     html = _fetch_page_html(http)
     payloads = _extract_pokemon_payloads(html)
+    regulation_order = _extract_regulation_order(html)
     extracted_at_utc = datetime.now(UTC).isoformat()
 
     rows = []
     for payload in payloads:
         rows.extend(
             _rows_from_pokemon(
-                payload, extracted_at_utc=extracted_at_utc, dataset_version=dataset_version
+                payload,
+                extracted_at_utc=extracted_at_utc,
+                dataset_version=dataset_version,
+                regulation_order=regulation_order,
             )
         )
 

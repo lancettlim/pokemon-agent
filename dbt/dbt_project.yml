@@ -4,11 +4,10 @@ config-version: 2
 
 profile: "pokemon_champions"
 
-# The MunchStats `format` value identifying the Pokemon Champions format.
-# Declared once here rather than repeated as a literal across every mart
-# that scopes to it (see int_champions_roster.sql).
-vars:
-  champions_event_format: "gen9championsvgc2026regma"
+# Which MunchStats/Limitless formats count as Pokémon Champions lives in
+# seeds/champions_regulations.csv (one row per regulation set). A single
+# `champions_event_format` var used to live here, and it pinned the whole
+# pipeline to Reg M-A.
 
 model-paths: ["models"]
 test-paths: ["tests"]

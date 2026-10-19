@@ -1,0 +1,119 @@
+name: Refresh dashboard
+
+# Rebuilds the published dashboard from the latest extracted data and opens
+# (or updates) a pull request with the result (docs/upgrade-plan-2026q4.md,
+# A6). Before this existed, scheduled-extraction.yml refreshed staging every
+# day but nothing rebuilt docs/dashboard/, and deploy-dashboard.yml only
+# runs on a push to docs/**. The published site sat on Reg M-A data for
+# four months after Reg M-C started.
+#
+# It opens a pull request rather than committing to main, so a refresh still
+# goes through review (and CI) before deploy-dashboard.yml publishes it.
+#
+# Data: the daily sources (OP.GG, MunchStats, RK9, Limitless, PokéBase) come
+# from the staging cache scheduled-extraction.yml populates, restored
+# read-only so this workflow never forks that cache's history. PokéAPI and
+# Bulbagarden are re-extracted here because the dashboard also needs their
+# image bytes (data/assets/), which that cache doesn't hold. Both extractors
+# skip images they already have, and data/assets/ is cached under its own
+# key, so a typical weekly run downloads only new sprites. Bulbagarden is
+# kept off scheduled-extraction.yml's daily cron (see that file's header);
+# a weekly run here keeps its request volume low.
+#
+# Repository setting required: Settings → Actions → General → "Allow GitHub
+# Actions to create and approve pull requests".
+on:
+  schedule:
+    - cron: "37 9 * * 1" # weekly, Monday 09:37 UTC: after scheduled-extraction's 07:00 PokéAPI run
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: refresh-dashboard
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Restore staging snapshot history
+        uses: actions/cache/restore@v4
+        with:
+          path: data/staging
+          key: staging-snapshots-refresh-noop
+          restore-keys: |
+            staging-snapshots-
+
+      - name: Restore image asset cache
+        uses: actions/cache@v4
+        with:
+          path: data/assets
+          key: dashboard-assets-${{ github.run_id }}
+          restore-keys: |
+            dashboard-assets-
+
+      - name: Extract sources the cache doesn't cover
+        run: |
+          set -euo pipefail
+          # Daily sources are normally already in the restored cache; extract
+          # any that are missing (fresh repo, evicted cache) so the build
+          # never runs on a partial dataset.
+          for source in munchstats rk9 limitless opgg pokebase; do
+            subdir="$source"
+            [ "$source" = "rk9" ] && subdir="rk9_pairings"
+            [ "$source" = "opgg" ] && subdir="opgg_champions"
+            if ! find "data/staging/$subdir" -name '*.csv' -print -quit 2>/dev/null | grep -q .; then
+              uv run python -m pipelines.cli extract "$source"
+            fi
+          done
+          uv run python -m pipelines.cli extract bulbagarden
+          uv run python -m pipelines.cli extract pokeapi
+
+      - name: dbt build + validate
+        run: make validate
+
+      - name: Build dashboard
+        run: uv run python -m pipelines.cli build-dashboard
+
+      # The rebuild should only ever change the generated site and the
+      # tracked extraction summary. Anything else in the diff means a step
+      # wrote somewhere unexpected, so stop rather than put it up for review.
+      - name: Check the diff is dashboard-only
+        run: |
+          set -euo pipefail
+          unexpected=$(git status --porcelain | awk '{print $2}' | grep -v -e '^docs/dashboard/' -e '^reports/validation/extraction_summary.json$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::Refresh changed files outside docs/dashboard/ and the extraction summary:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+      - name: Open or update the refresh pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/dashboard-refresh
+          delete-branch: true
+          add-paths: |
+            docs/dashboard
+            reports/validation/extraction_summary.json
+          commit-message: "Refresh dashboard data"
+          title: "Refresh dashboard data"
+          body: |
+            Automated weekly rebuild of `docs/dashboard/` from the latest extracted data
+            (`.github/workflows/refresh-dashboard.yml`). All release gates passed in
+            `make validate` before this was opened.
+
+            Merging publishes it via `deploy-dashboard.yml`.

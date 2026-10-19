@@ -11,7 +11,14 @@ sources:
       # snapshot_date column; int_*_latest.sql models select the current
       # point-in-time snapshot for the rest of the normalized layer to
       # build on (backlog.md #2).
-      external_location: "../data/staging/{name}/*.csv"
+      #
+      # quote/escape are pinned for the same reason dbt_project.yml pins
+      # them on the normalized/mart layers: DuckDB's sniffer only samples
+      # the first ~20k rows, and a quoted comma further down (the 2026-10
+      # MunchStats snapshot's first appears at line 24,762: "CHIA,HAN LIN")
+      # gets the file mis-detected as unquoted. union_by_name keeps the
+      # multi-snapshot glob readable across a staging column being added.
+      external_location: "read_csv('../data/staging/{name}/*.csv', auto_detect=true, header=true, quote='\"', escape='\"', union_by_name=true)"
     tables:
       # backlog.md #39: freshness thresholds mirror docs/dataset-spec.md's
       # "Refresh policy" cadences (PokéAPI weekly, everything else daily),

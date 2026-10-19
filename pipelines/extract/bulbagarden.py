@@ -18,9 +18,12 @@ opgg.py/pokebase.py) — no HTML parser dependency is needed:
     (batched, since MediaWiki accepts multiple `|`-joined titles per call)
     resolves each title to its real CDN download URL plus size/mime/sha1.
 
-File titles follow the pattern `File:Menu CP <4-digit Pokédex number>[-<Form
-descriptor>].png` (e.g. "Menu CP 0003-Mega.png", "Menu CP 0128-Paldea
-Aqua.png") — flat, no subcategories. `_parse_title` splits this into raw,
+File titles follow the pattern `File:Menu Champs <4-digit Pokédex
+number>[-<Form descriptor>].png` (e.g. "Menu Champs 0003-Mega.png", "Menu
+Champs 0128-Paldea Aqua.png") — flat, no subcategories. Bulbagarden renamed
+every file from the older "Menu CP" prefix by 2026-10. Both prefixes are
+accepted, so a cached or partially renamed category still parses, but the
+mapping seed is keyed on the current "Menu Champs" titles. `_parse_title` splits this into raw,
 *unresolved* `pokedex_number_raw`/`form_suffix_raw` fields; like
 opgg.py/pokebase.py, this extractor doesn't resolve cross-source identity
 itself — that's dbt's job, via the
@@ -65,7 +68,7 @@ DEFAULT_CACHE_DIR = REPO_ROOT / "data" / "assets" / "bulbagarden"
 # batches modest to stay well under typical URL-length limits.
 _TITLE_BATCH_SIZE = 50
 
-_TITLE_PATTERN = re.compile(r"^File:Menu CP (\d{4})(?:-(.+))?\.png$")
+_TITLE_PATTERN = re.compile(r"^File:Menu (?:CP|Champs) (\d{4})(?:-(.+))?\.png$")
 
 FIELDNAMES = [
     "bulbagarden_title",
@@ -166,7 +169,7 @@ def extract(
     resolve each file's real image URL/metadata, download the bytes to
     cache_dir, and write a manifest CSV to output_path matching the field
     list in data/staging/bulbagarden.schema.json, including provenance
-    fields. Titles that don't match the expected "Menu CP <NNNN>[-<Form>]"
+    fields. Titles that don't match the expected "Menu Champs <NNNN>[-<Form>]"
     pattern are skipped (not written) rather than guessed at."""
     http = session if session is not None else requests.Session()
     members = _list_category_members(http)

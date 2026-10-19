@@ -1,40 +1,40 @@
 {
   "description": "Phase 1 ingestion check: source availability and row-level parsing success for each staging extractor. Distinct from validation_report.json, which gates normalized-table release readiness.",
-  "generated_at_utc": "2026-08-04T06:13:41Z",
+  "generated_at_utc": "2026-10-18T14:52:30Z",
   "dataset_version": "0.3.0",
   "sources": [
     {
       "source_name": "Bulbagarden Archives",
       "endpoint": "https://archives.bulbagarden.net/w/api.php (Category:Champions_menu_sprites)",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 368,
-      "requests_succeeded": 368,
+      "requests_attempted": 402,
+      "requests_succeeded": 402,
       "request_success_rate": 1.0,
-      "rows_written": 359,
+      "rows_written": 393,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T06:00:16Z"
+      "checked_at_utc": "2026-10-18T14:46:57Z"
     },
     {
       "source_name": "Limitless VGC",
       "endpoint": "https://limitlessvgc.com/tournaments, /tournaments/{id}, /teams/{id}",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 363,
-      "requests_succeeded": 363,
+      "requests_attempted": 891,
+      "requests_succeeded": 891,
       "request_success_rate": 1.0,
-      "rows_written": 2616,
+      "rows_written": 6204,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T05:59:44Z"
+      "checked_at_utc": "2026-10-18T14:47:57Z"
     },
     {
       "source_name": "MunchStats",
       "endpoint": "https://raw.githubusercontent.com/PizzaTimeJoshua/munchstats/main/stats/tournaments/",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 92,
-      "requests_succeeded": 92,
+      "requests_attempted": 75,
+      "requests_succeeded": 75,
       "request_success_rate": 1.0,
-      "rows_written": 106134,
+      "rows_written": 131122,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T05:58:13Z"
+      "checked_at_utc": "2026-10-18T14:41:20Z"
     },
     {
       "source_name": "OP.GG Pok\u00e9mon Champions",
@@ -43,9 +43,9 @@
       "requests_attempted": 1,
       "requests_succeeded": 1,
       "request_success_rate": 1.0,
-      "rows_written": 317,
+      "rows_written": 352,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T05:59:45Z"
+      "checked_at_utc": "2026-10-18T14:41:22Z"
     },
     {
       "source_name": "Pok\u00e9API",
@@ -56,51 +56,51 @@
       "request_success_rate": 1.0,
       "rows_written": 1351,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T06:02:10Z"
+      "checked_at_utc": "2026-10-18T14:51:19Z"
     },
     {
       "source_name": "Pok\u00e9API (ability detail)",
       "endpoint": "https://pokeapi.co/api/v2/ability/{ability_name}",
-      "availability": "reachable, but 1/234 request(s) failed",
-      "requests_attempted": 234,
-      "requests_succeeded": 233,
-      "request_success_rate": 0.9957,
-      "rows_written": 233,
+      "availability": "reachable, but 1/240 request(s) failed",
+      "requests_attempted": 240,
+      "requests_succeeded": 239,
+      "request_success_rate": 0.9958,
+      "rows_written": 239,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T06:03:14Z"
+      "checked_at_utc": "2026-10-18T14:52:16Z"
     },
     {
       "source_name": "Pok\u00e9API (artwork)",
       "endpoint": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/{pokeapi_resource_id}.png",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 317,
-      "requests_succeeded": 317,
+      "requests_attempted": 34,
+      "requests_succeeded": 34,
       "request_success_rate": 1.0,
-      "rows_written": 317,
+      "rows_written": 351,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T06:13:41Z"
+      "checked_at_utc": "2026-10-18T14:51:23Z"
     },
     {
       "source_name": "Pok\u00e9API (item detail)",
       "endpoint": "https://pokeapi.co/api/v2/item/{item_name}",
-      "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 204,
-      "requests_succeeded": 204,
-      "request_success_rate": 1.0,
-      "rows_written": 204,
+      "availability": "reachable, but 1/233 request(s) failed",
+      "requests_attempted": 233,
+      "requests_succeeded": 232,
+      "request_success_rate": 0.9957,
+      "rows_written": 232,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T06:03:36Z"
+      "checked_at_utc": "2026-10-18T14:52:30Z"
     },
     {
       "source_name": "Pok\u00e9API (move detail)",
       "endpoint": "https://pokeapi.co/api/v2/move/{move_name}",
-      "availability": "reachable, but 1/569 request(s) failed",
-      "requests_attempted": 569,
-      "requests_succeeded": 568,
-      "request_success_rate": 0.9982,
-      "rows_written": 568,
+      "availability": "reachable, but 1/579 request(s) failed",
+      "requests_attempted": 579,
+      "requests_succeeded": 578,
+      "request_success_rate": 0.9983,
+      "rows_written": 578,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T06:02:55Z"
+      "checked_at_utc": "2026-10-18T14:52:00Z"
     },
     {
       "source_name": "Pok\u00e9Base",
@@ -109,20 +109,20 @@
       "requests_attempted": 1,
       "requests_succeeded": 1,
       "request_success_rate": 1.0,
-      "rows_written": 311,
+      "rows_written": 924,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T05:59:48Z"
+      "checked_at_utc": "2026-10-18T14:46:33Z"
     },
     {
       "source_name": "RK9.gg",
       "endpoint": "https://rk9.gg/pairings/{event_id}?pod={pod}&rnd={round}",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 119,
-      "requests_succeeded": 119,
+      "requests_attempted": 326,
+      "requests_succeeded": 326,
       "request_success_rate": 1.0,
-      "rows_written": 13201,
+      "rows_written": 31912,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-08-04T05:59:15Z"
+      "checked_at_utc": "2026-10-18T14:49:44Z"
     }
   ]
 }

@@ -2,8 +2,8 @@
  * window.DASHBOARD_DATA (the critical payload baked into index.html by
  * pipelines/dashboard/build.py) and wires up the tabs/filters/tables/grids
  * declared in index.html.jinja. The marts themselves are not inlined —
- * they are fetched once from the sibling data.json on the first activation
- * of a tab that needs them (see ensureData below).
+ * they are fetched as shard files under data/ on the first activation of a
+ * tab that needs them (see ensureData below).
  *
  * This file owns the core framework (tabs, tables, the shared .grid-6xn
  * component) plus the Overview/Usage/Pokémon Profile/Speed Tiers/Players &
@@ -30,6 +30,62 @@
     reference_teams: [],
     pokemon_names: {},
   };
+  // ---------- regulation scope ----------
+  // Every regulation-sensitive mart carries a regulation_scope column with
+  // one partition per regulation plus "all" (docs/upgrade-plan-2026q4.md,
+  // A3). The page shows exactly one scope, chosen once at load from ?reg=
+  // (so a link can point at "M-B"), else the regulation in force on the
+  // viewer's date, else the build's default. Changing it reloads the page
+  // (see setupRegulationSelector) rather than re-rendering live tabs.
+  var SCOPE_PARAM = "reg";
+  var SCOPE_STORAGE_KEY = "dashboard-regulation";
+  var ALL_SCOPE = "all";
+
+  function resolveRegulationScope() {
+    var byScope = DATA.kpis_by_scope || {};
+    var requested = null;
+    try {
+      requested = new URLSearchParams(window.location.search).get(SCOPE_PARAM);
+    } catch (e) {
+      requested = null;
+    }
+    if (requested && byScope[requested]) return requested;
+    // Hosts that don't pass the query string through (a Claude artifact
+    // frame) fall back to the viewer's last choice in this browser.
+    var remembered = null;
+    try {
+      remembered = localStorage.getItem(SCOPE_STORAGE_KEY);
+    } catch (e) {
+      remembered = null;
+    }
+    if (remembered && byScope[remembered]) return remembered;
+    var inForce = regulationInForce(DATA.regulations, new Date().toISOString().slice(0, 10));
+    if (inForce && byScope[inForce.regulation_code]) return inForce.regulation_code;
+    return DATA.default_scope || ALL_SCOPE;
+  }
+
+  var regulationScope = resolveRegulationScope();
+  if (DATA.kpis_by_scope && DATA.kpis_by_scope[regulationScope]) {
+    DATA.kpis = DATA.kpis_by_scope[regulationScope];
+  }
+
+  // Rows of a scoped mart narrowed to the page's scope; unscoped marts
+  // (no regulation_scope column) pass through untouched.
+  function applyRegulationScope(rows) {
+    if (!rows || !rows.length || !("regulation_scope" in rows[0])) return rows;
+    return rows.filter(function (r) {
+      return r.regulation_scope === regulationScope;
+    });
+  }
+
+  function scopeLabel(scope) {
+    if (scope === ALL_SCOPE) return "All Champions regulations";
+    var match = (DATA.regulations || []).filter(function (r) {
+      return r.regulation_code === scope;
+    })[0];
+    return match ? match.regulation_name : scope;
+  }
+
   var marts = DATA.marts || {};
   var sprites = DATA.sprites || {};
   var heroArt = DATA.hero_art || {};
@@ -390,17 +446,14 @@
       return;
     }
     if (large) {
-      // --icon-md, not --icon-xl: on the Profile header these sit beside
-      // the Pokémon's hero art, and at 128px two type emblems were larger
-      // than the Pokémon itself — the subject of the page losing to its
-      // own metadata. They keep a type-colored ring so they still read as
-      // hero-level information at the smaller size.
+      // A type-colored pill with a small icon and the type name. The
+      // earlier 64px ringed emblems competed with the Pokémon's own art on
+      // the Profile header, and the bare icons needed a hover to read.
       container.className = "type-badge-row type-badge-lg";
       container.innerHTML = types
         .map(function (t) {
-          return '<div class="type-pill-lg" role="img" aria-label="' + escapeHtml(t) +
-            ' type" style="--pill-type-color:' + typeColor(t) + '">' +
-            typeIconImg(t, ICON_SIZES.md) + "</div>";
+          return '<span class="type-pill-lg" style="--pill-type-color:' + typeColor(t) + '">' +
+            typeIconImg(t, 20) + "<span>" + escapeHtml(t) + "</span></span>";
         })
         .join("");
     } else {
@@ -574,6 +627,7 @@
   // ---------- tab switching ----------
 
   var tabInitializers = {};
+  var activeTabId = null;
   var initialized = {};
   var tabNeedsMarts = {};
 
@@ -581,41 +635,65 @@
   // inline critical payload (kpis/sprites/names) and so must not wait on
   // the data.json fetch — Overview is the one such tab today, which is why
   // the landing view paints with no network at all.
+  // opts.needsMarts === false: renders from the inline payload alone.
+  // opts.extraMarts: on-demand marts (DATA.mart_files.on_demand) the tab
+  // reads beyond the core and regulation files.
+  var tabExtraMarts = {};
   function registerTab(tabId, initFn, opts) {
     tabInitializers[tabId] = initFn;
     tabNeedsMarts[tabId] = !(opts && opts.needsMarts === false);
+    tabExtraMarts[tabId] = (opts && opts.extraMarts) || [];
+    // A tab registered after the page already opened on it (a #matchup
+    // link, with matchup.js loading after app.js) initialises now.
+    if (activeTabId === tabId) initTab(tabId);
   }
 
   // ---------- lazy mart payload ----------
 
   // index.html inlines only the critical payload (KPIs, sprite/hero/type
-  // icon maps, display names) — a few hundred KB. The marts themselves are
-  // ~8MB and live in the sibling data.json, fetched once on the first
-  // activation of a tab that needs them. Before this split the whole
-  // payload was inlined, so first paint blocked on parsing 8MB of JSON.
-  var martsPromise = null;
+  // icon maps, display names). The marts live in shard files indexed by
+  // DATA.mart_files (pipelines/dashboard/build.py's _write_mart_shards):
+  // a core file plus the selected regulation's file load on the first tab
+  // that needs marts, and the largest marts (head-to-head, triple cores,
+  // player signatures) load only when a tab that reads them opens
+  // (registerTab's extraMarts). Each file is fetched at most once.
+  var shardPromises = {};
 
-  function ensureData() {
-    if (martsPromise) return martsPromise;
-    if (Object.keys(marts).length) {
-      martsPromise = Promise.resolve(marts);
-      return martsPromise;
-    }
-    martsPromise = fetch("data.json")
-      .then(function (response) {
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        return response.json();
-      })
-      .then(function (full) {
-        // Mutated in place, never reassigned: matchup.js and teams.js hold
-        // a reference to this same object via window.DashboardApp.marts.
-        var loaded = (full && full.marts) || {};
-        Object.keys(loaded).forEach(function (name) {
-          marts[name] = loaded[name];
+  function fetchShard(path) {
+    if (!shardPromises[path]) {
+      shardPromises[path] = fetch(path)
+        .then(function (response) {
+          if (!response.ok) throw new Error("HTTP " + response.status + " for " + path);
+          return response.json();
+        })
+        .then(function (loaded) {
+          // Mutated in place, never reassigned: matchup.js and teams.js hold
+          // a reference to this same object via window.DashboardApp.marts.
+          Object.keys(loaded || {}).forEach(function (name) {
+            marts[name] = applyRegulationScope(loaded[name]);
+          });
+          return marts;
+        })
+        .catch(function (error) {
+          delete shardPromises[path];
+          throw error;
         });
-        return marts;
-      });
-    return martsPromise;
+    }
+    return shardPromises[path];
+  }
+
+  function ensureData(extraMarts) {
+    var files = DATA.mart_files;
+    if (!files) return Promise.resolve(marts);
+    var paths = [files.core];
+    var scopePath = files.scopes && (files.scopes[regulationScope] || files.scopes[ALL_SCOPE]);
+    if (scopePath) paths.push(scopePath);
+    (extraMarts || []).forEach(function (name) {
+      if (files.on_demand && files.on_demand[name]) paths.push(files.on_demand[name]);
+    });
+    return Promise.all(paths.filter(Boolean).map(fetchShard)).then(function () {
+      return marts;
+    });
   }
 
   // fetch() against a file:// URL is blocked as a cross-origin request, so
@@ -627,33 +705,79 @@
     if (!panel || panel.querySelector(".data-load-error")) return;
     var isFileProtocol = window.location.protocol === "file:";
     var message = isFileProtocol
-      ? "This page loads its data from data.json, which a browser will not fetch over file://. " +
+      ? "This page loads its data from files under data/, which a browser will not fetch over file://. " +
         "Serve the directory instead: python -m http.server -d docs/dashboard"
-      : "Could not load data.json (" + escapeHtml(String(error && error.message)) + ").";
+      : "Could not load the dashboard data (" + String(error && error.message) + ").";
     var box = document.createElement("p");
     box.className = "empty-state data-load-error";
     box.textContent = message;
     panel.insertBefore(box, panel.firstChild);
   }
 
+  // Two-level navigation (docs/upgrade-plan-2026q4.md, B2): five section
+  // buttons, each owning a row of view buttons (.tab-btn[data-section]).
+  // Only the active section's row shows, and only when it has more than
+  // one view; the KPI strip shows on Meta only. The open view lives in the
+  // URL hash (#usage), so a link opens the same view and the regulation
+  // selector's reload keeps it. Each section remembers its last view.
   function setupTabs(onActivate) {
-    var buttons = document.querySelectorAll(".tab-btn");
+    var buttons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
     var panels = document.querySelectorAll(".tab-panel");
+    var sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-btn"));
+    var tabRow = document.querySelector(".tabs");
+    var kpiStrip = document.getElementById("kpi-strip");
+    var lastTabBySection = {};
+
+    function sectionOf(tabId) {
+      var btn = buttons.filter(function (b) { return b.getAttribute("data-tab") === tabId; })[0];
+      return btn ? btn.getAttribute("data-section") : null;
+    }
+
     function activate(tabId) {
+      var section = sectionOf(tabId);
+      lastTabBySection[section] = tabId;
+      var inSection = 0;
       buttons.forEach(function (btn) {
+        var mine = btn.getAttribute("data-section") === section;
+        btn.hidden = !mine;
+        if (mine) inSection += 1;
         btn.setAttribute("aria-selected", btn.getAttribute("data-tab") === tabId ? "true" : "false");
       });
+      if (tabRow) tabRow.hidden = inSection < 2;
+      sectionButtons.forEach(function (btn) {
+        if (btn.getAttribute("data-section") === section) btn.setAttribute("aria-current", "true");
+        else btn.removeAttribute("aria-current");
+      });
+      if (kpiStrip) kpiStrip.hidden = section !== "meta";
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-panel") !== tabId;
       });
       if (onActivate) onActivate(tabId);
     }
+
+    function go(tabId) {
+      activate(tabId);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", window.location.search + "#" + tabId);
+      }
+    }
+
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        activate(btn.getAttribute("data-tab"));
+        go(btn.getAttribute("data-tab"));
       });
     });
-    activate("overview");
+    sectionButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var section = btn.getAttribute("data-section");
+        var first = buttons.filter(function (b) { return b.getAttribute("data-section") === section; })[0];
+        var target = lastTabBySection[section] || (first && first.getAttribute("data-tab"));
+        if (target) go(target);
+        window.scrollTo(0, 0);
+      });
+    });
+    var fromHash = window.location.hash.replace(/^#/, "");
+    activate(sectionOf(fromHash) ? fromHash : "overview");
   }
 
   // ---------- sub-tabs ----------
@@ -686,7 +810,56 @@
 
   // ---------- per-tab setup (each called once, on first activation) ----------
 
+  function moverListHtml(rows, showDelta) {
+    if (!rows.length) return '<p class="empty-state">None.</p>';
+    return "<ol class=\"mover-list\">" + rows.map(function (r) {
+      var delta = r.usage_share_delta;
+      var deltaHtml = "";
+      if (showDelta && delta != null) {
+        var sign = delta > 0 ? "+" : "";
+        deltaHtml = '<span class="mover-delta ' + (delta > 0 ? "is-up" : "is-down") + '">' +
+          sign + (delta * 100).toFixed(1) + " pts</span>";
+      }
+      return "<li>" + spriteImg(r.pokemon_key, ICON_SIZES.sm) +
+        '<span class="mover-name">' + escapeHtml(r.pokemon_name || r.pokemon_key) + "</span>" +
+        '<span class="mover-share">' + formatPercent(r.usage_share) + "</span>" + deltaHtml + "</li>";
+    }).join("") + "</ol>";
+  }
+
+  // "What changed" (docs/upgrade-plan-2026q4.md, A4/B5): the selected
+  // regulation against the one before it, from pokemon_regulation_movers
+  // summarised server-side (summarize_movers). When either regulation has
+  // too few teams for a delta to mean much, it shows the sample sizes and
+  // new arrivals only.
+  function renderMovers() {
+    var panel = document.getElementById("movers-panel");
+    var movers = DATA.kpis && DATA.kpis.movers;
+    if (!panel || !movers) return;
+    var title = "What changed in " + scopeLabel(movers.regulation_code) + " vs " +
+      scopeLabel(movers.previous_regulation_code);
+    var sample = movers.team_count.toLocaleString() + " teams this regulation · " +
+      movers.previous_team_count.toLocaleString() + " in the previous one. " +
+      "Shares are of all roster slots in each regulation's events.";
+    var columns = [];
+    if (movers.reliable) {
+      columns.push('<div><h4>Rising</h4>' + moverListHtml(movers.risers, true) + "</div>");
+      columns.push('<div><h4>Falling</h4>' + moverListHtml(movers.fallers, true) + "</div>");
+    } else {
+      sample += " Too few teams on one side to compare shares reliably, so only new arrivals are shown.";
+    }
+    columns.push('<div><h4>New this regulation</h4>' + moverListHtml(movers.new_arrivals, false) + "</div>");
+    panel.innerHTML = "<h3>" + escapeHtml(title) + '</h3><p class="sub">' + escapeHtml(sample) +
+      '</p><div class="mover-columns">' + columns.join("") + "</div>";
+    panel.hidden = false;
+  }
+
   function setupOverview() {
+    var overviewSub = document.getElementById("overview-sub");
+    if (overviewSub) {
+      overviewSub.textContent = "Top 12 most-used Pokémon in " + scopeLabel(regulationScope) +
+        ", ranked by share of roster slots.";
+    }
+    renderMovers();
     var top12 = (DATA.kpis && DATA.kpis.top_12_pokemon) || [];
     renderGrid6xn(document.getElementById("overview-top-12"), top12, {
       keyFn: function (r) {
@@ -710,15 +883,86 @@
     });
   }
 
+  // Tier List (docs/upgrade-plan-2026q4.md, B5). Bands by usage share in
+  // the selected regulation; the chip beside each Pokémon is its win rate,
+  // coloured only when the 95% Wilson interval sits clearly above or below
+  // 50%. Usage decides the band and win rate qualifies it, kept as two
+  // signals rather than blended into one opaque score.
+  var TIERS = [
+    { id: "s", label: "S", min: 0.04 },
+    { id: "a", label: "A", min: 0.02 },
+    { id: "b", label: "B", min: 0.01 },
+    { id: "c", label: "C", min: 0.005 },
+  ];
+
+  function setupTiers() {
+    var body = document.getElementById("tiers-body");
+    var method = document.getElementById("tiers-method");
+    if (!body) return;
+    var winByKey = {};
+    (marts.pokemon_win_rate_summary || []).forEach(function (r) {
+      winByKey[r.pokemon_key] = r;
+    });
+    var rows = (marts.pokemon_usage_summary || [])
+      .filter(function (r) { return !r.event_tier; })
+      .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
+    if (method) {
+      method.textContent = "Bands by share of roster slots in " + scopeLabel(regulationScope) +
+        ": S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%. The chip is win rate: green when its 95% Wilson lower bound " +
+        "is above 50%, red when even its upper bound is below 50%, grey otherwise. Click a Pokémon for its profile.";
+    }
+    body.innerHTML = TIERS.map(function (tier, i) {
+      var max = i === 0 ? Infinity : TIERS[i - 1].min;
+      var members = rows.filter(function (r) {
+        return r.usage_share >= tier.min && r.usage_share < max;
+      });
+      if (!members.length) return "";
+      var chips = members.map(function (r) {
+        var win = winByKey[r.pokemon_key];
+        var wrHtml = "";
+        if (win && win.win_rate != null) {
+          // Upper bound mirrors the Wilson lower bound around the point
+          // estimate; enough to flag "clearly losing" without a second mart.
+          var upper = win.win_rate + (win.win_rate - (win.wilson_lower_bound || 0));
+          var cls = win.wilson_lower_bound > 0.5 ? " is-strong" : upper < 0.5 ? " is-weak" : "";
+          wrHtml = '<span class="tier-wr' + cls + '" title="' + win.record_count + ' recorded results">' +
+            formatPercent(win.win_rate) + "</span>";
+        }
+        return '<button type="button" class="tier-chip" data-pokemon="' + escapeHtml(r.pokemon_name) + '">' +
+          spriteImg(r.pokemon_key, ICON_SIZES.sm) + escapeHtml(r.pokemon_name) +
+          ' <span class="set-share">' + formatPercent(r.usage_share) + "</span>" + wrHtml + "</button>";
+      }).join("");
+      return '<div class="tier-row"><div class="tier-label tier-' + tier.id + '">' + tier.label +
+        "<small>" + members.length + "</small></div>" +
+        '<div class="tier-members">' + chips + "</div></div>";
+    }).join("") || '<p class="empty-state">No usage data for this regulation yet.</p>';
+    body.addEventListener("click", function (e) {
+      var chip = e.target.closest(".tier-chip");
+      if (!chip) return;
+      openProfile(chip.getAttribute("data-pokemon"));
+    });
+  }
+
+  // Opens the Pokémon Profile on a given display name (the profile
+  // select's option values), from any view.
+  function openProfile(pokemonName) {
+    var tab = document.querySelector('.tab-btn[data-tab="pokemon-profile"]');
+    if (tab) tab.click();
+    ensureData().then(function () {
+      var select = document.getElementById("pokemon-profile-filter");
+      if (!select) return;
+      select.value = pokemonName;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      window.scrollTo(0, 0);
+    });
+  }
+
   function setupUsage() {
     var usageRows = marts.pokemon_usage_summary || [];
-    var regulationRows = marts.pokemon_usage_by_regulation || [];
     var profileByKey = championsProfileByKey();
     var roles = roleByKey();
 
     var tierSelect = document.getElementById("usage-tier-filter");
-    var regulationSelect = document.getElementById("usage-regulation-filter");
-    var regulationNote = document.getElementById("usage-regulation-note");
     var roleSelect = document.getElementById("usage-role-filter");
     var typeFilterEl = document.getElementById("usage-type-filter");
     var shareMin = document.getElementById("usage-share-min");
@@ -727,28 +971,13 @@
     var speedMax = document.getElementById("usage-speed-max");
     var selectedTypes = {};
 
-    // Source rows for the usage leaderboard: pokemon_usage_summary's
-    // overall/per-tier rows normally, or pokemon_usage_by_regulation's
-    // regulation-partitioned rows when a regulation is selected (backlog
-    // #12). The two marts can't be combined — tournament_event carries no
-    // regulation_code (no source reports which regulation an event was
-    // played under), so a regulation slice is "usage among the Pokémon
-    // legal under regulation X," with share/rank recomputed inside that
-    // pool. Tier therefore doesn't apply while a regulation is selected,
-    // and the select is disabled to say so rather than silently ignored.
-    function baseRows(tier, regulation) {
-      if (!regulation) {
-        return usageRows.filter(function (r) {
-          return (r.event_tier || "") === tier;
-        });
-      }
-      return regulationRows.filter(function (r) {
-        return r.regulation_code === regulation;
-      });
-    }
-
-    function filteredRows(tier, regulation) {
-      return baseRows(tier, regulation).filter(function (r) {
+    // Rows are already scoped to the page's regulation (the header's
+    // Regulation selector; see applyRegulationScope), so this tab only
+    // filters by tier. It used to carry its own Regulation select, which
+    // could only approximate a regulation by its legal pool.
+    function filteredRows(tier) {
+      return usageRows.filter(function (r) {
+        if ((r.event_tier || "") !== tier) return false;
         var profile = profileByKey[r.pokemon_key];
         if (!passesTypeFilter(selectedTypes, profile && profile.type_1, profile && profile.type_2)) return false;
         if (roleSelect && roleSelect.value && roles[r.pokemon_key] !== roleSelect.value) return false;
@@ -777,20 +1006,7 @@
 
     function drawUsage() {
       var tier = tierSelect ? tierSelect.value : "";
-      var regulation = regulationSelect ? regulationSelect.value : "";
-      if (tierSelect) tierSelect.disabled = !!regulation;
-      if (regulationNote) {
-        regulationNote.hidden = !regulation;
-        if (regulation) {
-          regulationNote.textContent =
-            "Scoped to regulation " + regulation + "'s legal pool (" +
-            baseRows(tier, regulation).length +
-            " Pokémon); shares and ranks are recomputed within that pool. " +
-            "Tournament tier doesn't apply here — no source reports which " +
-            "regulation an event was played under.";
-        }
-      }
-      var rows = filteredRows(tier, regulation)
+      var rows = filteredRows(tier)
         .slice()
         .sort(function (a, b) {
           return a.usage_rank - b.usage_rank;
@@ -813,10 +1029,6 @@
       var tiers = distinctSorted(usageRows, "event_tier");
       fillSelect(tierSelect, tiers, "Overall");
       tierSelect.addEventListener("change", drawUsage);
-    }
-    if (regulationSelect) {
-      fillSelect(regulationSelect, distinctSorted(regulationRows, "regulation_code"), "All (current pool)");
-      regulationSelect.addEventListener("change", drawUsage);
     }
     renderTypeFilterChips(typeFilterEl, selectedTypes, drawUsage);
     [roleSelect, shareMin, shareMax, speedMin, speedMax].forEach(function (el) {
@@ -1094,6 +1306,7 @@
     var itemRows = marts.pokemon_item_usage || [];
     var abilityRows = marts.pokemon_ability_usage || [];
     var moveRows = marts.pokemon_move_usage || [];
+    var natureRows = marts.pokemon_nature_usage || [];
     var coreRows = marts.pokemon_team_core_usage || [];
     var synergyRows = marts.pokemon_team_synergy || [];
     var tripleRows = marts.pokemon_team_core_triple_usage || [];
@@ -1241,6 +1454,99 @@
       );
     }
 
+    // Base stats as bars against the legal pool's median for each stat
+    // (docs/upgrade-plan-2026q4.md, B4), so "Atk 130" reads as "well above
+    // a typical Champions Pokémon" at a glance.
+    var STAT_FIELDS = [
+      ["hp", "HP"], ["attack", "Atk"], ["defense", "Def"],
+      ["sp_attack", "SpA"], ["sp_defense", "SpD"], ["speed", "Spe"],
+    ];
+    var statMedians = {};
+    STAT_FIELDS.forEach(function (field) {
+      var values = profileRows
+        .map(function (r) { return r[field[0]]; })
+        .filter(function (v) { return v != null; })
+        .sort(function (a, b) { return a - b; });
+      statMedians[field[0]] = values.length ? values[Math.floor(values.length / 2)] : null;
+    });
+    var STAT_SCALE_MAX = 200;
+    // Below this many team sheets, the most-common-set card says so.
+    var MIN_SET_SAMPLE = 30;
+
+    function statBarsHtml(profile) {
+      return '<div class="stat-bars" role="list">' + STAT_FIELDS.map(function (field) {
+        var value = profile[field[0]];
+        var median = statMedians[field[0]];
+        var width = Math.min(100, ((value || 0) / STAT_SCALE_MAX) * 100);
+        var medianLeft = median != null ? Math.min(100, (median / STAT_SCALE_MAX) * 100) : null;
+        var cls = median == null ? "" : value >= median * 1.15 ? " is-high" : value <= median * 0.85 ? " is-low" : "";
+        return '<div class="stat-bar-row" role="listitem" aria-label="' + field[1] + " " + value +
+          (median != null ? ", format median " + median : "") + '">' +
+          '<span class="stat-label">' + field[1] + "</span>" +
+          '<span class="stat-value">' + value + "</span>" +
+          '<span class="stat-track"><span class="stat-fill' + cls + '" style="width:' + width + '%"></span>' +
+          (medianLeft != null ? '<span class="stat-median" style="left:' + medianLeft + '%" title="Format median ' + median + '"></span>' : "") +
+          "</span></div>";
+      }).join("") + '<p class="stat-legend">Tick marks the median across the legal pool.</p></div>';
+    }
+
+    function topRow(rows, name) {
+      return rows
+        .filter(function (r) { return r.pokemon_name === name; })
+        .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
+    }
+
+    function showdownName(key) {
+      return String(key).split("-").map(function (part) {
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      }).join("-");
+    }
+
+    // The single most common choice in each slot (B4). These are separate
+    // modes, not one observed team sheet: the top item and top nature may
+    // never have appeared together. Labelled as such, and there is no EV
+    // line because no source publishes spreads.
+    function commonSetHtml(profile) {
+      var item = topRow(itemRows, profile.pokemon_name)[0];
+      var ability = topRow(abilityRows, profile.pokemon_name)[0];
+      var nature = topRow(natureRows, profile.pokemon_name)[0];
+      var moves = topRow(moveRows, profile.pokemon_name).slice(0, 4);
+      if (!item && !ability && !moves.length) return "";
+      var paste = [showdownName(profile.pokemon_key) + (item ? " @ " + item.item_name : "")];
+      if (ability) paste.push("Ability: " + ability.ability);
+      if (nature) paste.push(nature.nature + " Nature");
+      moves.forEach(function (m) { paste.push("- " + m.move_name); });
+      function line(label, value, share) {
+        return "<dt>" + label + "</dt><dd>" + escapeHtml(value) +
+          (share != null ? ' <span class="set-share">' + formatPercent(share) + "</span>" : "") + "</dd>";
+      }
+      var slots = item ? itemRows.filter(function (r) { return r.pokemon_name === profile.pokemon_name; })
+        .reduce(function (sum, r) { return sum + (r.usage_count || 0); }, 0) : 0;
+      var sampleNote = slots
+        ? '<p class="set-sample' + (slots < MIN_SET_SAMPLE ? " is-thin" : "") + '">From ' + slots.toLocaleString() +
+          " team sheet" + (slots === 1 ? "" : "s") + " in " + escapeHtml(scopeLabel(regulationScope)) +
+          (slots < MIN_SET_SAMPLE ? ". Small sample: treat as anecdotal." : ".") + "</p>"
+        : "";
+      return '<div class="common-set">' +
+        '<div class="common-set-head"><h3>Most common set</h3>' +
+        '<button type="button" class="btn btn-sm" id="copy-common-set">Copy for Showdown</button></div>' +
+        "<dl>" +
+        (item ? line("Item", item.item_name, item.item_share) : "") +
+        (ability ? line("Ability", ability.ability, ability.ability_share) : "") +
+        (nature ? line("Nature", nature.nature, nature.nature_share) : "") +
+        "</dl>" + sampleNote +
+        '<ul class="set-moves">' + moves.map(function (m) {
+          return "<li>" + typeIconImg(m.move_type, 18) + " " + escapeHtml(m.move_name) +
+            ' <span class="set-share">' + formatPercent(m.move_share) + "</span></li>";
+        }).join("") + "</ul>" +
+        '<p class="stat-legend">Each line is the most common choice for that slot, counted separately. ' +
+        "No EVs: tournament team sheets don't publish them.</p>" +
+        '<textarea class="visually-hidden" id="common-set-paste" aria-hidden="true" tabindex="-1">' +
+        escapeHtml(paste.join("\n")) + "</textarea></div>";
+    }
+
+    var setEl = document.getElementById("pokemon-profile-set");
+
     function render(chosenName) {
       var profile = sortedProfiles.filter(function (r) {
         return r.pokemon_name === chosenName;
@@ -1269,12 +1575,39 @@
             "<div><strong>" + escapeHtml(profile.pokemon_name) + "</strong> " +
             speedTierBadge(profile.speed) +
             '<div class="type-badge-row type-badge-lg" id="profile-type-badge"></div>' +
-            "HP " + profile.hp + " · Atk " + profile.attack + " · Def " + profile.defense +
-            " · SpA " + profile.sp_attack + " · SpD " + profile.sp_defense +
-            " · Spe " + profile.speed + "<br>" +
-            formatPercent(profile.usage_share) + " usage · " + formatPercent(profile.win_rate) +
-            " win rate</div></div>";
+            '<div class="profile-usage-line">' + formatPercent(profile.usage_share) + " usage · " +
+            formatPercent(profile.win_rate) + " win rate in " + escapeHtml(scopeLabel(regulationScope)) +
+            "</div>" + statBarsHtml(profile) + "</div></div>";
           renderTypeBadgeRow(document.getElementById("profile-type-badge"), profile.type_1, profile.type_2, true);
+        }
+      }
+      if (setEl) {
+        setEl.innerHTML = profile ? commonSetHtml(profile) : "";
+        var copyBtn = document.getElementById("copy-common-set");
+        if (copyBtn) {
+          copyBtn.addEventListener("click", function () {
+            var text = document.getElementById("common-set-paste").value;
+            var done = function () {
+              copyBtn.textContent = "Copied";
+              setTimeout(function () { copyBtn.textContent = "Copy for Showdown"; }, 1500);
+            };
+            // Some hosts refuse clipboard writes; then show the text
+            // selected so the viewer can copy it by hand.
+            var fallback = function () {
+              var box = document.getElementById("common-set-paste");
+              box.classList.remove("visually-hidden");
+              box.removeAttribute("aria-hidden");
+              box.rows = 7;
+              box.focus();
+              box.select();
+              copyBtn.textContent = "Select and copy";
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(done, fallback);
+            } else {
+              fallback();
+            }
+          });
         }
       }
 
@@ -1884,24 +2217,302 @@
     setupSubTabs(subtabs, subpanels);
   }
 
+  // ---------- Pokémon search combobox ----------
+  // Type-ahead search with sprites, layered over an existing Pokémon
+  // <select> (docs/upgrade-plan-2026q4.md, B4). The select stays the source
+  // of truth: picking a result sets select.value and dispatches "change",
+  // so every listener the tabs already attach keeps working, and options
+  // are read from the select on each open, so it can be attached before a
+  // tab fills it. Option values are either pokemon_keys or display names
+  // depending on the tab; both resolve to a sprite.
+  var keyByName = {};
+  Object.keys(pokemonNames).forEach(function (key) {
+    keyByName[pokemonNames[key]] = key;
+  });
+  var MAX_COMBO_RESULTS = 12;
+  var comboCount = 0;
+
+  function normalizeSearch(text) {
+    return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  function attachPokemonCombobox(select) {
+    if (!select || select.dataset.combobox) return;
+    select.dataset.combobox = "1";
+    comboCount += 1;
+    var listId = "combo-list-" + comboCount;
+    var wrap = document.createElement("div");
+    wrap.className = "combo";
+    var input = document.createElement("input");
+    input.type = "search";
+    input.className = "combo-input";
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-controls", listId);
+    input.setAttribute("autocomplete", "off");
+    input.placeholder = "Search Pokémon…";
+    var list = document.createElement("ul");
+    list.className = "combo-list";
+    list.id = listId;
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+    wrap.appendChild(input);
+    wrap.appendChild(list);
+    select.parentNode.insertBefore(wrap, select);
+    select.classList.add("combo-source");
+    select.setAttribute("tabindex", "-1");
+    select.setAttribute("aria-hidden", "true");
+
+    var results = [];
+    var active = -1;
+
+    function selectedText() {
+      var opt = select.options[select.selectedIndex];
+      return opt && opt.value ? opt.textContent : "";
+    }
+    function syncInput() {
+      if (document.activeElement !== input) input.value = selectedText();
+    }
+    function options() {
+      return Array.prototype.filter.call(select.options, function (o) { return o.value; });
+    }
+    function spriteFor(opt) {
+      return spriteImg(sprites[opt.value] ? opt.value : keyByName[opt.textContent], ICON_SIZES.sm);
+    }
+    function close() {
+      list.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+      active = -1;
+    }
+    function highlight(index) {
+      active = index;
+      Array.prototype.forEach.call(list.children, function (li, i) {
+        li.setAttribute("aria-selected", i === index ? "true" : "false");
+      });
+      if (index >= 0 && list.children[index]) {
+        input.setAttribute("aria-activedescendant", list.children[index].id);
+        list.children[index].scrollIntoView({ block: "nearest" });
+      }
+    }
+    function render() {
+      var query = normalizeSearch(input.value);
+      var all = options();
+      // Prefix matches first, then substring matches; select order (which
+      // is usage order on most tabs) breaks ties.
+      var prefix = [];
+      var inner = [];
+      // A match at the start of any word counts as a prefix match, so
+      // "salam" ranks Mega Salamence (by usage) alongside Salamence.
+      all.forEach(function (opt) {
+        var words = String(opt.textContent).split(/[\s-]+/).map(normalizeSearch);
+        var text = normalizeSearch(opt.textContent);
+        var wordStart = words.some(function (w) { return w.indexOf(query) === 0; });
+        if (!query || wordStart || text.indexOf(query) === 0) prefix.push(opt);
+        else if (text.indexOf(query) > 0) inner.push(opt);
+      });
+      results = prefix.concat(inner).slice(0, MAX_COMBO_RESULTS);
+      list.innerHTML = results.length
+        ? results.map(function (opt, i) {
+            return '<li role="option" id="' + listId + "-" + i + '" data-index="' + i + '">' +
+              spriteFor(opt) + "<span>" + escapeHtml(opt.textContent) + "</span></li>";
+          }).join("")
+        : '<li class="combo-empty" aria-disabled="true">No Pokémon match “' + escapeHtml(input.value) + "”</li>";
+      list.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      highlight(results.length ? 0 : -1);
+    }
+    function choose(index) {
+      var opt = results[index];
+      if (!opt) return;
+      select.value = opt.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      close();
+      input.value = opt.textContent;
+      input.blur();
+    }
+
+    input.addEventListener("focus", function () {
+      input.select();
+      render();
+    });
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (list.hidden) render();
+        else highlight(Math.min(active + 1, results.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        highlight(Math.max(active - 1, 0));
+      } else if (e.key === "Enter") {
+        if (!list.hidden && active >= 0) {
+          e.preventDefault();
+          choose(active);
+        }
+      } else if (e.key === "Escape") {
+        close();
+        input.value = selectedText();
+        input.blur();
+      }
+    });
+    // mousedown, not click: it fires before the input's blur closes the list.
+    list.addEventListener("mousedown", function (e) {
+      var li = e.target.closest("li[data-index]");
+      if (!li) return;
+      e.preventDefault();
+      choose(Number(li.getAttribute("data-index")));
+    });
+    input.addEventListener("blur", function () {
+      close();
+      input.value = selectedText();
+    });
+    select.addEventListener("change", syncInput);
+    // Tabs fill and preselect their selects after setup; poll the label
+    // cheaply until the first real selection appears.
+    var tries = 0;
+    var timer = setInterval(function () {
+      syncInput();
+      tries += 1;
+      if (selectedText() || tries > 40) clearInterval(timer);
+    }, 250);
+  }
+
+  [
+    "pokemon-profile-filter",
+    "compare-a",
+    "compare-b",
+    "core-anchor",
+    "matchup-attacker-select",
+    "matchup-defender-select",
+  ].forEach(function (id) {
+    attachPokemonCombobox(document.getElementById(id));
+  });
+
+  // "/" jumps to the Pokémon search from anywhere on the page.
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    e.preventDefault();
+    var profileTab = document.querySelector('.tab-btn[data-tab="pokemon-profile"]');
+    if (profileTab) profileTab.click();
+    setTimeout(function () {
+      var input = document.querySelector('[data-panel="pokemon-profile"] .combo-input');
+      if (input) input.focus();
+    }, 50);
+  });
+
+  // ---------- staleness banner ----------
+  // Evaluated against the viewer's clock, not the build time: a site that
+  // stops being rebuilt is exactly the case this exists for (the published
+  // dashboard once sat on Reg M-A data for four months after M-C began).
+  var STALE_AFTER_DAYS = 21;
+
+  function regulationInForce(regulations, todayIso) {
+    var inForce = null;
+    (regulations || []).forEach(function (r) {
+      if (r.start_date <= todayIso && todayIso < r.end_date) inForce = r;
+    });
+    return inForce;
+  }
+
+  function renderStalenessBanner() {
+    var banner = document.getElementById("staleness-banner");
+    var latest = (DATA.kpis || {}).latest_event_date;
+    if (!banner || !latest) return;
+    var todayIso = new Date().toISOString().slice(0, 10);
+    var ageDays = Math.floor((Date.parse(todayIso) - Date.parse(latest)) / 86400000);
+    var current = regulationInForce(DATA.regulations, todayIso);
+    var messages = [];
+    if (current && latest < current.start_date) {
+      messages.push(
+        current.regulation_name + " began " + current.start_date +
+        ", but the newest tournament here is from " + latest +
+        ". These figures describe an earlier regulation."
+      );
+    } else if (ageDays > STALE_AFTER_DAYS) {
+      messages.push(
+        "The newest tournament here is from " + latest + " (" + ageDays +
+        " days ago). Results from more recent events are not included yet."
+      );
+    }
+    if (!messages.length) return;
+    banner.textContent = messages.join(" ");
+    banner.hidden = false;
+  }
+  renderStalenessBanner();
+
+  // Header Regulation selector and the per-scope KPI rows the template
+  // renders (one .kpi-row[data-scope] per scope; only the selected shows).
+  function setupRegulationSelector() {
+    document.querySelectorAll(".kpi-row[data-scope]").forEach(function (row) {
+      row.hidden = row.getAttribute("data-scope") !== regulationScope;
+    });
+    var select = document.getElementById("regulation-scope");
+    if (!select) return;
+    select.value = regulationScope;
+    select.addEventListener("change", function () {
+      try {
+        localStorage.setItem(SCOPE_STORAGE_KEY, select.value);
+      } catch (e) {
+        // Storage blocked: the ?reg= link below still carries the choice.
+      }
+      var params = new URLSearchParams(window.location.search);
+      params.set(SCOPE_PARAM, select.value);
+      window.location.assign("?" + params.toString() + window.location.hash);
+    });
+  }
+  setupRegulationSelector();
+
+  // Theme toggle: Auto (follow the OS) -> Light -> Dark. The choice is a
+  // per-browser convenience in localStorage; the inline script in <head>
+  // applies it before first paint.
+  function setupThemeToggle() {
+    var button = document.getElementById("theme-toggle");
+    if (!button) return;
+    var order = ["auto", "light", "dark"];
+    var labels = { auto: "Theme: Auto", light: "Theme: Light", dark: "Theme: Dark" };
+    var current = document.documentElement.getAttribute("data-theme") || "auto";
+    function apply(theme) {
+      current = theme;
+      if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", theme);
+      button.textContent = labels[theme];
+      try {
+        localStorage.setItem("dashboard-theme", theme);
+      } catch (e) {
+        // Storage blocked (private mode): the choice lasts for this page only.
+      }
+    }
+    button.textContent = labels[current];
+    button.addEventListener("click", function () {
+      apply(order[(order.indexOf(current) + 1) % order.length]);
+    });
+  }
+  setupThemeToggle();
+
   // Overview reads only DATA.kpis, which is inlined — it renders with no
   // network round-trip, so the landing view is never waiting on data.json.
   registerTab("overview", setupOverview, { needsMarts: false });
   registerTab("data-sources", setupDataSources);
+  registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage);
-  registerTab("pokemon-profile", setupPokemonProfile);
+  registerTab("pokemon-profile", setupPokemonProfile, { extraMarts: ["pokemon_team_core_triple_usage"] });
   registerTab("archetypes", setupDetectedArchetypes);
   registerTab("speed-tiers", setupSpeedTiers);
-  registerTab("players", setupPlayers);
+  registerTab("players", setupPlayers, { extraMarts: ["player_signature_pokemon"] });
 
-  setupTabs(function (tabId) {
+  function initTab(tabId) {
     if (initialized[tabId] || !tabInitializers[tabId]) return;
     initialized[tabId] = true;
     if (!tabNeedsMarts[tabId]) {
       tabInitializers[tabId]();
       return;
     }
-    ensureData().then(
+    ensureData(tabExtraMarts[tabId]).then(
       function () {
         tabInitializers[tabId]();
       },
@@ -1909,10 +2520,14 @@
         // Un-mark so a retry (re-clicking the tab) can try the fetch again
         // rather than silently doing nothing forever.
         initialized[tabId] = false;
-        martsPromise = null;
         renderDataLoadError(tabId, error);
       }
     );
+  }
+
+  setupTabs(function (tabId) {
+    activeTabId = tabId;
+    initTab(tabId);
   });
 
   // Shared namespace for matchup.js/teams.js (loaded right after this
@@ -1960,5 +2575,9 @@
     registerTab: registerTab,
     setupSubTabs: setupSubTabs,
     ensureData: ensureData,
+    regulationScope: regulationScope,
+    scopeLabel: scopeLabel,
+    attachPokemonCombobox: attachPokemonCombobox,
+    openProfile: openProfile,
   };
 })();

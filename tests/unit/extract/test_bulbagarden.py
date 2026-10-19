@@ -76,9 +76,9 @@ class _FakeSession:
 _FAKE_IMAGE_BYTES = b"\x89PNG fake bytes for testing"
 _FAKE_IMAGE_SHA1 = hashlib.sha1(_FAKE_IMAGE_BYTES).hexdigest()
 
-MEGA_TITLE = "File:Menu CP 0003-Mega.png"
-BASE_TITLE = "File:Menu CP 0004.png"
-PALDEA_TITLE = "File:Menu CP 0128-Paldea Aqua.png"
+MEGA_TITLE = "File:Menu Champs 0003-Mega.png"
+BASE_TITLE = "File:Menu Champs 0004.png"
+PALDEA_TITLE = "File:Menu Champs 0128-Paldea Aqua.png"
 
 MEMBERS_PAGE_1 = [{"pageid": 1, "ns": 6, "title": MEGA_TITLE}]
 MEMBERS_PAGE_2 = [{"pageid": 2, "ns": 6, "title": BASE_TITLE}]
@@ -247,3 +247,12 @@ def test_extract_retries_transient_error_then_succeeds(tmp_path, monkeypatch):
         rows = list(csv.DictReader(fh))
 
     assert len(rows) == 1
+
+
+def test_parse_title_accepts_current_and_legacy_prefixes():
+    # Bulbagarden renamed every file from "Menu CP" to "Menu Champs" by
+    # 2026-10; the old pattern silently matched nothing and wrote an empty
+    # snapshot.
+    assert bulbagarden._parse_title("File:Menu Champs 0359-Mega Z.png") == ("0359", "Mega Z")
+    assert bulbagarden._parse_title("File:Menu CP 0003.png") == ("0003", None)
+    assert bulbagarden._parse_title("File:Something Else 0003.png") is None

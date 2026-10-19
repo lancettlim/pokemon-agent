@@ -205,6 +205,26 @@ def test_extract_writes_full_provenance(tmp_path):
     assert row["extracted_at_utc"]
 
 
+def test_extract_default_covers_every_registered_regulation(tmp_path, monkeypatch):
+    # Regression: the filter used to be the single slug "m-a", which
+    # silently dropped Worlds (m-b) and every m-c event.
+    listing = _TOURNAMENTS.replace('data-format="reg-i"', 'data-format="m-c"')
+    monkeypatch.setattr(
+        limitless,
+        "_fetch_text",
+        lambda _http, url: (
+            listing
+            if url == limitless.TOURNAMENTS_URL
+            else _TEAM
+            if "/teams/" in url
+            else _STANDINGS
+        ),
+    )
+    output_path = tmp_path / "limitless.csv"
+    limitless.extract(output_path, session=_FakeSession(), dataset_version="9.9.9")
+    assert {row["regulation_set"] for row in _read(output_path)} == {"m-a", "m-c"}
+
+
 def test_extract_format_filter_none_takes_every_tournament(tmp_path):
     output_path = tmp_path / "limitless.csv"
     limitless.extract(

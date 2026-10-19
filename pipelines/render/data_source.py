@@ -18,7 +18,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pipelines.dashboard.data import to_pascal_case
+from pipelines.dashboard.data import display_name as format_display_name
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_NORMALIZED_DIR = REPO_ROOT / "data" / "normalized"
@@ -146,7 +146,11 @@ def load_from_team_id(
         )
         raw_moves = [m for m in (row.get("moves") or "").split("|") if m]
         moves, types = _resolve_moves(raw_moves, move_types)
-        display_name = to_pascal_case(pokemon_key) if pokemon_key else "Unknown"
+        display_name = (
+            format_display_name(pokemon_key, pokemon.get("pokemon_name"))
+            if pokemon_key
+            else "Unknown"
+        )
         slots.append(
             CardSlot(
                 slot_number=int(row["slot_number"]),

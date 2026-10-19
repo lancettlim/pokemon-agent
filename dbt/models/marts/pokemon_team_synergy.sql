@@ -26,38 +26,50 @@
 -- consumers can apply their own confidence floor, the same pattern
 -- pokemon_win_rate_summary's record_count/wilson_lower_bound pairing
 -- uses.
+--
+-- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
+-- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
+-- each computed and ranked independently, via int_champions_roster_scoped.
 with legal_members as (
-  select distinct member.team_id, member.pokemon_key
-  from {{ ref('int_champions_roster') }} member
+  select distinct member.regulation_scope, member.team_id, member.pokemon_key
+  from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
 ),
 total_teams as (
-  select count(distinct team_id) as total_teams from legal_members
+  select regulation_scope, count(distinct team_id) as total_teams
+  from legal_members
+  group by regulation_scope
 ),
 marginal as (
-  select pokemon_key, count(distinct team_id) as team_count
+  select regulation_scope, pokemon_key, count(distinct team_id) as team_count
   from legal_members
-  group by pokemon_key
+  group by regulation_scope, pokemon_key
 ),
 scored as (
   select
+    core.regulation_scope,
     core.pokemon_key,
     core.partner_pokemon_key,
     core.co_occurrence_count as pair_team_count,
     (core.co_occurrence_count::double * total_teams.total_teams)
       / (marginal_a.team_count * marginal_b.team_count) as lift_raw
   from {{ ref('pokemon_team_core_usage') }} core
-  cross join total_teams
-  inner join marginal marginal_a on marginal_a.pokemon_key = core.pokemon_key
-  inner join marginal marginal_b on marginal_b.pokemon_key = core.partner_pokemon_key
+  inner join total_teams on total_teams.regulation_scope = core.regulation_scope
+  inner join marginal marginal_a
+    on marginal_a.pokemon_key = core.pokemon_key
+    and marginal_a.regulation_scope = core.regulation_scope
+  inner join marginal marginal_b
+    on marginal_b.pokemon_key = core.partner_pokemon_key
+    and marginal_b.regulation_scope = core.regulation_scope
 )
 select
+  regulation_scope,
   pokemon_key,
   partner_pokemon_key,
   pair_team_count,
   round(lift_raw, 4) as lift,
-  row_number() over (partition by pokemon_key order by lift_raw desc) as lift_rank
+  row_number() over (partition by regulation_scope, pokemon_key order by lift_raw desc) as lift_rank
 from scored
-order by pokemon_key, lift desc
+order by regulation_scope, pokemon_key, lift desc

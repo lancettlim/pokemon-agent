@@ -13,9 +13,13 @@
 --     weighted view using an inverse-placement weight (1/placement) per
 --     appearance, so a 1st-place finish counts far more than a 200th, with
 --     no cutoff discontinuity.
+--
+-- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
+-- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
+-- each computed and ranked independently, via int_champions_roster_scoped.
 with legal_appearances as (
-  select member.pokemon_key, team.placement
-  from {{ ref('int_champions_roster') }} member
+  select member.regulation_scope, member.pokemon_key, team.placement
+  from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('tournament_team') }} team
     on team.team_id = member.team_id
   inner join {{ ref('pokemon_stat_champions') }} champions
@@ -26,26 +30,28 @@ with legal_appearances as (
 ),
 per_pokemon as (
   select
+    regulation_scope,
     pokemon_key,
     count(*) as usage_count,
     sum(case when placement <= 8 then 1 else 0 end) as top_cut_usage_count,
     sum(1.0 / placement) as placement_weighted_score
   from legal_appearances
-  group by pokemon_key
+  group by regulation_scope, pokemon_key
 )
 select
+  regulation_scope,
   pokemon_key,
   usage_count,
   top_cut_usage_count,
   round(
-    top_cut_usage_count::double / nullif(sum(top_cut_usage_count) over (), 0),
+    top_cut_usage_count::double / nullif(sum(top_cut_usage_count) over (partition by regulation_scope), 0),
     4
   ) as top_cut_usage_share,
   round(placement_weighted_score, 4) as placement_weighted_score,
   round(
-    placement_weighted_score / nullif(sum(placement_weighted_score) over (), 0),
+    placement_weighted_score / nullif(sum(placement_weighted_score) over (partition by regulation_scope), 0),
     4
   ) as weighted_usage_share,
-  row_number() over (order by placement_weighted_score desc) as weighted_usage_rank
+  row_number() over (partition by regulation_scope order by placement_weighted_score desc) as weighted_usage_rank
 from per_pokemon
-order by placement_weighted_score desc
+order by regulation_scope, placement_weighted_score desc

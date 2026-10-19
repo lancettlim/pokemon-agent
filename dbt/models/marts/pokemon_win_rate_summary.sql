@@ -12,8 +12,13 @@
 -- though the latter is the far more reliable number. wilson_rank orders by
 -- this instead of raw win_rate; win_rate/record_count stay as reported so
 -- consumers that want the raw proxy still have it.
+--
+-- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
+-- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
+-- each computed and ranked independently, via int_champions_roster_scoped.
 with agg as (
   select
+    member.regulation_scope,
     member.pokemon_key,
     sum(team.record_wins) as total_wins,
     sum(team.record_losses) as total_losses,
@@ -23,7 +28,7 @@ with agg as (
       4
     ) as win_rate,
     count(*) as record_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('tournament_team') }} team
     on team.team_id = member.team_id
   inner join {{ ref('pokemon_stat_champions') }} champions
@@ -31,7 +36,7 @@ with agg as (
     and champions.is_legal = true
   where team.record_wins is not null
     and team.record_losses is not null
-  group by member.pokemon_key
+  group by member.regulation_scope, member.pokemon_key
 ),
 -- z = 1.96 (95% confidence). Wilson score lower bound:
 -- (phat + z^2/(2n) - z*sqrt((phat*(1-phat) + z^2/(4n)) / n)) / (1 + z^2/n)
@@ -45,12 +50,13 @@ scored as (
   from agg
 )
 select
+  regulation_scope,
   pokemon_key,
   total_wins,
   total_losses,
   win_rate,
   record_count,
   round(greatest(wilson_lower_bound_raw, 0), 4) as wilson_lower_bound,
-  row_number() over (order by wilson_lower_bound_raw desc) as wilson_rank
+  row_number() over (partition by regulation_scope order by wilson_lower_bound_raw desc) as wilson_rank
 from scored
-order by wilson_lower_bound desc
+order by regulation_scope, wilson_lower_bound desc

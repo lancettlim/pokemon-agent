@@ -19,9 +19,11 @@ select
   ) as member_rank
 from {{ ref('archetype_pokemon_map') }} map
 left join (
-  select * from {{ ref('pokemon_usage_summary') }} where event_tier is null
+  select * from {{ ref('pokemon_usage_summary') }}
+  where event_tier is null and regulation_scope = 'all'
 ) usage
   on usage.pokemon_key = map.pokemon_key
 left join {{ ref('pokemon_win_rate_summary') }} win
   on win.pokemon_key = map.pokemon_key
+  and win.regulation_scope = 'all'
 order by map.archetype_key, member_rank

@@ -14,8 +14,13 @@
 -- nature is reported for 100% of slots (and tera_type for 0%, since the
 -- format has no Tera mechanic); outside it, exactly the reverse.
 --
+-- Champions membership comes from the champions_regulations seed, which
+-- lists every regulation set. This used to compare against a single
+-- hardcoded Reg M-A format, which silently excluded the 2026 World
+-- Championships (M-B) and every M-C event.
+--
 -- Joins team and event alongside the member row so downstream marts get
--- placement/record/tier/date without repeating the same two joins.
+-- placement/record/tier/date/regulation without repeating the same joins.
 select
   member.team_member_id,
   member.team_id,
@@ -37,10 +42,11 @@ select
   event.event_name,
   event.event_date,
   event.event_tier,
-  event.event_format
+  event.event_format,
+  event.regulation_code
 from {{ ref('tournament_team_member') }} member
 inner join {{ ref('tournament_team') }} team
   on team.team_id = member.team_id
 inner join {{ ref('tournament_event') }} event
   on event.event_id = team.event_id
-where event.event_format = '{{ var("champions_event_format") }}'
+where event.regulation_code is not null

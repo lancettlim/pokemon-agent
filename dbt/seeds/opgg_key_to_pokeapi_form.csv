@@ -13,6 +13,7 @@ annihilape,annihilape
 appletun,appletun
 araquanid,araquanid
 arbok,arbok
+arboliva,arboliva
 arcanine,arcanine
 arcanine-hisui,arcanine-hisui
 archaludon,archaludon
@@ -29,6 +30,7 @@ barbaracle,barbaracle
 basculegion-female,basculegion-female
 basculegion-male,basculegion-male
 bastiodon,bastiodon
+baxcalibur,baxcalibur
 beartic,beartic
 beedrill,beedrill
 bellibolt,bellibolt
@@ -42,6 +44,7 @@ chandelure,chandelure
 charizard,charizard
 chesnaught,chesnaught
 chimecho,chimecho
+cinderace,cinderace
 clawitzer,clawitzer
 clefable,clefable
 cofagrigus,cofagrigus
@@ -66,6 +69,7 @@ espathra,espathra
 espeon,espeon
 excadrill,excadrill
 falinks,falinks
+farfetchd,farfetchd
 farigiraf,farigiraf
 feraligatr,feraligatr
 flapple,flapple
@@ -86,6 +90,8 @@ glaceon,glaceon
 glalie,glalie
 glimmora,glimmora
 gliscor,gliscor
+gogoat,gogoat
+golisopod,golisopod
 golurk,golurk
 goodra,goodra
 goodra-hisui,goodra-hisui
@@ -93,6 +99,7 @@ gourgeist-average,gourgeist-average
 gourgeist-large,gourgeist-large
 gourgeist-small,gourgeist-small
 gourgeist-super,gourgeist-super
+grapploct,grapploct
 greninja,greninja
 grimmsnarl,grimmsnarl
 gyarados,gyarados
@@ -106,7 +113,10 @@ houndstone,houndstone
 hydrapple,hydrapple
 hydreigon,hydreigon
 incineroar,incineroar
+indeedee-female,indeedee-female
+indeedee-male,indeedee-male
 infernape,infernape
+inteleon,inteleon
 jolteon,jolteon
 kangaskhan,kangaskhan
 kingambit,kingambit
@@ -122,6 +132,7 @@ luxray,luxray
 lycanroc,lycanroc-midday
 lycanroc-dusk,lycanroc-dusk
 lycanroc-midnight,lycanroc-midnight
+mabosstiff,mabosstiff
 machamp,machamp
 malamar,malamar
 mamoswine,mamoswine
@@ -132,6 +143,7 @@ mawile,mawile
 medicham,medicham
 mega-abomasnow,abomasnow-mega
 mega-absol,absol-mega
+mega-absol-z,absol-mega-z
 mega-aerodactyl,aerodactyl-mega
 mega-aggron,aggron-mega
 mega-alakazam,alakazam-mega
@@ -140,6 +152,7 @@ mega-ampharos,ampharos-mega
 mega-audino,audino-mega
 mega-banette,banette-mega
 mega-barbaracle,barbaracle-mega
+mega-baxcalibur,baxcalibur-mega
 mega-beedrill,beedrill-mega
 mega-blastoise,blastoise-mega
 mega-blaziken,blaziken-mega
@@ -164,10 +177,12 @@ mega-floette,floette-mega
 mega-froslass,froslass-mega
 mega-gallade,gallade-mega
 mega-garchomp,garchomp-mega
+mega-garchomp-z,garchomp-mega-z
 mega-gardevoir,gardevoir-mega
 mega-gengar,gengar-mega
 mega-glalie,glalie-mega
 mega-glimmora,glimmora-mega
+mega-golisopod,golisopod-mega
 mega-golurk,golurk-mega
 mega-greninja,greninja-mega
 mega-gyarados,gyarados-mega
@@ -177,6 +192,7 @@ mega-houndoom,houndoom-mega
 mega-kangaskhan,kangaskhan-mega
 mega-lopunny,lopunny-mega
 mega-lucario,lucario-mega
+mega-lucario-z,lucario-mega-z
 mega-malamar,malamar-mega
 mega-manectric,manectric-mega
 mega-mawile,mawile-mega
@@ -189,6 +205,7 @@ mega-pyroar,pyroar-mega
 mega-raichu-x,raichu-mega-x
 mega-raichu-y,raichu-mega-y
 mega-sableye,sableye-mega
+mega-salamence,salamence-mega
 mega-sceptile,sceptile-mega
 mega-scizor,scizor-mega
 mega-scolipede,scolipede-mega
@@ -212,6 +229,7 @@ metagross,metagross
 milotic,milotic
 mimikyu,mimikyu-disguised
 morpeko,morpeko-full-belly
+mr-mime,mr-mime
 mr.-rime,mr-rime
 mudsdale,mudsdale
 musharna,musharna
@@ -225,9 +243,14 @@ palafin,palafin-zero
 palafin-hero,palafin-hero
 pangoro,pangoro
 passimian,passimian
+pawmot,pawmot
 pelipper,pelipper
+perrserker,perrserker
+persian,persian
+persian-alolan,persian-alola
 pidgeot,pidgeot
 pikachu,pikachu
+pincurchin,pincurchin
 pinsir,pinsir
 politoed,politoed
 polteageist,polteageist
@@ -241,6 +264,7 @@ raichu-alolan,raichu-alola
 rampardos,rampardos
 reuniclus,reuniclus
 rhyperior,rhyperior
+rillaboom,rillaboom
 roserade,roserade
 rotom,rotom
 rotom-fan,rotom-fan
@@ -250,6 +274,7 @@ rotom-mow,rotom-mow
 rotom-wash,rotom-wash
 runerigus,runerigus
 sableye,sableye
+salamence,salamence
 salazzle,salazzle
 samurott,samurott
 samurott-hisui,samurott-hisui
@@ -265,6 +290,7 @@ simipour,simipour
 simisage,simisage
 simisear,simisear
 sinistcha,sinistcha
+sirfetchd,sirfetchd
 skarmory,skarmory
 skeledirge,skeledirge
 slowbro,slowbro
@@ -275,12 +301,17 @@ slurpuff,slurpuff
 sneasler,sneasler
 snorlax,snorlax
 spiritomb,spiritomb
+squawkabilly-blue-plumage,squawkabilly-blue-plumage
+squawkabilly-green-plumage,squawkabilly-green-plumage
+squawkabilly-white-plumage,squawkabilly-white-plumage
+squawkabilly-yellow-plumage,squawkabilly-yellow-plumage
 staraptor,staraptor
 staraptor-female,staraptor
 starmie,starmie
 steelix,steelix
 stunfisk,stunfisk
 stunfisk-galarian,stunfisk-galar
+swalot,swalot
 swampert,swampert
 sylveon,sylveon
 talonflame,talonflame
@@ -288,12 +319,15 @@ tauros,tauros
 tauros-paldean-aqua,tauros-paldea-aqua-breed
 tauros-paldean-blaze,tauros-paldea-blaze-breed
 tauros-paldean-combat,tauros-paldea-combat-breed
+thievul,thievul
 tinkaton,tinkaton
 torkoal,torkoal
 torterra,torterra
 toucannon,toucannon
 toxapex,toxapex
 toxicroak,toxicroak
+toxtricity-amped,toxtricity-amped
+toxtricity-low-key,toxtricity-low-key
 trevenant,trevenant
 tsareena,tsareena
 typhlosion,typhlosion
@@ -312,6 +346,7 @@ volcarona,volcarona
 watchog,watchog
 weavile,weavile
 whimsicott,whimsicott
+wigglytuff,wigglytuff
 wyrdeer,wyrdeer
 zoroark,zoroark
 zoroark-hisui,zoroark-hisui

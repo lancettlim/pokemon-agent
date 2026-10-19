@@ -1046,6 +1046,13 @@ of the same value with none of the hosting cost.
 `fetch()`-ing `data.json` — so it keeps working opened directly via
 `file://`, per this module's own docstring.
 
+**2026-10 update:** the marts now live in shard files under
+`docs/dashboard/data/` (core, one per regulation scope, and the three
+largest marts on their own), and `data.json` holds every other key plus
+`mart_files`, the index of those shards. The feed is still complete and
+scriptable, as several files instead of one. See `docs/dashboard.md`'s
+"Payload split".
+
 ### 33. GitHub Releases with packaged artifacts — DONE
 
 - **Size**: S
