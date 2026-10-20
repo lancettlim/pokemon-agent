@@ -577,11 +577,11 @@
       var r = byKey[key];
       el.className = "team-slot";
       // A filled slot is an --icon-lg hero box, so it takes the HOME
-      // render rather than the upscaled menu sprite, and carries its
-      // Pokémon's type accent on the slot border.
-      el.style.setProperty("--tile-accent", App.typeAccentGradient(r.type_1, r.type_2));
-      el.classList.add("has-type-accent");
+      // render rather than the upscaled menu sprite. Its type emblems sit
+      // top-right, so the team's type spread reads across the slots.
+      var emblems = App.typeIconsHtml(r.type_1, r.type_2);
       el.innerHTML =
+        (emblems ? '<div class="slot-head">' + emblems + "</div>" : "") +
         App.heroImg(key, App.ICON_SIZES.lg) +
         '<div class="slot-name">' + App.escapeHtml(r.pokemon_name) + "</div>" +
         '<div class="slot-detail">HP ' + r.hp + " Atk " + r.attack + " Def " + r.defense +

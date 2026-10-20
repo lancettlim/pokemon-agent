@@ -846,6 +846,13 @@ table tracks sprint progress.
   fetch count. The core payload (page, scripts, `core.json` and the default
   regulation's shard) is held under 500KB compressed (483KB after Sprint 9, up from 448KB). CI
   installs Chromium for them.
+- [x] Type icons instead of the type-colour side bar on Pokémon cards (U9).
+  Overview and calculator tiles and Team Builder slots show one or two type
+  emblems in their top-right corner (`typeIconsHtml` in `static/app.js`,
+  one `role="img"` labelled "dragon / ground type"); the profile header
+  drops its bar, since its pills already name the types. The type colours
+  now only fill those pills. Also fixes the Builder on phones, whose second
+  column of slots ran off the screen.
 - [x] `pokemon_set_variants` mart and real-set tabs on the profile (P1).
   Exact (item + ability + nature + 4 moves) and core (item + ability + top
   3 moves) levels, top 5 per Pokémon and scope with a Wilson-ranked win

@@ -493,7 +493,7 @@
 
   // A `typeFn` for renderGrid6xn that resolves a row's types through
   // pokemon_champions_profile, so usage/win-rate grids (whose own marts
-  // carry no type columns) can still take a type accent.
+  // carry no type columns) can still show their type emblems.
   function typeFnFromProfile() {
     var profiles = championsProfileByKey();
     return function (row) {
@@ -525,22 +525,13 @@
     return flag ? '<span class="country-flag" aria-hidden="true">' + flag + "</span> " + label : label;
   }
 
-  // Per-type accent color (docs/design-system.md's "Type color accents"),
+  // Per-type color (docs/design-system.md's "Type colors"), for the type pills,
   // from the palette pipelines/render/template.py owns and build.py emits
   // into the payload. Unknown/absent types fall back to the neutral
   // --type-unknown rather than to a random hue.
   function typeColor(typeName) {
     if (!typeName) return "var(--type-unknown)";
     return typeColors[String(typeName).toLowerCase()] || "var(--type-unknown)";
-  }
-
-  // A left-edge accent bar built from a Pokémon's one or two types, as an
-  // inline style value. Two types blend at the midpoint so a dual-type
-  // Pokémon reads as both rather than as its primary only.
-  function typeAccentGradient(type1, type2) {
-    var c1 = typeColor(type1);
-    var c2 = type2 ? typeColor(type2) : c1;
-    return "linear-gradient(180deg, " + c1 + " 0%, " + c1 + " 50%, " + c2 + " 50%, " + c2 + " 100%)";
   }
 
   // The committed type icons (static/icons/types/) are square, text-free
@@ -554,6 +545,19 @@
       '<img class="type-icon" src="' + src + '" alt="' + escapeHtml(typeName) +
       '" title="' + escapeHtml(typeName) + '" width="' + size + '" height="' + size + '">'
     );
+  }
+
+  // A Pokémon's one or two type emblems, primary first, for the top-right
+  // corner of a Pokémon card (docs/upgrade-plan-2027q1.md, U9; they replace
+  // the type-colour side bar). One role="img" with both types in its label,
+  // so a screen reader hears "dragon / ground type" once; each emblem keeps
+  // its title for a desktop hover. No type data -> "".
+  function typeIconsHtml(type1, type2, sizePx) {
+    var types = [type1, type2].filter(Boolean).map(function (t) { return String(t).toLowerCase(); });
+    var icons = types.map(function (t) { return typeIconImg(t, sizePx || 20); }).filter(Boolean);
+    if (!icons.length) return "";
+    return '<span class="type-icons" role="img" aria-label="' + escapeHtml(types.join(" / ") + " type") + '">' +
+      icons.join("") + "</span>";
   }
 
   // Renders a Pokémon's type_1/type_2 into `container` as a type-badge row
@@ -962,12 +966,12 @@
       container.innerHTML = '<p class="empty-state">No data yet.</p>';
       return;
     }
-    // Type accent resolution, decided once per call rather than per row.
-    // Any Pokémon-keyed grid gets it automatically — passing typeFn: false
+    // Type emblem resolution, decided once per call rather than per row.
+    // Any Pokémon-keyed grid gets them automatically — passing typeFn: false
     // opts out, and an explicit typeFn overrides the default lookup. Doing
     // it here rather than at each of the call sites is what makes
-    // docs/design-system.md's "every Pokémon-keyed tile carries its type
-    // accent" true by construction instead of by remembering.
+    // docs/design-system.md's "every Pokémon-keyed tile shows its types"
+    // true by construction instead of by remembering.
     var typeFn = opts.typeFn;
     if (typeFn === undefined && opts.keyFn) typeFn = typeFnFromProfile();
 
@@ -995,21 +999,15 @@
       var tile = document.createElement(href ? "a" : "div");
       if (href) tile.href = href;
       tile.className = "grid-6xn-tile" + (i === 0 && opts.showLeader !== false ? " is-leader" : "");
-      // Type accent: a left-edge bar in the Pokémon's own type colors, on
-      // tiles whose row carries type data. Purely additive — a row without
-      // types renders exactly as before.
-      if (typeFn) {
-        var types = typeFn(row) || {};
-        if (types.type_1) {
-          tile.classList.add("has-type-accent");
-          tile.style.setProperty(
-            "--tile-accent",
-            typeAccentGradient(types.type_1, types.type_2)
-          );
-        }
-      }
+      // The tile's head row: the #rank badge on the left and, on tiles
+      // whose row carries type data, the type emblems on the right. In
+      // flow rather than absolutely placed, so the emblems can't overlap
+      // the sprite on a narrow tile.
+      var types = typeFn ? typeFn(row) || {} : {};
+      var emblems = typeIconsHtml(types.type_1, types.type_2);
+      var rankBadge = opts.showRank !== false ? '<span class="badge badge-rank">#' + (i + 1) + "</span>" : "";
       tile.innerHTML =
-        (opts.showRank !== false ? '<span class="badge badge-rank">#' + (i + 1) + "</span>" : "") +
+        (rankBadge || emblems ? '<div class="grid-6xn-head">' + (rankBadge || "<span></span>") + emblems + "</div>" : "") +
         (iconHtml || (iconSrc ? '<img src="' + iconSrc + '" alt="" loading="lazy" decoding="async">' : "")) +
         '<div class="grid-6xn-label">' + escapeHtml(opts.labelFn(row)) + "</div>" +
         '<div class="grid-6xn-value">' + escapeHtml(opts.displayFn(row)) + "</div>" +
@@ -3146,12 +3144,8 @@
         } else {
           statsEl.className = "";
           // Hero slot: --icon-lg is where a 128px menu sprite was being
-          // upscaled, so this reads the 256px HOME render instead.
-          statsEl.style.setProperty(
-            "--tile-accent",
-            typeAccentGradient(profile.type_1, profile.type_2)
-          );
-          statsEl.classList.add("has-type-accent");
+          // upscaled, so this reads the 256px HOME render instead. The
+          // types are the labelled pills below the name.
           statsEl.innerHTML =
             '<div class="cell-with-icon">' +
             // --icon-xl belongs to the Pokémon here: this is the one view
@@ -4273,7 +4267,7 @@
     heroImg: heroImg,
     teamCompositionHtml: teamCompositionHtml,
     typeColor: typeColor,
-    typeAccentGradient: typeAccentGradient,
+    typeIconsHtml: typeIconsHtml,
     typeFnFromProfile: typeFnFromProfile,
     countryFlag: countryFlag,
     countryCell: countryCell,

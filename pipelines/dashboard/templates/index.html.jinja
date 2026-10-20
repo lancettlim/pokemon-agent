@@ -81,12 +81,11 @@
     --icon-lg: 96px;
     --icon-xl: 128px;
 
-    /* Per-type accent colors (docs/design-system.md's "Type color
-       accents"). Emitted from pipelines/render/template.py's TYPE_COLORS
-       via build.py's _type_colors() rather than hardcoded here, so the
-       dashboard and the team-card renderer share one palette. Used as
-       accents (borders, gradients) rather than fills — the broadcast
-       palette above stays the page's identity. */
+    /* Per-type colors (docs/design-system.md's "Type colors"). Emitted
+       from pipelines/render/template.py's TYPE_COLORS via build.py's
+       _type_colors() rather than hardcoded here, so the dashboard and the
+       team-card renderer share one palette. Used only to fill the labelled
+       type pills; Pokémon cards show type emblems instead. */
     {%- for type_name, hex in payload.type_colors.items() | sort %}
     --type-{{ type_name }}: {{ hex }};
     {%- endfor %}
@@ -822,21 +821,12 @@
   }
   .grid-6xn-tile.is-leader { border-color: var(--accent-red); background: var(--accent-red-bg); }
 
-  /* Type color accent (docs/design-system.md's "Type color accents"): a
-     left-edge bar in the Pokémon's own type colors, painted from the
-     --tile-accent custom property app.js sets per element. An accent, not
-     a fill — the broadcast palette stays the page's identity, and the
-     .is-leader treatment above still reads over the top of it. */
-  .has-type-accent { position: relative; overflow: hidden; }
-  .has-type-accent::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 6px;
-    background: var(--tile-accent, var(--type-unknown));
-  }
+  /* A Pokémon's type emblems (docs/design-system.md's "Type icons on
+     Pokémon cards"; typeIconsHtml() in app.js), primary type first. The
+     compound selector outranks .grid-6xn-tile img and .team-slot img, which
+     size the Pokémon's own art. */
+  .type-icons { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+  .type-icons .type-icon { width: 20px; height: 20px; }
 
   /* A team drawn as its six Pokémon (app.js's teamCompositionHtml). Wraps
      to two rows at narrow widths rather than overflowing its tile. */
@@ -866,11 +856,18 @@
   /* Country flag glyph. Sized up slightly against the code beside it,
      which always stays visible — see countryCell() in app.js. */
   .country-flag { font-size: 1.15em; line-height: 1; }
-  /* Normal flow, left-aligned within the centered column — not absolutely
-     positioned, so it reserves its own row instead of overlapping the
-     label when a tile has no icon (e.g. an item/ability/move/team with no
-     resolvable sprite). */
-  .grid-6xn-tile .badge-rank { align-self: flex-start; }
+  /* A tile's head row: the #rank badge left, the type emblems right. Normal
+     flow, full width of the centered column — not absolutely positioned,
+     so it reserves its own row instead of overlapping the sprite or the
+     label (a tile with no sprite, or no rank, still lays out cleanly). */
+  .grid-6xn-head {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1);
+    min-height: 22px;
+  }
   .grid-6xn-tile img { width: var(--icon-md); height: var(--icon-md); object-fit: contain; }
   .grid-6xn-tile .grid-6xn-label { font-weight: 600; font-size: var(--font-xs); overflow-wrap: anywhere; }
   .grid-6xn-value { font-weight: 800; font-size: var(--font-lg); color: var(--navy); }
@@ -1108,9 +1105,12 @@
   .roster-item .roster-name { font-weight: 600; }
   .roster-item .roster-sub { font-size: var(--font-xs); color: var(--muted); }
 
+  /* minmax(0, 1fr), not 1fr: a 1fr track won't shrink below its content,
+     and a slot's selects are as wide as their longest option, which pushed
+     the phone layout's second column off the screen. */
   .team-slots {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-3);
   }
   .team-slot {
@@ -1126,10 +1126,12 @@
     justify-content: center;
   }
   .team-slot.empty { border-style: dashed; color: var(--muted); font-size: var(--font-xs); }
+  /* Type emblems in the slot's top-right corner, as on a Pokémon tile. */
+  .team-slot .slot-head { align-self: stretch; display: flex; justify-content: flex-end; }
   .team-slot img { width: var(--icon-lg); height: var(--icon-lg); object-fit: contain; }
   .team-slot .slot-name { font-weight: 600; font-size: var(--font-sm); }
   .team-slot .slot-detail { font-size: var(--font-xs); color: var(--muted); }
-  .team-slot select { width: 100%; margin-top: 2px; }
+  .team-slot select { width: 100%; min-width: 0; margin-top: 2px; }
   .team-slot .slot-move-selects { display: flex; flex-direction: column; gap: 2px; width: 100%; }
 
   .speed-order-list { list-style: none; margin: 0; padding: 0; }
@@ -1186,8 +1188,8 @@
     .section-btn { flex: 1 1 0; min-height: 44px; padding: 8px 4px; font-size: 0.85rem; background: transparent; border: none; color: #b8bdd1; border-radius: var(--radius-sm); }
     .section-btn[aria-current="true"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
     body { padding-bottom: 64px; }
-    .team-builder-grid { grid-template-columns: 1fr; }
-    .team-slots { grid-template-columns: repeat(2, 1fr); }
+    .team-builder-grid { grid-template-columns: minmax(0, 1fr); }
+    .team-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .team-analysis-grid, .team-analysis-columns { grid-template-columns: 1fr; }
     .grid-6xn { grid-template-columns: repeat(3, 1fr); }
     .matchup-picker-grid { grid-template-columns: 1fr; }

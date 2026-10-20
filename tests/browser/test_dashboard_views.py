@@ -413,3 +413,48 @@ def test_a_tap_shows_a_shares_denominator(site_url, open_page):
     page.goto(site_url + "#/usage")
     page.wait_for_load_state("networkidle")
     assert bubble.is_hidden()
+
+
+def test_pokemon_cards_show_type_icons_not_a_colour_bar(site_url, open_page):
+    """U9: type emblems, labelled once per card, replace the side bar."""
+    page = open_page()
+    page.goto(site_url)
+    page.wait_for_load_state("networkidle")
+    tiles = page.locator("#overview-top-12 .grid-6xn-tile")
+    assert tiles.count() == 8
+    for i in range(tiles.count()):
+        assert tiles.nth(i).locator(".grid-6xn-head .type-icons img.type-icon").count() in (1, 2)
+    first = tiles.first.locator(".type-icons")
+    assert first.get_attribute("role") == "img"
+    assert first.get_attribute("aria-label") == "grass type"  # Rillaboom: one type
+    sneasler = page.locator('#overview-top-12 a[href="#/pokemon/sneasler"] .type-icons')
+    assert sneasler.get_attribute("aria-label") == "fighting / poison type"
+
+    page.goto(site_url + "#/builder/garchomp.0")
+    page.wait_for_selector("#team-builder-slots .team-slot:not(.empty)")
+    slot = page.locator("#team-builder-slots .team-slot:not(.empty)").first
+    assert slot.locator(".slot-head .type-icons").get_attribute("aria-label") == (
+        "dragon / ground type"
+    )
+
+    # The profile header already names its types in pills: no emblems there.
+    page.goto(site_url + "#/pokemon/garchomp")
+    page.wait_for_selector("#pokemon-profile-stats .type-pill-lg")
+    assert page.locator("#pokemon-profile-stats .type-pill-lg").count() == 2
+    assert page.locator("#pokemon-profile-stats .type-icons").count() == 0
+
+    assert page.locator(".has-type-accent").count() == 0
+    assert not page.errors
+
+
+def test_builder_slots_fit_a_phone_screen(site_url, open_page):
+    """A slot's selects used to widen the phone layout past the screen."""
+    page = open_page(390, 844)
+    page.goto(site_url + "#/builder/garchomp.0,incineroar.0,rillaboom.0")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector("#team-builder-slots .team-slot:not(.empty)")
+    right = page.evaluate(
+        "Math.max(...[...document.querySelectorAll('#team-builder-slots .team-slot')]"
+        ".map(e => e.getBoundingClientRect().right))"
+    )
+    assert right <= 390

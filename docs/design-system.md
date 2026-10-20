@@ -36,7 +36,7 @@ color, spacing, or radius value that already has a token — add one instead.
 | `--panel-dark` | `#12131a` | Broadcast color-block section/page header background (see "Broadcast color-block header" below) |
 | `--accent-red` / `--accent-red-bg` | `#e3323c` / `#fce7e8` | Broadcast accent: active tab, `.grid-6xn` leader tile |
 | `--accent-gold` | `#f4b942` | Broadcast accent: reserved for #1-rank/MVP highlighting |
-| `--type-<name>` (18) | see below | Per-type accent color, one per Pokémon type |
+| `--type-<name>` (18) | see below | Per-type color, one per Pokémon type; fills the type pills only (see "Type colors") |
 | `--type-unknown` | `#6B7280` | Fallback when a type is absent or unrecognized |
 
 ### Dark theme
@@ -57,7 +57,7 @@ active pill, a primary button) is fine in both.
 Keyboard focus always shows a 3px `--blue` ring (`:focus-visible`), and
 `prefers-reduced-motion` turns off transitions and animations.
 
-### Type color accents
+### Type colors
 
 The 18 `--type-*` tokens are **not** authored in the stylesheet. They are
 emitted into `:root` at build time from `pipelines/render/template.py`'s
@@ -66,13 +66,33 @@ via `build.py`'s `_type_colors()`, so the dashboard and the card renderer
 are one palette rather than two that drift. To change a type's color, edit
 `TYPE_COLORS`; do not add a literal hex here.
 
-Use them as **accents, not fills**: a 6px left-edge bar via the
-`.has-type-accent` class plus a `--tile-accent` custom property set per
-element (`typeAccentGradient()` in `app.js`, which splits the bar 50/50 for
-a dual-type Pokémon so it reads as both). The broadcast palette above stays
-the page's identity. Applied today to `.grid-6xn-tile` (via
-`renderGrid6xn`'s `typeFn` option), the Pokémon Profile header, and Team
-Builder's filled slots.
+They fill the labelled type pills (the Pokémon Profile header's
+`.type-pill-lg`) and nothing else. A color on its own never carries a type:
+see "Type icons on Pokémon cards".
+
+### Type icons on Pokémon cards
+
+A card that stands for one Pokémon shows its type as one or two emblems
+from `static/icons/types/`, primary type first, in the card's top-right
+corner (docs/upgrade-plan-2027q1.md, U9). They replaced a 6px type-colour
+bar down the left edge, which needed 18 colours memorised, was unreadable
+to anyone who can't tell them apart, and confused close hues.
+
+- Draw them with `typeIconsHtml(type_1, type_2)` in `app.js` (exported as
+  `DashboardApp.typeIconsHtml`): a `.type-icons` span with
+  `role="img"` and an `aria-label` such as "dragon / ground type", holding
+  20px emblems that each keep a `title` for hover.
+- Place them in the card's head row, in normal flow: `.grid-6xn-head`
+  (the `#rank` badge left, emblems right) on `.grid-6xn-tile`, and
+  `.slot-head` on Team Builder's filled slots. Never absolutely position
+  them over the art.
+- Every Pokémon-keyed `renderGrid6xn` grid gets them automatically, typed
+  through `pokemon_champions_profile`; pass `typeFn` to read types off the
+  row instead (the Overview, which renders before the marts load) or
+  `typeFn: false` to opt out.
+- A Pokémon with no type data shows no emblems; there is no placeholder.
+- Where the types are already written out (the Profile header's pills),
+  don't add emblems as well.
 
 Speed-tier colors (`--speed-blazing`, `--speed-fast`, `--speed-average`,
 `--speed-slow`, each with a `-bg` pair) are documented under "Speed-tier
