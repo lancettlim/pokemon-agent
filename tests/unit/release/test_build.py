@@ -324,3 +324,54 @@ def test_build_sources_handles_a_source_that_was_never_extracted(tmp_path):
         if name != "PokéAPI":
             assert by_name[name]["record_count"] == 0
             assert by_name[name]["extracted_at_utc"] is None
+
+
+def test_build_packages_a_release_asset_and_records_it(tmp_path):
+    """docs/upgrade-plan-2027q1.md, D1: from 0.4.0 the package is a GitHub
+    Release asset; the committed manifest records its file and checksum."""
+    import hashlib
+    import zipfile
+
+    report_path = tmp_path / "validation_report.json"
+    report_path.write_text(json.dumps(_passing_validation_report()))
+    normalized_dir, staging_dir, asset_cache_dir, artwork_cache_dir = (
+        _populate_normalized_and_staging(tmp_path)
+    )
+    manifests_dir = tmp_path / "releases" / "manifests"
+    packages_dir = tmp_path / "releases" / "packages"
+
+    manifest = build.build(
+        "0.4.0",
+        notes=["Releases before 0.4.0 exclude Reg M-B and M-C events."],
+        validation_report_path=report_path,
+        normalized_dir=normalized_dir,
+        staging_dir=staging_dir,
+        releases_data_dir=tmp_path / "releases" / "data",
+        manifests_dir=manifests_dir,
+        changelogs_dir=tmp_path / "releases" / "changelogs",
+        asset_cache_dir=asset_cache_dir,
+        artwork_cache_dir=artwork_cache_dir,
+        package=True,
+        packages_dir=packages_dir,
+    )
+
+    package = manifest["package"]
+    zip_path = packages_dir / "pokemon-champions-dataset-0.4.0.zip"
+    assert package["file_name"] == zip_path.name
+    assert package["sha256"] == hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    assert package["size_bytes"] == zip_path.stat().st_size
+    assert package["release_tag"] == "data-v0.4.0"
+    assert package["url"].endswith("/releases/download/data-v0.4.0/" + zip_path.name)
+    checksum = (packages_dir / "pokemon-champions-dataset-0.4.0.sha256").read_text()
+    assert checksum == f"{package['sha256']}  {zip_path.name}\n"
+    assert json.loads((manifests_dir / "manifest-0.4.0.json").read_text())["package"] == package
+
+    with zipfile.ZipFile(zip_path) as archive:
+        names = set(archive.namelist())
+        prefix = "pokemon-champions-dataset-0.4.0/"
+        assert prefix + "manifest.json" in names
+        assert prefix + "CHANGELOG.md" in names
+        assert all(prefix + f"{table}.csv" in names for table in build.TABLES)
+        assert prefix + "images/menu_sprite/0001.png" in names
+        changelog = archive.read(prefix + "CHANGELOG.md").decode()
+        assert "## Notes" in changelog and "exclude Reg M-B and M-C" in changelog

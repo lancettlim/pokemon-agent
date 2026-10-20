@@ -797,6 +797,138 @@ stale. See `docs/backlog.md` #25-#27 for the full write-ups.
   Champions and was removed (backlog #10 reopened), following the same
   precedent as the stat-change leaderboard and legal-pool trend sections.
 
+## 2027 Q1 upgrade plan — "Built for players"
+
+The entries proposed in `docs/upgrade-plan-2027q1.md`, promoted here on
+acceptance (backlog → todo). Each names its plan item; the plan's Status
+table tracks sprint progress.
+
+- [x] Routing: pushState + popstate, full view state in the hash, legacy `#tab` redirects (U1).
+  `static/app.js`'s router maps `#/pokemon/<key>/<subtab>`,
+  `#/compare/<a>,<b>`, `#/matchup/<a>/<b>`, `#/teams/<view>`,
+  `#/cores/<key>[/triple]`, `#/usage/<view>`, `#/players/<view>` and
+  `#/data/<view>` to views; every Pokémon name, sprite, tile and tier chip
+  is a real link. Old `#usage` and `?tab=compare&a=&b=` links are rewritten
+  in place.
+- [x] Compact sticky header; status pills to footer; drop duplicate panel headers; events/teams KPI (U2).
+  Content now starts 114px from the top on desktop and 110px on a 390px
+  phone. The first KPI reads "5 events · 3,770 teams" from the new
+  `tournament_event_summary` mart.
+- [x] Regulation-in-force beats a stale remembered choice; thin-new-regulation fallback; rollover fixture test (U3).
+  A remembered regulation is kept only if it was chosen while the same
+  regulation was in force; a regulation in force with fewer than 300 teams
+  opens on the previous one with a banner (`data.py`'s
+  `default_scope_for` and `app.js`'s `resolveRegulationScope` apply the
+  same rule). Covered by `tests/unit/dashboard/test_data.py` and
+  `tests/browser/test_regulation_rollover.py` against a fixture M-D row.
+- [x] Copy pass, glossary tooltips, denominators on every percentage (U4).
+  Repo paths and internal names are gone from the page (the Data section's
+  descriptions strip schema.yml's "See data/…" pointers too). One `GLOSSARY`
+  map in `static/app.js` backs both the inline terms (usage share, roster
+  slot, Wilson bound, HHI, Locked in, synergy lift, pts, top cut and more)
+  and the Data section's "How to read this page". Table cells show their
+  denominator ("487 of 5,644 team sheets") with the same tooltip, which now
+  opens on tap as well as hover: a tap's compatibility mouseover and focus
+  used to open the tip only for the click to close it again.
+- [x] Shared sortable table component, adopted in Usage, Profile, Speed Tiers, Cores, Players (U5).
+  `createDataTable` in `static/app.js`: sticky sortable header, sprite +
+  name cells, inline share bars, row → route, two-line rows on phones.
+  Card grids remain only on Overview and the Tier List.
+- [x] Type filter popover (U6); mobile sub-tab scroll cues, import moved to Builder (U7).
+  One "Any type ▾" button replaces the 18-icon row in Usage, Speed Tiers
+  and the Builder; tab rows fade at the clipped edge and centre the active
+  tab; the pokepaste import is the Builder's "Import team"; phone tap
+  targets are 44px.
+- [x] Playwright route smoke test + payload budget in CI (U8).
+  `tests/browser/` builds the dashboard from synthetic marts, opens every
+  route at 1440px and 390px and fails on a console error or an empty
+  panel; it also covers Back/Forward, legacy links and the default view's
+  fetch count. The core payload (page, scripts, `core.json` and the default
+  regulation's shard) is held under 500KB compressed (483KB after Sprint 9, up from 448KB). CI
+  installs Chromium for them.
+- [x] Type icons instead of the type-colour side bar on Pokémon cards (U9).
+  Overview and calculator tiles and Team Builder slots show one or two type
+  emblems in their top-right corner (`typeIconsHtml` in `static/app.js`,
+  one `role="img"` labelled "dragon / ground type"); the profile header
+  drops its bar, since its pills already name the types. The type colours
+  now only fill those pills. Also fixes the Builder on phones, whose second
+  column of slots ran off the screen.
+- [x] `pokemon_set_variants` mart and real-set tabs on the profile (P1).
+  Exact (item + ability + nature + 4 moves) and core (item + ability + top
+  3 moves) levels, top 5 per Pokémon and scope with a Wilson-ranked win
+  rate. dbt tests check shares sum to at most 1 and that every exact set
+  appears verbatim on its example team's sheet. The per-slot modal card is
+  gone.
+- [x] Pokémon hub v2: per-regulation trend, featuring teams, teammates, meta pressure (P2).
+  The profile header draws usage share across every regulation with win
+  rate and n under each point (`pokemon_usage_by_regulation` now carries
+  `win_rate`/`record_count`); new Teams and Meta pressure views; Teammates
+  is a table ranked by synergy lift; a recently-viewed strip is kept per
+  browser. Meta pressure is labelled type-based, not battle results.
+- [x] Calculator presets from real sets; "vs the meta" mode (P3).
+  Each side starts on its #1 real set's item/ability toggles (and the
+  defender's Intimidate); "Top 12 of the meta" (`#/matchup/<a>/meta`)
+  lists damage ranges and OHKO/2HKO/3HKO verdicts against the regulation's
+  most-used Pokémon, labelled as a full-investment level-50 estimate.
+- [x] Builder: use a real team, saved teams, share link (P4); starter teams strip (P5).
+  "Use this team" loads a real sheet (`#/builder/team/<id>`,
+  `#/builder/list/<id>`); up to five named teams save per browser; "Copy
+  share link" gives `?reg=<scope>#/builder/<key>.<set>,...` with real-set
+  indices. The Builder carries natures. The Overview's "Copy and play"
+  strip shows three top-placing fully reported teams.
+- [x] Event pages and `pokemon_event_usage_vs_regulation` mart (C1).
+  `#/events` lists every event in the regulation (`tournament_event_summary`);
+  `#/event/<id>` shows the header with RK9/MunchStats source links, the top
+  8 as team cards with full sets and copy, and the Pokémon the field over-
+  and under-used against the regulation average (withheld below 100
+  teams). The Overview has a Latest event card. Code in `static/events.js`.
+- [x] Top Teams: record/placement headline, placement ranking, copy actions (C2).
+  Cards lead with "1st 15–2", rank by placement within event tier, and
+  offer win rate as a sort; `?tier=` and `?sort=` live in the route. Every
+  card has Copy for Showdown and Use this team (`#/builder/team/<id>`);
+  converged lists load their Limitless sets (`team_list_sheets`).
+- [x] Player pages (C3).
+  The Players tab opens on "Find a player" (`#/players`): a name search
+  over `player_index`, derived at build time from `tournament_team_results`
+  (names as the sources spell them). `#/player/<id>` lists their events in
+  the selected regulation as team cards (with sets where a top-16 sheet
+  exists), links their other regulations, their most-brought Pokémon, and
+  their team-level record against detected archetypes from the new
+  `player_archetype_record` mart (per regulation and across all of them,
+  at least two matches in that scope, labelled team vs
+  team). Code in `static/players.js`.
+- [x] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4).
+  Usage's "Events" filter (latest, last N, since an event) compares the
+  window with the regulation's earlier events. `render-share-cards`
+  (`pipelines/render/share_cards.py`) renders the newest event's top 8 and a
+  What changed card per regulation, the default one doubling as the Open
+  Graph image; the build adds download buttons and OG/Twitter tags. Every
+  data table has "Copy with citation". The What changed panel names its
+  baseline's events and teams and opens on early vs recent events when
+  the previous regulation is thin (M-B is one Worlds field).
+- [x] Release-asset distribution and the release contract change (D1); **publishing 0.4.0 is a manual step.**
+  `release --package` zips the CSVs, images, manifest and changelog into
+  `releases/packages/` and records `{file_name, sha256, size_bytes,
+  release_tag, url}` as the manifest's `package` block; from 0.4.0 only the
+  manifest and changelog are committed (`docs/dataset-spec.md`'s
+  "Distribution"). The new `cut-release.yml` workflow (manual dispatch)
+  refreshes, validates, packages, creates the GitHub Release with the zip
+  and opens a PR with the manifest and changelog. A local dry run built a
+  62MB package. To publish, run that workflow with version `0.4.0` and the
+  note "Releases before 0.4.0 exclude Reg M-B and M-C events."
+- [x] Data section table cards and a generated data dictionary (D2).
+  `pipelines/dashboard/dictionary.py` builds both at dashboard build time,
+  from `dbt/models/*/schema.yml` and the newest release manifest, into one
+  on-demand `data/data_dictionary.json`. Data → Tables has a card per
+  release table (description, rows, key, download: the release zip from
+  0.4.0, the committed CSV before) and per served mart (rows, grain, JSON
+  file); Data → Dictionary lists every served field with its description.
+- [x] Regulation rollover playbook and M-D dry run (D3).
+  `docs/dashboard.md`'s "Regulation rollover playbook". The dry run added a
+  fixture M-D row and ran the real pipeline end to end; its one finding
+  (the staleness banner repeating the rollover banner) is fixed. The drift
+  alarm was also probed by withholding M-C.
+
 ## Release readiness (v1 definition of done)
 
 All release gates pass as of this writing (see

@@ -1,0 +1,125 @@
+name: Cut dataset release
+
+# docs/upgrade-plan-2027q1.md, D1: from 0.4.0 a dataset release is
+# distributed only as a GitHub Release asset, and the repository commits
+# just its manifest and changelog. Releases 0.1.0-0.3.0 committed their
+# CSVs and images under releases/data/ (~50MB each); that stopped scaling.
+#
+# The package has to be built where it is uploaded, so this workflow does
+# the whole cut: extract every source stamped with the new version, run
+# the release gates, build and zip the package (`release --package`),
+# publish it as the data-v<version> GitHub Release, and open a pull
+# request adding releases/manifests/manifest-<version>.json and
+# releases/changelogs/CHANGELOG-<version>.md. The manifest's `package`
+# block records the asset's URL and sha256, so the committed metadata
+# always names the exact bytes that were published.
+#
+# publish-release.yml still (re)publishes the committed pre-0.4.0
+# versions; for a version with no releases/data/ directory it does nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New dataset version, e.g. 0.4.0"
+        required: true
+      note:
+        description: "Optional note for the changelog's Notes section"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+      NOTE: ${{ github.event.inputs.note }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version is well-formed and new
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$VERSION' is not a MAJOR.MINOR.PATCH version."
+            exit 1
+          fi
+          if [ -f "releases/manifests/manifest-$VERSION.json" ]; then
+            echo "::error::dataset_version $VERSION is already published."
+            exit 1
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Restore staging snapshot history
+        uses: actions/cache/restore@v4
+        with:
+          path: data/staging
+          key: staging-snapshots-release-noop
+          restore-keys: |
+            staging-snapshots-
+
+      - name: Restore image asset cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/assets
+          key: dashboard-assets-release-noop
+          restore-keys: |
+            dashboard-assets-
+
+      # Every row of a release carries its dataset_version, so the cut
+      # re-extracts everything stamped with the new one.
+      - name: Extract every source for this version
+        run: uv run python -m pipelines.cli extract all --dataset-version "$VERSION"
+
+      - name: dbt build + validate (the release gates)
+        run: make validate
+
+      - name: Build and package the release
+        run: |
+          set -euo pipefail
+          args=(release --version "$VERSION" --package)
+          if [ -n "$NOTE" ]; then args+=(--note "$NOTE"); fi
+          uv run python -m pipelines.cli "${args[@]}"
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "data-v$VERSION" \
+            "releases/packages/pokemon-champions-dataset-$VERSION.zip" \
+            "releases/packages/pokemon-champions-dataset-$VERSION.sha256" \
+            --title "Dataset v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --notes-file "releases/changelogs/CHANGELOG-$VERSION.md"
+
+      - name: Open the release metadata pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/release-${{ github.event.inputs.version }}
+          delete-branch: true
+          add-paths: |
+            releases/manifests/manifest-${{ github.event.inputs.version }}.json
+            releases/changelogs/CHANGELOG-${{ github.event.inputs.version }}.md
+          commit-message: "Release dataset ${{ github.event.inputs.version }}"
+          title: "Release dataset ${{ github.event.inputs.version }}"
+          body: |
+            Adds the manifest and changelog for dataset_version ${{ github.event.inputs.version }},
+            published as the `data-v${{ github.event.inputs.version }}` GitHub Release by
+            `.github/workflows/cut-release.yml`. The package itself (CSVs, images,
+            manifest, changelog) is the Release asset; the manifest's `package` block
+            records its URL and sha256. All release gates passed before it was published.

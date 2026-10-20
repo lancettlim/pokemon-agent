@@ -14,11 +14,27 @@ labelled everywhere it appears, and the site stays static with no backend.
 
 | Item | State |
 |---|---|
-| U1–U4 Shell fixes | Not started |
-| U5–U8 Data presentation | Not started |
-| P1–P5 Player features | Not started |
-| C1–C4 Event, team and player features | Not started |
-| D1–D3 Data access and operations | Not started |
+| U1 Real routing | Done (Sprint 5) |
+| U2 Compact chrome | Done (Sprint 5): content starts at 114px desktop, 110px phone |
+| U3 Regulation rollover | Done (Sprint 5), with unit and browser fixture tests |
+| U4 Copy pass | Done (Sprints 5 and 9): copy, glossary terms, tappable denominators |
+| U5 Shared table | Done (Sprint 6): Usage, Profile, Speed Tiers, Core Explorer, Players |
+| U6 Type popover | Done (Sprint 6) |
+| U7 Mobile fixes | Done (Sprint 6) |
+| U8 Browser smoke tests + budget | Done (Sprint 5): core payload 483KB compressed after Sprint 9 (448KB at Sprint 5) |
+| U9 Type icons instead of the side bar | Done (2026-10-19) |
+| P1 Real sets | Done (Sprint 6) |
+| P2 Pokémon hub v2 | Done (Sprint 8) |
+| P3 Calculator presets | Done (Sprint 8) |
+| P4 Builder sharing | Done (Sprints 7–8) |
+| P5 Starter teams | Done (Sprint 7) |
+| C1 Event pages | Done (Sprint 7) |
+| C2 Top Teams | Done (Sprint 7) |
+| C3 Player pages | Done (Sprint 9) |
+| C4 Shareable outputs | Done (Sprint 8) |
+| D1 Release assets | Built (Sprint 9); publishing 0.4.0 waits on a run of `cut-release.yml` |
+| D2 Data section | Done (Sprint 9): table cards and a generated dictionary |
+| D3 Rollover playbook | Done (Sprint 7), with an end-to-end M-D dry run |
 
 ---
 
@@ -148,6 +164,50 @@ count. Use it in Usage and the Builder.
   error or empty main panel.
 - Add a CI budget: the core payload stays under 500KB compressed and the
   default view makes no more than 3 data fetches.
+
+### U9. Type icons instead of the type-colour side bar (added 2026-10-19)
+
+A Pokémon's type is shown today as a 6px bar down a card's left edge, in
+its type colours, split in half for a dual type (`.has-type-accent`). The
+bar only works if you have memorised 18 colours, it can't be read at all
+by someone who can't tell them apart, and two close hues (Ground and
+Electric, Dragon and Ghost) are easily confused. The type emblems in
+`static/icons/types/` already say the same thing unambiguously.
+
+Where the bar appears, and what replaces it:
+
+| Where | Today | Change |
+|---|---|---|
+| Pokémon tiles (Overview top 12, the calculator's head-to-head and co-usage grids) | Side bar | One or two 20px type emblems in the tile's top-right corner, on the same row as the `#rank` badge |
+| Team Builder slots | Side bar | The same emblems in the slot's top-right corner, so a team's type spread reads across the six slots |
+| Pokémon profile header | Side bar, beside the type pills | Bar removed; the labelled type pills already say it |
+
+Rules:
+
+- One helper, `typeIconsHtml(type_1, type_2, size)`, draws the emblems
+  everywhere, primary type first. It is a single `role="img"` with an
+  `aria-label` such as "dragon / ground type", so a screen reader hears
+  the types once rather than as two unlabelled images. Each emblem keeps a
+  `title` for a desktop hover.
+- The emblems sit in normal flow in a head row, not absolutely
+  positioned, so they can't overlap the sprite on a narrow tile and a tile
+  without a rank still has room for them.
+- A Pokémon with no type data shows no emblems, as before; nothing falls
+  back to a grey placeholder.
+- The type colours stay, but only as fills of the labelled pills
+  (profile header). `typeAccentGradient`, `--tile-accent` and
+  `.has-type-accent` are removed.
+- The PNG team cards and share cards are unchanged: they don't use the
+  side bar.
+
+Done when every card that had the bar shows emblems instead, no
+`.has-type-accent` remains in the build, and a browser test checks the
+emblems and their labels on the Overview tiles and Builder slots.
+
+Found while checking the Builder at 390px: its second column of slots ran
+off the screen, because the phone layout's `1fr` grid tracks grew to fit
+the selects' longest option. Fixed with `minmax(0, 1fr)` tracks and a
+browser test that every slot fits a 390px screen.
 
 ---
 

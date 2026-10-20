@@ -36,7 +36,7 @@ color, spacing, or radius value that already has a token — add one instead.
 | `--panel-dark` | `#12131a` | Broadcast color-block section/page header background (see "Broadcast color-block header" below) |
 | `--accent-red` / `--accent-red-bg` | `#e3323c` / `#fce7e8` | Broadcast accent: active tab, `.grid-6xn` leader tile |
 | `--accent-gold` | `#f4b942` | Broadcast accent: reserved for #1-rank/MVP highlighting |
-| `--type-<name>` (18) | see below | Per-type accent color, one per Pokémon type |
+| `--type-<name>` (18) | see below | Per-type color, one per Pokémon type; fills the type pills only (see "Type colors") |
 | `--type-unknown` | `#6B7280` | Fallback when a type is absent or unrecognized |
 
 ### Dark theme
@@ -57,7 +57,7 @@ active pill, a primary button) is fine in both.
 Keyboard focus always shows a 3px `--blue` ring (`:focus-visible`), and
 `prefers-reduced-motion` turns off transitions and animations.
 
-### Type color accents
+### Type colors
 
 The 18 `--type-*` tokens are **not** authored in the stylesheet. They are
 emitted into `:root` at build time from `pipelines/render/template.py`'s
@@ -66,13 +66,33 @@ via `build.py`'s `_type_colors()`, so the dashboard and the card renderer
 are one palette rather than two that drift. To change a type's color, edit
 `TYPE_COLORS`; do not add a literal hex here.
 
-Use them as **accents, not fills**: a 6px left-edge bar via the
-`.has-type-accent` class plus a `--tile-accent` custom property set per
-element (`typeAccentGradient()` in `app.js`, which splits the bar 50/50 for
-a dual-type Pokémon so it reads as both). The broadcast palette above stays
-the page's identity. Applied today to `.grid-6xn-tile` (via
-`renderGrid6xn`'s `typeFn` option), the Pokémon Profile header, and Team
-Builder's filled slots.
+They fill the labelled type pills (the Pokémon Profile header's
+`.type-pill-lg`) and nothing else. A color on its own never carries a type:
+see "Type icons on Pokémon cards".
+
+### Type icons on Pokémon cards
+
+A card that stands for one Pokémon shows its type as one or two emblems
+from `static/icons/types/`, primary type first, in the card's top-right
+corner (docs/upgrade-plan-2027q1.md, U9). They replaced a 6px type-colour
+bar down the left edge, which needed 18 colours memorised, was unreadable
+to anyone who can't tell them apart, and confused close hues.
+
+- Draw them with `typeIconsHtml(type_1, type_2)` in `app.js` (exported as
+  `DashboardApp.typeIconsHtml`): a `.type-icons` span with
+  `role="img"` and an `aria-label` such as "dragon / ground type", holding
+  20px emblems that each keep a `title` for hover.
+- Place them in the card's head row, in normal flow: `.grid-6xn-head`
+  (the `#rank` badge left, emblems right) on `.grid-6xn-tile`, and
+  `.slot-head` on Team Builder's filled slots. Never absolutely position
+  them over the art.
+- Every Pokémon-keyed `renderGrid6xn` grid gets them automatically, typed
+  through `pokemon_champions_profile`; pass `typeFn` to read types off the
+  row instead (the Overview, which renders before the marts load) or
+  `typeFn: false` to opt out.
+- A Pokémon with no type data shows no emblems; there is no placeholder.
+- Where the types are already written out (the Profile header's pills),
+  don't add emblems as well.
 
 Speed-tier colors (`--speed-blazing`, `--speed-fast`, `--speed-average`,
 `--speed-slow`, each with a `-bg` pair) are documented under "Speed-tier
@@ -499,6 +519,123 @@ visually and functionally distinct from Team Builder's own roster planner
 and never itself called "Team Builder" — "Load into my builder" calls the
 same `addToTeam`/`ensureTeamBuilder()` pipeline the pokepaste importer
 uses (see "Team Builder" below).
+
+### Routes and links (2027 Q1, U1)
+
+Every view has a route, and the hash holds the whole view state:
+`#/pokemon/<key>[/<view>]`, `#/compare/<a>,<b>`, `#/matchup/<a>/<b>`,
+`#/teams[/<view>]`, `#/cores/<key>[/triple]`, `#/usage/<view>`,
+`#/players/<view>`, `#/data/<view>`, plus the detail routes
+`#/event/<event_id>` and `#/player/<player_id>`. `?reg=` in the query
+string stays the regulation.
+
+- Anything that names a Pokémon is a real `<a href>` to its profile:
+  `pokemonCell()`, Pokémon-keyed `.grid-6xn` tiles, tier chips, mover rows
+  and each slot of a `.team-comp`. Never attach a click handler that
+  navigates where a link would do; middle-click and long-press must work.
+- Moving to another view (a tab, a link, another Pokémon) adds a history
+  entry. Refining the current view (a filter, a sub-tab) replaces it, so
+  Back always means "the previous view".
+- A sub-tab row passed `{route: {tab, argIndex}}` to `setupSubTabs` keeps
+  its open sub-tab in the route; each button's `data-route` is its slug.
+- A tab registers `onRoute(route)` with `registerTab`; it runs once the
+  tab is ready and again on every Back/Forward while the tab is in view.
+
+### Compact chrome (2027 Q1, U2)
+
+One sticky 56px bar holds the brand, the five sections, the regulation
+select and a ⋯ menu (theme, "How to read this page", Data). Provenance
+(dataset version, snapshot, gate status) sits in a one-line footer. A
+panel's own `<h2>` repeats its tab label, so it is `.panel-title`
+(screen-reader only). Intros are one `.lead` sentence; the method goes in a
+`<details class="method">` "How this is computed" disclosure. Content
+starts within 200px of the top on desktop and 120px on phones.
+
+### Data table (2027 Q1, U5)
+
+`createDataTable(container, opts)` is the one component for ranked data,
+replacing tall card grids wherever more than a top-N highlight is shown
+(Usage, Profile items/abilities/moves, Speed Tiers, Core Explorer,
+Players). Card grids remain for top-N highlights only (Overview, Tier
+List).
+
+- Columns are specs: `rank`, `pokemon` (sprite + name link), `share`
+  (inline bar scaled to the column's maximum), `percent`, `int`, `text`,
+  or a custom `render`. Numeric columns are right-aligned with tabular
+  figures.
+- Every percentage cell should pass `title(row)` with its denominator
+  ("1,958 of 22,604 roster slots").
+- The header is sticky under the bar and sorts on click or Enter; a row
+  with `rowHref` opens what it describes when clicked anywhere but a link.
+- On phones (≤600px) rows collapse to two lines: `main: true` columns on
+  the first, the rest as labelled details on the second, with a Sort
+  select in place of the header. `hideOnPhone` drops a column there.
+- `limit` caps the first render with a "Show all N" button.
+
+### Tooltip (2027 Q1, U4/U5)
+
+Any element with `data-tip` shows that text in a bubble on hover, focus
+and tap (a `title` never shows on a phone). `tipHtml(text)` renders a
+small "i" button, used for item, ability and move effect text that used to
+sit inline and make each row ~270px tall.
+
+### Real-set card (2027 Q1, P1)
+
+The profile's set card lists a Pokémon's top 3 real sets
+(`pokemon_set_variants`) as tabs, each with its share and team count, and
+an Exact/Core toggle: exact sets match item, ability, nature and all four
+moves; core sets group item, ability and the three most common moves.
+Moves are shown in the Pokémon's own move-usage order. Below 10 teams the
+sample line says "Small sample". Copy for Showdown uses `setToShowdown()`
+(no EV line: team sheets don't publish spreads).
+
+### Type filter popover (2027 Q1, U6)
+
+`renderTypeFilterChips()` renders one "Any type ▾" button that opens the
+18-type multi-select and reads "Type · 2 selected" once types are picked.
+It replaced an 18-icon row that took ~140px of each filter panel. Escape
+or a click outside closes it.
+
+### Scroll cues (2027 Q1, U7)
+
+A horizontally scrolling tab row (`.tabs`, `.subtabs`) fades at whichever
+edge has more to show, snaps to tabs, and centres the active tab without
+scrolling the page. On phones every tab, sub-tab and chip is at least 44px
+tall.
+
+### Team card (2027 Q1, C1/C2/P5)
+
+`teamCardHtml(team, opts)` draws a real team: placement and record as the
+headline ("1st 15–2"), win rate secondary, the player (linked to their
+page) and event (linked to its page), the six Pokémon as `.team-comp`
+links, the sets behind a "Sets" disclosure, and actions: Copy for
+Showdown, Use this team (`#/builder/team/<id>`) and, when a pre-rendered
+image exists, Download card. Event pages pass `hideEvent`; converged lists
+pass their own `headline` and `useHref`. Every team display on the site
+(Top Teams, event top 8, starter strip, a profile's Teams, player pages)
+uses it.
+
+### Per-regulation trend (2027 Q1, P2)
+
+The profile's "Usage across regulations" is a small inline SVG line of
+usage share, one point per regulation with data, the selected regulation's
+point in the accent red, with win rate and n under each. No charting
+library: it's one `<polyline>` and labelled `<circle>`s with an
+`aria-label` listing every value.
+
+### Baseline toggle ("What changed", 2027 Q1, C4)
+
+The Overview's "What changed" names its comparison with that baseline's
+own size ("vs Reg M-B (1 event, 395 teams)") and offers "Early vs recent
+events" within the selected regulation. A thin baseline (fewer than two
+events, or under 300 teams) opens on early vs recent.
+
+### Copy with citation (2027 Q1, C4)
+
+Every data table has "Copy with citation": its rows in the current order
+as tab-separated text, then "Source: Pokémon Champions Data Platform,
+dataset X, Reg M-C, n = 3,770 teams, <url>" (an event page's tables cite
+the event's own n).
 
 ### Removed tabs and components
 

@@ -1,6 +1,6 @@
 {
   "description": "Phase 1 ingestion check: source availability and row-level parsing success for each staging extractor. Distinct from validation_report.json, which gates normalized-table release readiness.",
-  "generated_at_utc": "2026-10-18T14:52:30Z",
+  "generated_at_utc": "2026-10-19T15:33:35Z",
   "dataset_version": "0.3.0",
   "sources": [
     {
@@ -12,18 +12,18 @@
       "request_success_rate": 1.0,
       "rows_written": 393,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:46:57Z"
+      "checked_at_utc": "2026-10-19T15:30:16Z"
     },
     {
       "source_name": "Limitless VGC",
       "endpoint": "https://limitlessvgc.com/tournaments, /tournaments/{id}, /teams/{id}",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 891,
-      "requests_succeeded": 891,
+      "requests_attempted": 993,
+      "requests_succeeded": 993,
       "request_success_rate": 1.0,
-      "rows_written": 6204,
+      "rows_written": 6954,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:47:57Z"
+      "checked_at_utc": "2026-10-19T15:29:37Z"
     },
     {
       "source_name": "MunchStats",
@@ -34,7 +34,7 @@
       "request_success_rate": 1.0,
       "rows_written": 131122,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:41:20Z"
+      "checked_at_utc": "2026-10-19T15:26:46Z"
     },
     {
       "source_name": "OP.GG Pok\u00e9mon Champions",
@@ -45,7 +45,7 @@
       "request_success_rate": 1.0,
       "rows_written": 352,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:41:22Z"
+      "checked_at_utc": "2026-10-19T15:29:39Z"
     },
     {
       "source_name": "Pok\u00e9API",
@@ -56,7 +56,7 @@
       "request_success_rate": 1.0,
       "rows_written": 1351,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:51:19Z"
+      "checked_at_utc": "2026-10-19T15:31:40Z"
     },
     {
       "source_name": "Pok\u00e9API (ability detail)",
@@ -67,18 +67,18 @@
       "request_success_rate": 0.9958,
       "rows_written": 239,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:52:16Z"
+      "checked_at_utc": "2026-10-19T15:33:13Z"
     },
     {
       "source_name": "Pok\u00e9API (artwork)",
       "endpoint": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/{pokeapi_resource_id}.png",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 34,
-      "requests_succeeded": 34,
+      "requests_attempted": 351,
+      "requests_succeeded": 351,
       "request_success_rate": 1.0,
       "rows_written": 351,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:51:23Z"
+      "checked_at_utc": "2026-10-19T15:32:09Z"
     },
     {
       "source_name": "Pok\u00e9API (item detail)",
@@ -89,7 +89,7 @@
       "request_success_rate": 0.9957,
       "rows_written": 232,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:52:30Z"
+      "checked_at_utc": "2026-10-19T15:33:35Z"
     },
     {
       "source_name": "Pok\u00e9API (move detail)",
@@ -100,7 +100,7 @@
       "request_success_rate": 0.9983,
       "rows_written": 578,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:52:00Z"
+      "checked_at_utc": "2026-10-19T15:32:56Z"
     },
     {
       "source_name": "Pok\u00e9Base",
@@ -111,7 +111,7 @@
       "request_success_rate": 1.0,
       "rows_written": 924,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:46:33Z"
+      "checked_at_utc": "2026-10-19T15:29:39Z"
     },
     {
       "source_name": "RK9.gg",
@@ -122,7 +122,7 @@
       "request_success_rate": 1.0,
       "rows_written": 31912,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-18T14:49:44Z"
+      "checked_at_utc": "2026-10-19T15:28:41Z"
     }
   ]
 }

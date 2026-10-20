@@ -16,6 +16,11 @@ name: Publish dataset release
 # bigger change than this item asked for. `gh release create` still mints a
 # real `data-v<version>` tag as part of publishing; the manifest commit is
 # what decides the version, not a human remembering to tag it.
+#
+# From 0.4.0 releases are cut and published by cut-release.yml instead
+# (docs/upgrade-plan-2027q1.md, D1): their data is never committed, so the
+# merge that adds their manifest finds no releases/data/<version>/ here and
+# skips it. This workflow remains the way to (re)publish 0.1.0-0.3.0.
 on:
   push:
     branches: [main]
@@ -75,6 +80,10 @@ jobs:
             manifest="releases/manifests/manifest-$version.json"
             changelog="releases/changelogs/CHANGELOG-$version.md"
 
+            if [ ! -d "$data_dir" ] && [ -f "$manifest" ] && grep -q '"package"' "$manifest"; then
+              echo "::notice::$version is published by cut-release.yml as a Release asset; nothing to do."
+              continue
+            fi
             if [ ! -d "$data_dir" ] || [ ! -f "$manifest" ]; then
               echo "::warning::releases/data/$version or $manifest missing, skipping."
               continue

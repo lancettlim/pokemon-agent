@@ -125,7 +125,7 @@ def test_build_writes_index_html_and_app_js(tmp_path):
     payload = _build(marts_dir, normalized_dir, output_dir)
 
     assert (output_dir / "index.html").exists()
-    for script_name in ("app.js", "matchup.js", "teams.js"):
+    for script_name in build.SCRIPT_NAMES:
         assert (output_dir / script_name).exists()
         assert (output_dir / script_name).read_bytes() == (
             build.STATIC_DIR / script_name
@@ -154,12 +154,16 @@ def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_pat
 
     # Reassembling the shards gives back every mart, each scoped mart's
     # rows split across its scope files without loss.
+    # The Data section's dictionary and table cards ride along as one more
+    # on-demand file; they describe the marts rather than being one.
     reassembled: dict = {}
     files = feed["mart_files"]
-    for path in [files["core"], *files["scopes"].values(), *files["on_demand"].values()]:
+    paths = {files["core"], *files["scopes"].values(), *files["on_demand"].values()}
+    for path in sorted(paths):
         for name, rows in json.loads((output_dir / path).read_text(encoding="utf-8")).items():
             reassembled.setdefault(name, []).extend(rows)
-    assert set(reassembled) == set(payload["marts"])
+    assert set(reassembled) == set(payload["marts"]) | {"data_dictionary", "release_tables"}
+    assert {entry["table"] for entry in reassembled["data_dictionary"]} == set(payload["marts"])
     for name, rows in payload["marts"].items():
         assert len(reassembled[name]) == len(rows), name
 
@@ -329,3 +333,73 @@ def test_safe_json_escapes_script_close_tag():
     rendered = build._safe_json(payload)
     assert "</script>" not in rendered
     assert "\\u003c/script>" in rendered
+
+
+def test_share_card_manifest_keeps_only_cards_that_exist(tmp_path):
+    cards = tmp_path / "images" / "cards"
+    cards.mkdir(parents=True)
+    (cards / "t1.png").write_bytes(b"png")
+    (cards / "og.png").write_bytes(b"png")
+    (cards / "manifest.json").write_text(
+        json.dumps(
+            {
+                "teams": {"t1": "images/cards/t1.png", "t2": "images/cards/t2.png"},
+                "whats_changed": {"m-c": "images/cards/missing.png"},
+                "og_image": "images/cards/og.png",
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = build._load_share_cards(tmp_path)
+    assert manifest["teams"] == {"t1": "images/cards/t1.png"}
+    assert manifest["whats_changed"] == {}
+    assert manifest["og_image"] == "images/cards/og.png"
+    assert build._load_share_cards(tmp_path / "nowhere") == {}
+
+
+def test_site_meta_describes_the_default_regulation(tmp_path):
+    payload = {
+        "default_scope": "m-c",
+        "kpis": {
+            "top_used_pokemon": {"pokemon_name": "Rillaboom", "usage_share": 0.0866},
+            "team_count": 3770,
+            "event_count": 5,
+        },
+        "share_cards": {"og_image": "images/cards/og.png"},
+    }
+    meta = build._site_meta(payload)
+    assert meta["title"] == "Pokémon Champions Data — Reg M-C"
+    assert meta["description"].startswith(
+        "Reg M-C: Rillaboom leads at 8.7% of roster slots across 3,770 teams from 5 events."
+    )
+    assert meta["og_image"] == build.SITE_URL + "images/cards/og.png"
+
+
+def test_built_page_carries_open_graph_tags(tmp_path):
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    _populate_marts(marts_dir, normalized_dir)
+    _build(marts_dir, normalized_dir, tmp_path / "out")
+    html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
+    assert '<meta property="og:title"' in html
+    assert '<meta name="description"' in html
+
+
+def test_an_on_demand_mart_with_a_scope_column_ships_whole_not_per_scope(tmp_path):
+    # player_archetype_record carries regulation_scope but loads with the
+    # player page; copying it into each scope file too would put it in the
+    # default view's download.
+    marts = {
+        "player_archetype_record": [
+            {"player_id": "P1", "regulation_scope": "m-c"},
+            {"player_id": "P1", "regulation_scope": "all"},
+        ],
+        "pokemon_usage_summary": [{"pokemon_key": "a", "regulation_scope": "m-c"}],
+    }
+    index = build._write_mart_shards(marts, {"m-c": {}, "all": {}}, tmp_path)
+    scope_file = json.loads((tmp_path / index["scopes"]["m-c"]).read_text(encoding="utf-8"))
+    assert set(scope_file) == {"pokemon_usage_summary"}
+    whole = json.loads(
+        (tmp_path / index["on_demand"]["player_archetype_record"]).read_text(encoding="utf-8")
+    )
+    assert len(whole["player_archetype_record"]) == 2

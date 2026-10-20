@@ -426,8 +426,13 @@ def test_main_release_dispatches_version_and_known_limitations(monkeypatch):
     monkeypatch.setattr(
         cli,
         "_run_release",
-        lambda dataset_version, known_limitations: (
-            captured.update(dataset_version=dataset_version, known_limitations=known_limitations)
+        lambda dataset_version, known_limitations, notes, package: (
+            captured.update(
+                dataset_version=dataset_version,
+                known_limitations=known_limitations,
+                notes=notes,
+                package=package,
+            )
             or 0
         ),
     )
@@ -448,6 +453,8 @@ def test_main_release_dispatches_version_and_known_limitations(monkeypatch):
     assert captured == {
         "dataset_version": "0.3.0",
         "known_limitations": ["no removal signal", "zero stat deltas"],
+        "notes": [],
+        "package": False,
     }
 
 
@@ -456,8 +463,13 @@ def test_main_release_defaults_known_limitations_to_empty_list(monkeypatch):
     monkeypatch.setattr(
         cli,
         "_run_release",
-        lambda dataset_version, known_limitations: (
-            captured.update(dataset_version=dataset_version, known_limitations=known_limitations)
+        lambda dataset_version, known_limitations, notes, package: (
+            captured.update(
+                dataset_version=dataset_version,
+                known_limitations=known_limitations,
+                notes=notes,
+                package=package,
+            )
             or 0
         ),
     )
@@ -465,7 +477,28 @@ def test_main_release_defaults_known_limitations_to_empty_list(monkeypatch):
     exit_code = cli.main(["release", "--version", "0.3.0"])
 
     assert exit_code == 0
-    assert captured == {"dataset_version": "0.3.0", "known_limitations": []}
+    assert captured == {
+        "dataset_version": "0.3.0",
+        "known_limitations": [],
+        "notes": [],
+        "package": False,
+    }
+
+
+def test_main_release_passes_notes_and_package(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        cli,
+        "_run_release",
+        lambda dataset_version, known_limitations, notes, package: (
+            captured.update(notes=notes, package=package) or 0
+        ),
+    )
+    exit_code = cli.main(
+        ["release", "--version", "0.4.0", "--note", "pre-0.4.0 excludes M-B/M-C", "--package"]
+    )
+    assert exit_code == 0
+    assert captured == {"notes": ["pre-0.4.0 excludes M-B/M-C"], "package": True}
 
 
 def test_main_release_requires_version(capsys):

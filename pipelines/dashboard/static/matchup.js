@@ -90,6 +90,32 @@
     { id: "intimidate", label: "Intimidate (on defender)" },
   ];
 
+  // Presets (docs/upgrade-plan-2027q1.md, P3): the calculator starts each
+  // side on its #1 real set (pokemon_set_variants), pre-selecting whichever
+  // toggles that set's item and ability correspond to. The toggles stay
+  // editable; picking another Pokémon re-applies its preset.
+  var ITEM_TOGGLES = {
+    "Choice Band": "choice-band",
+    "Choice Specs": "choice-specs",
+    "Life Orb": "life-orb",
+    "Expert Belt": "expert-belt",
+  };
+  var ATTACKER_ABILITY_TOGGLES = {
+    "Huge Power": "huge-power",
+    "Pure Power": "huge-power",
+    Adaptability: "adaptability",
+    Technician: "technician",
+  };
+
+  function koVerdict(result) {
+    if (result.lowPct >= 100) return "OHKO";
+    if (result.highPct >= 100) return "Possible OHKO";
+    if (result.lowPct >= 50) return "2HKO";
+    if (result.highPct >= 50) return "Possible 2HKO";
+    if (result.lowPct >= 100 / 3) return "3HKO";
+    return "—";
+  }
+
   // ---------- level-50 stat formula (IV 31 / EV 252 "maxed" baseline —
   // see the file-header scope note) ----------
   function statAtLevel50(base) {
@@ -182,9 +208,9 @@
     (marts.pokemon_matchup_summary || []).forEach(function (r) {
       summaryByKey[r.pokemon_key] = r;
     });
-    var byName = {};
+    var byKey = {};
     profileRows.forEach(function (r) {
-      byName[r.pokemon_name] = r;
+      byKey[r.pokemon_key] = r;
     });
 
     var attackerSelect = document.getElementById("matchup-attacker-select");
@@ -210,21 +236,63 @@
     var sortedProfiles = profileRows.slice().sort(function (a, b) {
       return (b.usage_share || 0) - (a.usage_share || 0);
     });
-    var names = sortedProfiles.map(function (r) {
-      return r.pokemon_name;
+    // Values are pokemon_keys, the ids #/matchup/<attacker>/<defender> carries.
+    var pairs = sortedProfiles.map(function (r) {
+      return { value: r.pokemon_key, label: r.pokemon_name };
     });
-    App.fillSelect(attackerSelect, names, "Select a Pokémon…");
-    App.fillSelect(defenderSelect, names, "Select a Pokémon…");
-    attackerSelect.removeChild(attackerSelect.firstChild); // no blank "Select a Pokémon…" for required pickers
-    defenderSelect.removeChild(defenderSelect.firstChild);
-    if (names.length) {
-      attackerSelect.value = names[0];
-      defenderSelect.value = names[Math.min(1, names.length - 1)];
+    App.fillSelectPairs(attackerSelect, pairs);
+    App.fillSelectPairs(defenderSelect, pairs);
+    if (pairs.length) {
+      attackerSelect.value = pairs[0].value;
+      defenderSelect.value = pairs[Math.min(1, pairs.length - 1)].value;
     }
 
     var attackerStages = { atk: 0, spa: 0 };
     var defenderStages = { def: 0, spd: 0 };
     var toggles = {};
+    var toggleChips = {};
+    var topSetByKey = {};
+    (marts.pokemon_set_variants || []).forEach(function (r) {
+      if (r.set_level === "full" && r.set_rank === 1) topSetByKey[r.pokemon_key] = r;
+    });
+    var presetNoteEl = document.getElementById("matchup-preset-note");
+    var metaEl = document.getElementById("matchup-meta");
+    var defenderSideEl = document.getElementById("matchup-defender-side");
+    var mode = "single";
+
+    function syncToggleChips() {
+      Object.keys(toggleChips).forEach(function (id) {
+        toggleChips[id].setAttribute("aria-pressed", toggles[id] ? "true" : "false");
+      });
+    }
+
+    function setSummary(pokemon) {
+      var set = topSetByKey[pokemon.pokemon_key];
+      return set
+        ? App.escapeHtml(pokemon.pokemon_name) + " @ " + App.escapeHtml(set.item_name || "no item") +
+          " (" + App.escapeHtml(set.ability || "—") + ")"
+        : App.escapeHtml(pokemon.pokemon_name) + " (no complete set on record)";
+    }
+
+    function applyPresets() {
+      var attacker = byKey[attackerSelect.value];
+      var defender = byKey[defenderSelect.value];
+      toggles = {};
+      var attackerSet = attacker && topSetByKey[attacker.pokemon_key];
+      if (attackerSet) {
+        if (ITEM_TOGGLES[attackerSet.item_name]) toggles[ITEM_TOGGLES[attackerSet.item_name]] = true;
+        if (ATTACKER_ABILITY_TOGGLES[attackerSet.ability]) toggles[ATTACKER_ABILITY_TOGGLES[attackerSet.ability]] = true;
+      }
+      var defenderSet = defender && topSetByKey[defender.pokemon_key];
+      if (mode === "single" && defenderSet && defenderSet.ability === "Intimidate") toggles.intimidate = true;
+      syncToggleChips();
+      if (presetNoteEl) {
+        presetNoteEl.innerHTML = attacker
+          ? "Preset from each side's most common real set: " + setSummary(attacker) +
+            (mode === "single" && defender ? "; " + setSummary(defender) : "") + ". Toggle anything to override."
+          : "";
+      }
+    }
 
     function renderStageSliders(container, stages, keys) {
       container.innerHTML = "";
@@ -278,12 +346,13 @@
           chip.setAttribute("aria-pressed", toggles[toggle.id] ? "true" : "false");
           updateAll();
         });
+        toggleChips[toggle.id] = chip;
         toggleRowEl.appendChild(chip);
       });
     }
 
     function refreshMoveOptions() {
-      var attacker = byName[attackerSelect.value];
+      var attacker = byKey[attackerSelect.value];
       var moves = attacker
         ? moveRows
             .filter(function (r) {
@@ -467,8 +536,8 @@
     }
 
     function updateAll() {
-      var attacker = byName[attackerSelect.value];
-      var defender = byName[defenderSelect.value];
+      var attacker = byKey[attackerSelect.value];
+      var defender = byKey[defenderSelect.value];
       App.renderTypeBadgeRow(attackerTypeEl, attacker && attacker.type_1, attacker && attacker.type_2, false);
       App.renderTypeBadgeRow(defenderTypeEl, defender && defender.type_1, defender && defender.type_2, false);
       if (attackerStatsEl) attackerStatsEl.textContent = statLine(attacker);
@@ -486,6 +555,10 @@
         : null;
       if (moveDescEl) moveDescEl.textContent = move ? move.short_effect || "" : "";
 
+      if (mode === "meta") {
+        drawMeta(attacker, move);
+        return;
+      }
       if (!resultEl) return;
       if (!attacker || !defender || !move) {
         resultEl.innerHTML = '<div class="damage-sub">Pick an attacker, a move, and a defender to see estimated damage.</div>';
@@ -515,17 +588,169 @@
         (result.stab > 1 ? result.stab + "× STAB" : "no STAB") + "</div>";
     }
 
+    // "vs the meta" (P3): the attacker's move against the regulation's 12
+    // most-used Pokémon, each defender with its own #1 set's Intimidate.
+    var META_SIZE = 12;
+    var metaTable = App.createDataTable(document.getElementById("matchup-meta-table"), {
+      caption: "Damage against the top 12",
+      sort: { key: "usage_rank", dir: "asc" },
+      rowHref: function (r) {
+        return App.routeHash("matchup", [attackerSelect.value, r.pokemon_key]);
+      },
+      empty: "Pick an attacker and a damaging move.",
+      columns: [
+        { key: "usage_rank", label: "#", type: "rank", main: true },
+        { key: "pokemon_name", label: "Defender", type: "pokemon", main: true, sortable: true },
+        {
+          key: "high_pct",
+          label: "Damage",
+          numeric: true,
+          sortable: true,
+          main: true,
+          render: function (r) { return r.low_pct.toFixed(1) + "–" + r.high_pct.toFixed(1) + "%"; },
+          title: function (r) { return r.low + "–" + r.high + " HP"; },
+        },
+        {
+          key: "ko_rank",
+          label: "KO",
+          numeric: true,
+          sortable: true,
+          render: function (r) { return '<span class="ko-badge">' + r.ko + "</span>"; },
+        },
+        {
+          key: "effectiveness",
+          label: "Type",
+          numeric: true,
+          sortable: true,
+          render: function (r) { return r.effectiveness + "×"; },
+        },
+        {
+          key: "intimidate",
+          label: "Intimidate",
+          sortable: false,
+          hideOnPhone: true,
+          render: function (r) { return r.intimidate ? "Yes" : ""; },
+        },
+      ],
+    });
+    var KO_ORDER = { OHKO: 0, "Possible OHKO": 1, "2HKO": 2, "Possible 2HKO": 3, "3HKO": 4, "—": 5 };
+
+    function drawMeta(attacker, move) {
+      if (!attacker || !move || !move.power) {
+        metaTable.setRows([]);
+        return;
+      }
+      var top = sortedProfiles.slice(0, META_SIZE);
+      metaTable.setRows(top.map(function (defender, i) {
+        var defenderSet = topSetByKey[defender.pokemon_key];
+        var sideToggles = {};
+        Object.keys(toggles).forEach(function (id) {
+          if (id !== "intimidate") sideToggles[id] = true;
+        });
+        var intimidate = !!(defenderSet && defenderSet.ability === "Intimidate");
+        if (intimidate) sideToggles.intimidate = true;
+        var result = computeDamage({
+          attacker: attacker,
+          defender: defender,
+          move: move,
+          attackerStages: attackerStages,
+          defenderStages: { def: 0, spd: 0 },
+          weather: weatherSelect ? weatherSelect.value : "",
+          toggles: sideToggles,
+        });
+        var ko = result ? koVerdict(result) : "—";
+        return {
+          usage_rank: i + 1,
+          pokemon_key: defender.pokemon_key,
+          pokemon_name: defender.pokemon_name,
+          low: result ? result.low : 0,
+          high: result ? result.high : 0,
+          low_pct: result ? result.lowPct : 0,
+          high_pct: result ? result.highPct : 0,
+          effectiveness: result ? result.effectiveness : 1,
+          ko: ko,
+          ko_rank: -KO_ORDER[ko],
+          intimidate: intimidate,
+        };
+      }));
+    }
+
+    function setMode(next) {
+      mode = next;
+      document.querySelectorAll("[data-calc-mode]").forEach(function (btn) {
+        btn.setAttribute("aria-pressed", btn.getAttribute("data-calc-mode") === mode ? "true" : "false");
+      });
+      if (metaEl) metaEl.hidden = mode !== "meta";
+      if (resultEl) resultEl.hidden = mode === "meta";
+      if (defenderSideEl) defenderSideEl.hidden = mode === "meta";
+      applyPresets();
+      updateAll();
+    }
+
+    function recordRoute(push) {
+      App.setRoute(
+        "matchup",
+        [attackerSelect.value, mode === "meta" ? "meta" : defenderSelect.value],
+        {},
+        { push: push !== false }
+      );
+    }
+    document.querySelectorAll("[data-calc-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setMode(btn.getAttribute("data-calc-mode"));
+        recordRoute(false);
+      });
+    });
     attackerSelect.addEventListener("change", function () {
       refreshMoveOptions();
+      applyPresets();
       updateAll();
+      recordRoute();
     });
-    defenderSelect.addEventListener("change", updateAll);
+    defenderSelect.addEventListener("change", function () {
+      applyPresets();
+      updateAll();
+      recordRoute();
+    });
     moveSelect.addEventListener("change", updateAll);
     if (weatherSelect) weatherSelect.addEventListener("change", updateAll);
 
     refreshMoveOptions();
+    applyPresets();
     updateAll();
+
+    // #/matchup/<attacker>/<defender>, or #/matchup/<attacker>/meta for the
+    // top-12 mode; either side may be omitted.
+    matchupRoute = function (route) {
+      var attacker = route.args[0];
+      var defender = route.args[1];
+      var changed = false;
+      var nextMode = defender === "meta" ? "meta" : "single";
+      if (nextMode !== mode) {
+        mode = nextMode;
+        changed = true;
+      }
+      if (attacker && byKey[attacker] && attacker !== attackerSelect.value) {
+        attackerSelect.value = attacker;
+        attackerSelect.dispatchEvent(new Event("pokemon-sync"));
+        refreshMoveOptions();
+        changed = true;
+      }
+      if (defender && byKey[defender] && defender !== defenderSelect.value) {
+        defenderSelect.value = defender;
+        defenderSelect.dispatchEvent(new Event("pokemon-sync"));
+        changed = true;
+      }
+      if (changed) setMode(mode);
+    };
   }
 
-  App.registerTab("matchup", setupMatchup, { extraMarts: ["pokemon_head_to_head"] });
+  var matchupRoute = function () {};
+
+  App.registerTab("matchup", setupMatchup, {
+    extraMarts: ["pokemon_head_to_head"],
+    onRoute: function (route) {
+      matchupRoute(route);
+    },
+  });
 })();

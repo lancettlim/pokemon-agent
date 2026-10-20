@@ -20,6 +20,7 @@ validate:
 check: lint test validate
 
 dashboard: dbt-build
+	uv run python -m pipelines.cli render-share-cards
 	uv run python -m pipelines.cli build-dashboard
 
 # extract-all -> dbt-build -> validate, chained the same way `dashboard`

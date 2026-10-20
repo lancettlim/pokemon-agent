@@ -37,13 +37,15 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from pipelines.dashboard import data, sprites
+from pipelines.dashboard import data, dictionary, sprites
+from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
 from pipelines.render import template as render_template
@@ -90,7 +92,10 @@ _CRITICAL_PAYLOAD_KEYS = (
     "regulations",
     "kpis_by_scope",
     "default_scope",
+    "min_default_scope_teams",
     "mart_files",
+    "share_cards",
+    "site",
 )
 
 # The marts are split into shards so the page downloads only what the view
@@ -102,11 +107,25 @@ _CRITICAL_PAYLOAD_KEYS = (
 #   data/<mart>.json          the largest unscoped marts, each fetched only
 #                             by the tab that reads it (registerTab's
 #                             extraMarts in static/app.js)
+# The page's scripts, in load order (templates/index.html.jinja's <script>
+# tags). Each is copied verbatim next to index.html.
+SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js", "events.js", "players.js")
+
 SHARD_DIR = "data"
 ON_DEMAND_MARTS = (
     "pokemon_head_to_head",
     "pokemon_team_core_triple_usage",
     "player_signature_pokemon",
+    # Event-, team- and player-grain marts (docs/upgrade-plan-2027q1.md,
+    # C1-C4): only the event, team, player and Builder views and the
+    # event-window filter read them. Keeping them out of core.json holds
+    # the core payload under its 500KB budget (tests/browser).
+    "pokemon_event_usage_vs_regulation",
+    "tournament_team_results",
+    "tournament_team_sheets",
+    "team_list_sheets",
+    "player_archetype_record",
+    "player_index",
 )
 
 
@@ -124,17 +143,40 @@ def _write_mart_shards(
     for stale in shard_dir.glob("*.json"):
         stale.unlink()
 
+    # Display-name columns (pokemon_name, partner_pokemon_name, ...) repeat
+    # one of a few hundred names on every row, and the page already holds
+    # the full pokemon_key -> name map inline. They are dropped from the
+    # shard files and restored client-side from "name_fields" (static/
+    # app.js's fetchShard), which keeps the core payload within its budget.
+    name_fields = [name for _key, name in data.NAME_JOINS]
+
+    def without_names(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [{k: v for k, v in row.items() if k not in name_fields} for row in rows]
+
     def write(name: str, content: dict[str, Any]) -> str:
-        (shard_dir / f"{name}.json").write_text(json.dumps(content, default=str), encoding="utf-8")
+        slim = {mart: without_names(rows) for mart, rows in content.items()}
+        (shard_dir / f"{name}.json").write_text(json.dumps(slim, default=str), encoding="utf-8")
         return f"{SHARD_DIR}/{name}.json"
 
-    scoped_names = [n for n, rows in marts.items() if rows and "regulation_scope" in rows[0]]
+    # A scoped mart is split across the scope files unless it's on-demand:
+    # those load whole, with the page that needs them, and copying one into
+    # every scope file too would put it in the default view's download.
+    scoped_names = [
+        n
+        for n, rows in marts.items()
+        if rows and "regulation_scope" in rows[0] and n not in ON_DEMAND_MARTS
+    ]
     core = {
         name: rows
         for name, rows in marts.items()
         if name not in scoped_names and name not in ON_DEMAND_MARTS
     }
-    index: dict[str, Any] = {"core": write("core", core), "scopes": {}, "on_demand": {}}
+    index: dict[str, Any] = {
+        "core": write("core", core),
+        "scopes": {},
+        "on_demand": {},
+        "name_fields": [list(pair) for pair in data.NAME_JOINS],
+    }
     for scope in scopes:
         index["scopes"][scope] = write(
             f"scope-{scope}",
@@ -183,6 +225,58 @@ def _asset_coverage(payload: dict[str, Any], referenced_keys: set[str]) -> list[
             "referenced": 18,
         },
     ]
+
+
+# The published site's address: Open Graph tags need absolute URLs.
+SITE_URL = "https://lancettlim.github.io/pokemon-agent/dashboard/"
+
+
+def _load_share_cards(output_dir: Path) -> dict[str, Any]:
+    """The manifest `render-share-cards` writes (pipelines/render/
+    share_cards.py), or {} when it hasn't run: the site then shows no
+    download buttons and no Open Graph image."""
+    path = output_dir / "images" / "cards" / "manifest.json"
+    if not path.exists():
+        return {}
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    # Only cards whose PNG is actually there.
+    manifest["teams"] = {
+        k: v for k, v in (manifest.get("teams") or {}).items() if (output_dir / v).exists()
+    }
+    manifest["whats_changed"] = {
+        k: v for k, v in (manifest.get("whats_changed") or {}).items() if (output_dir / v).exists()
+    }
+    if manifest.get("og_image") and not (output_dir / manifest["og_image"]).exists():
+        manifest["og_image"] = None
+    return manifest
+
+
+def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
+    """Open Graph title/description for link unfurls (docs/upgrade-plan-
+    2027q1.md, C4), refreshed on every build from the default regulation's
+    headline: "Reg M-C: Rillaboom leads at 8.7% of roster slots across
+    3,770 teams from 5 events."""
+    kpis = payload.get("kpis") or {}
+    scope = payload.get("default_scope") or data.ALL_SCOPE
+    label = "All regulations" if scope == data.ALL_SCOPE else f"Reg {scope.upper()}"
+    top = kpis.get("top_used_pokemon")
+    description = f"{label}: usage, real sets, events and teams from Pokémon Champions tournaments."
+    if top and top.get("usage_share") is not None:
+        description = (
+            f"{label}: {top.get('pokemon_name')} leads at {top['usage_share'] * 100:.1f}% of "
+            f"roster slots across {kpis.get('team_count') or 0:,} teams from "
+            f"{kpis.get('event_count') or 0} events. Real sets, event pages and a team builder."
+        )
+    og_image = (payload.get("share_cards") or {}).get("og_image")
+    return {
+        "url": SITE_URL,
+        "title": f"Pokémon Champions Data — {label}",
+        "description": description,
+        "og_image": SITE_URL + og_image if og_image else None,
+    }
 
 
 def _critical_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -330,6 +424,9 @@ def build(
     item_icon_cache_dir: Path = DEFAULT_ITEM_ICON_CACHE_DIR,
     reference_teams_dir: Path = DEFAULT_REFERENCE_TEAMS_DIR,
     fetch_icons: bool = True,
+    regulations: list[Regulation] | None = None,
+    today: date | None = None,
+    manifests_dir: Path = dictionary.DEFAULT_MANIFESTS_DIR,
 ) -> dict[str, Any]:
     """Renders templates/index.html.jinja with the marts payload baked in,
     copies static/app.js alongside it, and populates output_dir/images/
@@ -338,8 +435,11 @@ def build(
 
     fetch_icons controls whether item icons are fetched over the network
     (see _resolve_item_icons); pass False for offline/test builds.
+    regulations/today override the regulation registry and build date, for
+    tests that exercise a regulation rollover; manifests_dir, where the
+    Data section's release table cards are read from.
     """
-    payload = data.build_payload(marts_dir, normalized_dir)
+    payload = data.build_payload(marts_dir, normalized_dir, regulations=regulations, today=today)
 
     referenced_keys = _referenced_pokemon_keys(payload["marts"])
     payload["sprites"] = sprites.copy_sprites(
@@ -363,6 +463,8 @@ def build(
         fetch_icons=fetch_icons,
     )
     payload["reference_teams"] = _load_reference_teams(output_dir, reference_teams_dir)
+    payload["share_cards"] = _load_share_cards(output_dir)
+    payload["site"] = _site_meta(payload)
     # Asset coverage is only knowable here, after the copies have run: it's
     # the ratio of what actually resolved to what the marts reference. The
     # Data & Sources tab reports it alongside the dbt release gates so the
@@ -372,6 +474,21 @@ def build(
     payload["mart_files"] = _write_mart_shards(
         payload["marts"], payload["kpis_by_scope"], output_dir
     )
+    # The Data section's dictionary and table cards (docs/upgrade-plan-
+    # 2027q1.md, D2): generated here, from schema.yml and the newest
+    # manifest, so they can't drift. One on-demand shard holds both.
+    reference = {
+        "data_dictionary": dictionary.mart_dictionary(
+            payload["marts"],
+            payload["mart_files"],
+            hidden_columns=tuple(name for _key, name in data.NAME_JOINS),
+        ),
+        "release_tables": dictionary.release_tables(manifests_dir),
+    }
+    reference_path = f"{SHARD_DIR}/data_dictionary.json"
+    (output_dir / reference_path).write_text(json.dumps(reference, default=str), encoding="utf-8")
+    for name in reference:
+        payload["mart_files"]["on_demand"][name] = reference_path
 
     env = _make_environment()
     template = env.get_template("index.html.jinja")
@@ -379,7 +496,7 @@ def build(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text(html, encoding="utf-8")
-    for script_name in ("app.js", "matchup.js", "teams.js", "expansions.js"):
+    for script_name in SCRIPT_NAMES:
         shutil.copyfile(STATIC_DIR / script_name, output_dir / script_name)
     # backlog.md #32's JSON feed: data.json carries every non-mart key plus
     # `mart_files`, the index of the shard files holding the marts (see

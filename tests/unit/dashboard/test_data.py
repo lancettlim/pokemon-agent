@@ -962,6 +962,165 @@ def test_summarize_movers_flags_a_thin_sample_as_unreliable():
     assert data.summarize_movers(rows, "m-c")["reliable"] is False
 
 
+def _event(event_id, regulation, event_date, teams, tier="Regional"):
+    return {
+        "event_id": event_id,
+        "event_name": event_id.title(),
+        "event_date": event_date,
+        "event_tier": tier,
+        "regulation_code": regulation,
+        "team_count": teams,
+    }
+
+
+def _regulation(code, start, end):
+    from datetime import date
+
+    from pipelines.regulations import Regulation
+
+    return Regulation(
+        regulation_code=code,
+        regulation_name=f"Regulation Set {code.upper()}",
+        munchstats_format=f"fmt-{code}",
+        limitless_format=code,
+        start_date=date.fromisoformat(start),
+        end_date=date.fromisoformat(end),
+    )
+
+
+# A fixture registry with a regulation after M-C: the U3 rollover cases
+# (docs/upgrade-plan-2027q1.md) are about the days after a set changes,
+# before the real seed has any events for the new one.
+_FIXTURE_REGULATIONS = [
+    _regulation("m-b", "2026-06-17", "2026-09-09"),
+    _regulation("m-c", "2026-09-09", "2026-12-02"),
+    _regulation("m-d", "2026-12-02", "2027-03-03"),
+]
+
+
+def test_default_scope_falls_back_when_the_new_regulation_has_no_events():
+    from datetime import date
+
+    by_scope = {"m-b": {"team_count": 395}, "m-c": {"team_count": 3770}, "all": {}}
+    # The day after M-C ends: M-D is in force but nothing has been played.
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 3)) == "m-c"
+
+
+def test_default_scope_falls_back_while_the_new_regulation_is_thin():
+    from datetime import date
+
+    by_scope = {
+        "m-c": {"team_count": 3770},
+        "m-d": {"team_count": data.MIN_DEFAULT_SCOPE_TEAMS - 1},
+        "all": {},
+    }
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-c"
+    by_scope["m-d"]["team_count"] = data.MIN_DEFAULT_SCOPE_TEAMS
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-d"
+
+
+def test_default_scope_keeps_a_thin_regulation_when_nothing_precedes_it():
+    from datetime import date
+
+    by_scope = {"m-b": {"team_count": 12}, "all": {}}
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 7, 1)) == "m-b"
+
+
+def test_compute_kpis_by_scope_uses_the_registry_it_is_given():
+    from datetime import date
+
+    marts = {
+        "pokemon_usage_summary": [
+            {
+                "regulation_scope": scope,
+                "pokemon_key": "rillaboom",
+                "event_tier": None,
+                "usage_count": 5,
+                "usage_share": 0.1,
+                "usage_rank": 1,
+                "pokemon_name": "Rillaboom",
+            }
+            for scope in ("m-c", "all")
+        ],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "tournament_event_summary": [_event("louisville", "m-c", "2026-10-09", 1013)],
+    }
+    by_scope, default = data.compute_kpis_by_scope(
+        marts, today=date(2026, 12, 3), regulations=_FIXTURE_REGULATIONS
+    )
+    assert default == "m-c"
+    assert by_scope["m-c"]["current_regulation"]["regulation_code"] == "m-c"
+    assert by_scope["all"]["current_regulation"]["regulation_code"] == "m-d"
+
+
+def test_starter_teams_rank_complete_sheets_by_placement_then_tier():
+    def team(team_id, event_id, placement, complete=True):
+        return {
+            "team_id": team_id,
+            "event_id": event_id,
+            "player_id": f"p-{team_id}",
+            "player_name": team_id.title(),
+            "player_country": "US",
+            "placement": placement,
+            "record_wins": 9,
+            "record_losses": 2,
+            "pokemon_keys": "a|b|c|d|e|f",
+            "is_fully_reported": "true" if complete else "false",
+        }
+
+    def sheet(team_id):
+        return [
+            {
+                "team_id": team_id,
+                "slot_number": slot,
+                "pokemon_key": key,
+                "item_name": "Sitrus Berry",
+                "ability": "Intimidate",
+                "nature": "Adamant",
+                "moves": "Protect|Fake Out|Knock Off|Flare Blitz",
+            }
+            for slot, key in enumerate("abcdef", start=1)
+        ]
+
+    marts = {
+        "tournament_event_summary": [
+            _event("regional", "m-c", "2026-10-09", 1013),
+            _event("worlds", "m-c", "2026-08-28", 395, tier="Worlds"),
+            _event("other-reg", "m-b", "2026-07-01", 500),
+        ],
+        "tournament_team_results": [
+            team("regional-winner", "regional", 1),
+            team("worlds-winner", "worlds", 1),
+            team("worlds-second", "worlds", 2),
+            team("incomplete-winner", "regional", 1, complete=False),
+            team("other-winner", "other-reg", 1),
+        ],
+        "tournament_team_sheets": [
+            row
+            for team_id in (
+                "regional-winner",
+                "worlds-winner",
+                "worlds-second",
+                "incomplete-winner",
+                "other-winner",
+            )
+            for row in sheet(team_id)
+        ],
+    }
+    teams = data.starter_teams(marts, "m-c")
+    # A Worlds win outranks a regional win; an incomplete sheet never
+    # qualifies; another regulation's teams stay out of this scope.
+    assert [t["team_id"] for t in teams] == ["worlds-winner", "regional-winner", "worlds-second"]
+    assert teams[0]["event_name"] == "Worlds"
+    assert [s["pokemon_key"] for s in teams[0]["sets"]] == list("abcdef")
+
+
+def test_team_results_slicer_drops_columns_the_event_summary_carries():
+    rows = [{"team_id": "t", "event_id": "e", "event_name": "E", "event_date": "d", "placement": 1}]
+    assert data._slice_team_results(rows) == [{"team_id": "t", "event_id": "e", "placement": 1}]
+
+
 def test_compute_kpis_by_scope_defaults_to_the_regulation_in_force():
     from datetime import date
 
@@ -984,10 +1143,17 @@ def test_compute_kpis_by_scope_defaults_to_the_regulation_in_force():
         ],
         "legality_summary_by_regulation": [],
         "pokemon_win_rate_summary": [],
+        "tournament_event_summary": [
+            _event("wcs", "m-b", "2026-08-28", 395),
+            _event("louisville", "m-c", "2026-10-09", 1013),
+        ],
     }
     by_scope, default = data.compute_kpis_by_scope(marts, today=date(2026, 10, 18))
     assert list(by_scope) == ["m-b", "m-c", "all"]
     assert default == "m-c"
+    assert (by_scope["m-c"]["event_count"], by_scope["m-c"]["team_count"]) == (1, 1013)
+    assert (by_scope["all"]["event_count"], by_scope["all"]["team_count"]) == (2, 1408)
+    assert by_scope["m-c"]["latest_event"]["event_id"] == "louisville"
     assert by_scope["m-c"]["top_used_pokemon"]["pokemon_key"] == "rillaboom"
     assert by_scope["all"]["top_used_pokemon"]["pokemon_key"] == "sneasler"
     # After M-C ends with no newer data, the newest regulation with data wins.
@@ -1011,3 +1177,127 @@ def test_team_core_slicer_caps_partners_per_scope_and_pokemon():
         scoped = [r for r in kept if r["regulation_scope"] == scope]
         assert len(scoped) == data.MAX_CORE_PARTNERS_PER_POKEMON
         assert min(r["co_occurrence_count"] for r in scoped) == 5
+
+
+def test_set_variant_slicer_keeps_the_three_sets_the_profile_shows():
+    rows = [{"pokemon_key": "a", "set_level": "full", "set_rank": rank} for rank in range(1, 6)]
+    assert [r["set_rank"] for r in data._slice_set_variants(rows)] == [1, 2, 3]
+
+
+def test_top_cut_teams_are_the_top_sixteen_finishes():
+    rows = [{"team_id": str(p), "placement": p} for p in (1, 8, 16, 17, 200)]
+    rows.append({"team_id": "unplaced", "placement": None})
+    assert [r["team_id"] for r in data.top_cut_teams(rows)] == ["1", "8", "16"]
+
+
+def test_short_event_name_drops_the_words_every_event_shares():
+    assert data.short_event_name("2027 Louisville Pokémon VGC Regional Championships") == (
+        "Louisville Regional"
+    )
+    assert data.short_event_name("2026 Pokémon VGC World Championship") == "World Championships"
+    assert data.short_event_name("") == ""
+
+
+def test_window_movers_compare_recent_events_with_earlier_ones():
+    events = [
+        _event("a", "m-c", "2026-09-18", 300),
+        _event("b", "m-c", "2026-09-26", 300),
+        _event("c", "m-c", "2026-10-03", 200),
+        _event("d", "m-c", "2026-10-09", 200),
+    ]
+
+    def usage(event_id, key, count):
+        return {
+            "event_id": event_id,
+            "pokemon_key": key,
+            "pokemon_name": key.title(),
+            "usage_count": count,
+            "event_slot_count": 1000,
+        }
+
+    rows = [
+        usage("a", "garchomp", 100),
+        usage("b", "garchomp", 100),
+        usage("c", "garchomp", 10),
+        usage("d", "garchomp", 10),
+        usage("a", "sneasler", 10),
+        usage("b", "sneasler", 10),
+        usage("c", "sneasler", 90),
+        usage("d", "sneasler", 90),
+    ]
+    summary = data.summarize_event_window_movers(rows, events)
+    # The newest half (c, d) against the rest (a, b).
+    assert summary["recent_events"] == ["C", "D"]
+    assert summary["early_events"] == ["A", "B"]
+    assert (summary["team_count"], summary["previous_team_count"]) == (400, 600)
+    assert summary["reliable"] is True
+    assert [r["pokemon_key"] for r in summary["risers"]] == ["sneasler"]
+    assert summary["risers"][0]["usage_share_delta"] == 0.08
+    assert [r["pokemon_key"] for r in summary["fallers"]] == ["garchomp"]
+    assert data.summarize_event_window_movers(rows, events[:1]) is None
+
+
+def test_movers_flag_a_one_event_previous_regulation_as_a_thin_baseline():
+    marts = {
+        "pokemon_usage_summary": [],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "pokemon_regulation_movers": [_mover("gholdengo", 0.03, 0.05, teams=3770, prev_teams=395)],
+        "tournament_event_summary": [
+            _event("wcs", "m-b", "2026-08-28", 395, tier="Worlds"),
+            _event("bal", "m-c", "2026-09-18", 1079),
+            _event("lou", "m-c", "2026-10-09", 1013),
+        ],
+        "pokemon_event_usage_vs_regulation": [],
+    }
+    movers = data.compute_kpis(marts, scope="m-c")["movers"]
+    assert movers["previous_event_count"] == 1
+    assert movers["event_count"] == 2
+    assert movers["baseline_thin"] is True
+
+
+def test_player_index_has_one_row_per_player_with_their_record():
+    events = [
+        {"event_id": "E1", "event_date": "2026-08-01"},
+        {"event_id": "E2", "event_date": "2026-09-01"},
+    ]
+    teams = [
+        {
+            "event_id": "E1",
+            "player_id": "P1",
+            "player_name": "zoe",
+            "player_country": "US",
+            "placement": 12,
+            "regulation_code": "m-b",
+        },
+        {
+            "event_id": "E2",
+            "player_id": "P1",
+            "player_name": "zoe",
+            "player_country": "US",
+            "placement": 3,
+            "regulation_code": "m-c",
+        },
+        {
+            "event_id": "E2",
+            "player_id": "P2",
+            "player_name": "Ash",
+            "player_country": None,
+            "placement": None,
+            "regulation_code": "m-c",
+        },
+        {"event_id": "E2", "player_id": None, "player_name": "Unknown"},
+    ]
+    index = data.player_index(teams, events)
+    # Sorted by name, case-insensitively; rows with no player_id are skipped.
+    assert [row["player_id"] for row in index] == ["P2", "P1"]
+    zoe = index[1]
+    assert zoe["team_count"] == 2
+    assert zoe["best_placement"] == 3
+    assert zoe["latest_event_date"] == "2026-09-01"
+    assert zoe["regulations"] == "m-b|m-c"
+    # Per regulation too, so an M-C list can rank by M-C results.
+    assert zoe["teams_by_regulation"] == "m-b:1|m-c:1"
+    assert zoe["best_by_regulation"] == "m-b:12|m-c:3"
+    assert index[0]["best_placement"] is None
+    assert index[0]["best_by_regulation"] == ""

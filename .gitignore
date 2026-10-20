@@ -41,3 +41,13 @@ data/staging/*/*.csv
 # on-demand by the renderer). Not committed for the same reason as
 # data/staging/ — regenerable build output, not a deliverable.
 data/assets/
+
+# Release packages from 0.4.0 on are GitHub Release assets, not commits
+# (docs/upgrade-plan-2027q1.md, D1; .github/workflows/cut-release.yml).
+# The three versions published before that stay tracked.
+/releases/data/*
+!/releases/data/README.md
+!/releases/data/0.1.0/
+!/releases/data/0.2.0/
+!/releases/data/0.3.0/
+/releases/packages/

@@ -507,11 +507,11 @@ and approve pull requests" enabled (Settings → Actions → General).
 
 **Regulation selector**: every regulation-sensitive mart is partitioned
 by `regulation_scope` (each regulation plus `all`). The header's Regulation
-dropdown chooses one scope for the whole page. It opens on the regulation
-in force on the visitor's date (falling back to the newest one with data),
-or whatever `?reg=` names, and changing it reloads the page with the new
-`?reg=` so links are shareable. The open tab lives in the URL hash
-(`#usage`). `static/app.js` narrows each scoped mart to the selected scope
+dropdown chooses one scope for the whole page. Changing it reloads the page
+with the new `?reg=` so links are shareable. Which regulation the page
+opens on is described under "Regulation rollover playbook" below. The open
+view and its state live in the URL hash (`#/usage/win-rate`,
+`#/pokemon/garchomp`; see "Routes"). `static/app.js` narrows each scoped mart to the selected scope
 once, as its shard loads (`applyRegulationScope`), so the tab code reads
 `marts.<name>` exactly as before. KPIs are precomputed per scope
 (`kpis_by_scope`) and the template renders one KPI row per scope. Marts
@@ -556,6 +556,133 @@ https://lancettlim.github.io/pokemon-agent/dashboard/.
 `location.replace`, so it works with JS disabled too) that sends
 `https://<owner>.github.io/<repo>/` itself to `dashboard/` — the site root
 would otherwise 404, since nothing else lives at `docs/`'s top level.
+
+## Regulation rollover playbook
+
+A new regulation set (M-D after M-C ends on 2026-12-02) needs one change:
+a row in `dbt/seeds/champions_regulations.csv`. Everything else follows
+from the seed (CLAUDE.md's "Regulation registry").
+
+1. **Add the seed row** as soon as the set is announced:
+   `regulation_code`, `regulation_name`, the MunchStats format
+   (`gen9championsvgc2026regmd`), the Limitless format (`m-d`), and the
+   start/end dates. Run `make refresh` and commit the seed.
+2. **If you miss it, the drift alarm says so.** MunchStats is extracted
+   unfiltered, so a new `gen9champions*` format reaches staging the day it
+   is indexed, and `assert_champions_formats_registered` fails naming the
+   unregistered format (it reports, for example,
+   `gen9championsvgc2026regmc`). It is a referential-integrity gate, so a
+   release and the weekly refresh both stop until the row is added.
+3. **What the site shows in the first weeks.** The page opens on the
+   regulation in force on the visitor's date only once it has at least
+   300 teams on record (`MIN_DEFAULT_SCOPE_TEAMS` in `data.py`, carried to
+   the page as `min_default_scope_teams`). Before that it opens on the
+   previous regulation with a banner: "Reg M-D started 2026-12-02. Not
+   enough results yet; showing Reg M-C." Once M-D has any results, the
+   banner adds "Switch to Reg M-D →". A regulation a visitor picked by
+   hand is remembered only while the regulation in force is the same one
+   it was picked under, so the October choice of M-C doesn't pin anyone
+   to M-C in December. `?reg=` always wins. This runs in the browser
+   against the visitor's clock, so a site built before the rollover still
+   behaves correctly after it.
+4. **When to switch the "What changed" baseline.** The panel compares the
+   selected regulation with the one before it, and shows deltas only when
+   both sides have at least 100 teams; below that it shows sample sizes
+   and new arrivals only. In a new set's first weeks the previous set is
+   the useful comparison, which the rollover default already gives. Once
+   the new set passes 300 teams the page opens on it and the panel
+   compares it with the set before; nothing needs switching by hand.
+5. **Legality** arrives separately: PokéBase usually publishes the new
+   legal pool before the first event. Until it does, the legal-pool KPI for
+   the new set reads "—".
+
+**Dry run (2026-10-19).** A fixture `m-d` row (2026-12-02 to 2027-03-03)
+was added to the seed and the pipeline run end to end against real data:
+
+- `dbt build` passed all 259 nodes with no other change; the Limitless and
+  MunchStats format lists picked up `m-d` from the seed.
+- The payload built for 2026-12-03 kept scopes M-A/M-B/M-C/all (no M-D
+  events), opened on M-C, and reported M-D as the regulation in force
+  with no legal pool yet.
+- In the browser, with the clock at 2026-12-03, the page opened on M-C
+  with the rollover banner.
+- The one finding: the staleness banner also fired and repeated the
+  rollover banner's point ("M-D began…, these figures describe an earlier
+  regulation"). It now defers to the rollover banner during a rollover.
+- Removing the M-C row made `assert_champions_formats_registered` fail
+  naming `gen9championsvgc2026regmc`, as step 2 describes.
+
+The fixture row was then removed. `tests/browser/test_regulation_rollover.py`
+and `tests/unit/dashboard/test_data.py` keep the rollover cases under test
+with the same fixture registry.
+
+## Share cards and link previews
+
+`python -m pipelines.cli render-share-cards` (`pipelines/render/
+share_cards.py`, docs/upgrade-plan-2027q1.md C4) renders, with Playwright:
+
+- the newest event's top 8 as team-card PNGs
+  (`images/cards/<event_id>-<placement>.png`), each offered as "Download
+  card" on its team card;
+- a 1200×630 "What changed" card per regulation
+  (`images/cards/whats-changed-<scope>.png`), using the same comparison the
+  Overview opens on, offered as "Download summary card";
+- `images/cards/og.png`, a copy of the default regulation's card, used as
+  the Open Graph / Twitter image.
+
+It writes `images/cards/manifest.json`, which `build-dashboard` reads, so it
+runs first: `make dashboard` and the weekly refresh workflow both do. The
+build also writes `og:`/`twitter:` title and description tags from the
+default regulation's headline ("Reg M-C: Rillaboom leads at 8.7% of roster
+slots across 3,770 teams from 5 events…"), so a shared link unfurls with
+the current state. Without the manifest the site simply has no download
+buttons and no preview image. The cards add about 1.6MB to
+`docs/dashboard/`, replaced on each refresh.
+
+## Routes
+
+Every view has a route in the hash, and the hash holds its state, so Back,
+Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
+
+| Route | View |
+|---|---|
+| `#/overview`, `#/tiers`, `#/speed` | Meta views |
+| `#/usage[/win-rate\|success\|trends]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window |
+| `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure]` | A Pokémon's profile |
+| `#/compare/<a>,<b>`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons; `meta` is the calculator's "vs the meta" mode |
+| `#/teams[/converged]?tier=regional&sort=win-rate` | Top Teams |
+| `#/events`, `#/event/<event_id>` | Event index and event pages |
+| `#/cores/<key>[/triple]`, `#/archetypes` | Cores and archetypes |
+| `#/players[/regions\|signatures]`, `#/player/<player_id>` | Find a player, players by region and signature Pokémon; a player's page |
+| `#/builder`, `#/builder/team/<team_id>`, `#/builder/list/<team_list_id>`, `#/builder/add/<key>.<set>`, `#/builder/<key>.<set>,...` | Team Builder, loading a real team, a converged list, one added Pokémon, or a shared team |
+| `#/data[/how-to-read\|tables\|dictionary\|sources\|gates\|images\|agreement\|history\|caveats]` | Data & Sources: the glossary, table cards, the generated dictionary and the release gates |
+
+Moving to another view pushes a history entry; refining the current one (a
+filter, a sub-tab) replaces it. Links from before routing (`#usage`,
+`?tab=compare&a=..&b=..`) are rewritten to their routes on load.
+`?reg=` in the query string stays the regulation.
+
+## Data section: table cards and dictionary
+
+Data → Tables and Data → Dictionary (docs/upgrade-plan-2027q1.md, D2) are
+generated by `pipelines/dashboard/dictionary.py` during `build-dashboard`,
+so they can't drift from what they describe:
+
+- **Release tables** come from the newest `releases/manifests/manifest-*.json`
+  (by version number), described from `dbt/models/normalized/schema.yml`.
+  From 0.4.0 the download is the release zip named in the manifest's
+  `package` block; earlier releases link the committed CSV.
+- **Site data** and the **Dictionary** cover every mart the page serves,
+  with descriptions, grain (the model's uniqueness test) and fields from
+  `dbt/models/marts/schema.yml`. Fields are the ones the JSON shards
+  actually carry, so the display-name columns shards drop are not listed.
+  Payload entries `data.py` derives (`tournament_top_cut_teams`,
+  `player_index`) are described in `DERIVED_DESCRIPTIONS`.
+
+Both ship in one on-demand file, `data/data_dictionary.json`, fetched only
+when the Data section opens. schema.yml's maintainer pointers ("See
+data/normalized/…schema.json", "Written to data/marts/….csv") are stripped
+from the text.
 
 ## Triple cores and detected archetypes
 

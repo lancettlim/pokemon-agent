@@ -709,6 +709,236 @@ models:
               config:
                 meta: {category: mart_quality, table_name: pokemon_matchup_summary}
 
+  - name: tournament_event_summary
+    description: >
+      One row per Champions event: name, date, tier, regulation, how many
+      teams and players it has on record, how many reported a W-L record,
+      how many decided Masters matches RK9 published, and the winning
+      team. Feeds the event index, each event page's header and the
+      events/teams sample-size KPI. Written to
+      data/marts/tournament_event_summary.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['event_id']
+          config:
+            meta: {category: mart_quality, table_name: tournament_event_summary}
+    columns:
+      - name: event_id
+        description: "The event's tournament_event.event_id."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: tournament_event_summary}
+      - name: regulation_code
+        description: "The Champions regulation the event was played under."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: tournament_event_summary}
+      - name: team_count
+        description: "Teams with at least one Champions roster row."
+      - name: player_count
+        description: "Distinct players with a team at the event."
+      - name: recorded_team_count
+        description: "Teams that reported a W-L record."
+      - name: match_count
+        description: "Decided Masters matches in RK9 pairings (0 when RK9 has none)."
+      - name: winner_pokemon_keys
+        description: "The placement-1 team's Pokémon, pipe-delimited in slot order."
+      - name: recency_rank
+        description: "1 for the regulation's newest event, counting back."
+  - name: tournament_team_results
+    description: >
+      One row per Champions team: event, player (as the source spells the
+      name), placement, W-L record, its six Pokémon, whether the sheet is
+      fully reported (six Pokémon, each with item, ability, nature and four
+      moves) and its primary detected archetype. Feeds event pages, Top
+      Teams' placement ranking, player pages and a profile's "Teams
+      featuring" list. Written to data/marts/tournament_team_results.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['team_id']
+          config:
+            meta: {category: mart_quality, table_name: tournament_team_results}
+    columns:
+      - name: team_id
+        description: "The team's tournament_team.team_id."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: tournament_team_results}
+      - name: event_id
+        description: "The event the team was brought to."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: tournament_team_results}
+      - name: placement
+        description: "Final standing at the event; null when unpublished."
+      - name: event_team_count
+        description: "Teams on record at the same event, the placement's denominator."
+      - name: win_rate
+        description: "record_wins / (record_wins + record_losses); null without a record."
+      - name: pokemon_keys
+        description: "The team's Pokémon, pipe-delimited in slot order."
+      - name: is_fully_reported
+        description: "Six Pokémon, each with an item, ability, nature and four moves."
+      - name: primary_archetype_key
+        description: "Primary detected_archetype_team_membership assignment, if any."
+  - name: tournament_team_sheets
+    description: >
+      Full team sheets (item, ability, nature, moves per slot) for every
+      top-16 finish at a Champions event and every team on the
+      top_tournament_teams leaderboard: the teams a reader can copy for
+      Showdown or load into the Builder. One row per team x slot. No EV or
+      IV columns: team sheets don't publish them. Written to
+      data/marts/tournament_team_sheets.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['team_id', 'slot_number']
+          config:
+            meta: {category: mart_quality, table_name: tournament_team_sheets}
+    columns:
+      - name: team_id
+        description: "The team's tournament_team.team_id."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: tournament_team_sheets}
+      - name: pokemon_key
+        description: "The Pokémon in this slot."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: tournament_team_sheets}
+      - name: moves
+        description: "Up to four moves, pipe-delimited as the sheet lists them."
+  - name: team_list_sheets
+    description: >
+      Full sheets (item, ability, nature, moves per slot) for the 60 most
+      converged Limitless team lists, so Top Teams' "Use this team" loads a
+      converged list into the Builder with real sets. One row per list x
+      slot. Written to data/marts/team_list_sheets.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['team_list_id', 'slot_number']
+          config:
+            meta: {category: mart_quality, table_name: team_list_sheets}
+    columns:
+      - name: team_list_id
+        description: "The Limitless team list."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: team_list_sheets}
+  - name: pokemon_set_variants
+    description: >
+      Real sets per Pokémon: the item, ability, nature and four moves that
+      appeared together on one team sheet (set_level 'full'), plus a looser
+      'core' level grouping item + ability + the set's three most common
+      moves. Top 5 per Pokémon, regulation scope and level, ranked by
+      team_count then Wilson lower bound. share_of_pokemon divides by all of
+      the Pokémon's roster slots, so shares sum to at most 1. Written to
+      data/marts/pokemon_set_variants.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'set_level', 'set_rank']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_set_variants}
+    columns:
+      - name: pokemon_key
+        description: "The Pokémon running the set."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_set_variants}
+      - name: set_level
+        description: "'full' (exact set) or 'core' (item + ability + top 3 moves)."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_set_variants}
+      - name: moves
+        description: "Pipe-delimited, sorted alphabetically: four for 'full', three for 'core'."
+      - name: team_count
+        description: "Roster slots (one per team) that ran the set."
+      - name: share_of_pokemon
+        description: "team_count / every roster slot of the Pokémon in the scope."
+      - name: wilson_lower_bound
+        description: "95% Wilson lower bound on the teams' combined win rate."
+      - name: example_team_id
+        description: "One team that ran the set verbatim."
+  - name: pokemon_event_usage_vs_regulation
+    description: >
+      Usage of each Pokémon at each Champions event against its
+      regulation's average (share of roster slots), including Pokémon
+      absent from the event. Feeds an event page's over- and
+      under-performers and the event-window filter. Written to
+      data/marts/pokemon_event_usage_vs_regulation.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['event_id', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_event_usage_vs_regulation}
+    columns:
+      - name: event_id
+        description: "The event."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_event_usage_vs_regulation}
+      - name: pokemon_key
+        description: "The Pokémon."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_event_usage_vs_regulation}
+      - name: event_usage_share
+        description: "usage_count / event_slot_count."
+      - name: regulation_usage_share
+        description: "The Pokémon's usage share across the whole regulation."
+      - name: usage_share_delta
+        description: "event_usage_share - regulation_usage_share."
+  - name: player_archetype_record
+    description: >
+      A player's team-vs-team record against each detected archetype they
+      faced, per regulation_scope (each regulation plus 'all'), from decided
+      Masters matches; rows with fewer than 2 matches in their scope are
+      dropped. Written to data/marts/player_archetype_record.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['player_id', 'regulation_scope', 'opponent_archetype_key']
+          config:
+            meta: {category: mart_quality, table_name: player_archetype_record}
+    columns:
+      - name: player_id
+        description: "The player."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: player_archetype_record}
+      - name: regulation_scope
+        description: "A regulation code, or 'all' for every Champions regulation together."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: player_archetype_record}
+      - name: opponent_archetype_key
+        description: "The opponent team's primary archetype."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: player_archetype_record}
+      - name: matches_played
+        description: "Decided matches against teams of that archetype."
+
 # Filter-dimension coverage for docs/todo.md's "Document KPI views and
 # filter dimensions (regulation/date/tournament tier)" item, and how it
 # maps to docs/prd.md's fuller dashboard-analytics ambition:
