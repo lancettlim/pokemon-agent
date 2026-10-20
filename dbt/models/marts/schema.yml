@@ -908,18 +908,24 @@ models:
   - name: player_archetype_record
     description: >
       A player's team-vs-team record against each detected archetype they
-      faced, per regulation, from decided Masters matches; rows with fewer
-      than 2 matches are dropped. Written to
-      data/marts/player_archetype_record.csv.
+      faced, per regulation_scope (each regulation plus 'all'), from decided
+      Masters matches; rows with fewer than 2 matches in their scope are
+      dropped. Written to data/marts/player_archetype_record.csv.
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['player_id', 'regulation_code', 'opponent_archetype_key']
+            combination_of_columns: ['player_id', 'regulation_scope', 'opponent_archetype_key']
           config:
             meta: {category: mart_quality, table_name: player_archetype_record}
     columns:
       - name: player_id
         description: "The player."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: player_archetype_record}
+      - name: regulation_scope
+        description: "A regulation code, or 'all' for every Champions regulation together."
         data_tests:
           - not_null:
               config:

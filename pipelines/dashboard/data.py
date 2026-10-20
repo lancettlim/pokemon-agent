@@ -364,6 +364,9 @@ def player_index(
     (docs/upgrade-plan-2027q1.md, C3): their name and country as the source
     spells them, how many teams they have on record (one per event), their
     best finish, their latest event date and the regulations they played.
+    teams_by_regulation and best_by_regulation ("m-b:1|m-c:3") carry the
+    same two figures per regulation, so a regulation-scoped list ranks by
+    that regulation's results rather than a player's best anywhere.
     Nothing is inferred beyond the tournament data."""
     dates = {e["event_id"]: e.get("event_date") or "" for e in events}
     players: dict[str, dict[str, Any]] = {}
@@ -380,20 +383,43 @@ def player_index(
                 "team_count": 0,
                 "best_placement": None,
                 "latest_event_date": "",
-                "regulations": set(),
+                "regulations": {},
             },
         )
-        entry["team_count"] += 1
         placement = row.get("placement")
-        if placement and (entry["best_placement"] is None or placement < entry["best_placement"]):
-            entry["best_placement"] = placement
+        entry["team_count"] += 1
+        entry["best_placement"] = _better_placement(entry["best_placement"], placement)
         entry["latest_event_date"] = max(entry["latest_event_date"], dates.get(row["event_id"], ""))
         if row.get("regulation_code"):
-            entry["regulations"].add(row["regulation_code"])
-    return [
-        {**entry, "regulations": "|".join(sorted(entry["regulations"]))}
-        for entry in sorted(players.values(), key=lambda e: (e["player_name"] or "").lower())
-    ]
+            teams, best = entry["regulations"].get(row["regulation_code"], (0, None))
+            entry["regulations"][row["regulation_code"]] = (
+                teams + 1,
+                _better_placement(best, placement),
+            )
+    rows = []
+    for entry in sorted(players.values(), key=lambda e: (e["player_name"] or "").lower()):
+        codes = sorted(entry["regulations"])
+        rows.append(
+            {
+                **entry,
+                "regulations": "|".join(codes),
+                "teams_by_regulation": "|".join(
+                    f"{code}:{entry['regulations'][code][0]}" for code in codes
+                ),
+                "best_by_regulation": "|".join(
+                    f"{code}:{entry['regulations'][code][1]}"
+                    for code in codes
+                    if entry["regulations"][code][1] is not None
+                ),
+            }
+        )
+    return rows
+
+
+def _better_placement(current: int | None, placement: int | None) -> int | None:
+    if not placement:
+        return current
+    return placement if current is None else min(current, placement)
 
 
 MART_SLICERS = {

@@ -383,3 +383,23 @@ def test_built_page_carries_open_graph_tags(tmp_path):
     html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
     assert '<meta property="og:title"' in html
     assert '<meta name="description"' in html
+
+
+def test_an_on_demand_mart_with_a_scope_column_ships_whole_not_per_scope(tmp_path):
+    # player_archetype_record carries regulation_scope but loads with the
+    # player page; copying it into each scope file too would put it in the
+    # default view's download.
+    marts = {
+        "player_archetype_record": [
+            {"player_id": "P1", "regulation_scope": "m-c"},
+            {"player_id": "P1", "regulation_scope": "all"},
+        ],
+        "pokemon_usage_summary": [{"pokemon_key": "a", "regulation_scope": "m-c"}],
+    }
+    index = build._write_mart_shards(marts, {"m-c": {}, "all": {}}, tmp_path)
+    scope_file = json.loads((tmp_path / index["scopes"]["m-c"]).read_text(encoding="utf-8"))
+    assert set(scope_file) == {"pokemon_usage_summary"}
+    whole = json.loads(
+        (tmp_path / index["on_demand"]["player_archetype_record"]).read_text(encoding="utf-8")
+    )
+    assert len(whole["player_archetype_record"]) == 2

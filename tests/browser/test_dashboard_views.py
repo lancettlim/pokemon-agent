@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 
 def _clipboard(page) -> str:
     return page.evaluate("navigator.clipboard.readText()")
@@ -296,9 +298,12 @@ def test_player_search_opens_the_player_page(site_url, open_page):
     page = open_page()
     page.goto(site_url + "#/players")
     page.wait_for_load_state("networkidle")
-    # No query: the regulation's top-8 finishers.
+    # No query: the regulation's top-8 finishers, with this regulation's
+    # figures: Player 1 has 3 teams on record but 2 of them in M-C.
     assert page.locator("#player-search-table tbody tr").count() == 8
-    assert "12 players on record" in page.locator("#player-search-note").inner_text()
+    assert "13 players on record" in page.locator("#player-search-note").inner_text()
+    first_row = page.locator("#player-search-table tbody tr").first
+    assert first_row.locator('td[data-label="Teams"]').inner_text() == "2"
     page.fill("#player-search", "player 1")
     assert page.locator("#player-search-table tbody tr").count() == 4  # 1, 10, 11, 12
     page.fill("#player-search", "nobody")
@@ -458,3 +463,41 @@ def test_builder_slots_fit_a_phone_screen(site_url, open_page):
         ".map(e => e.getBoundingClientRect().right))"
     )
     assert right <= 390
+
+
+def test_player_page_keeps_every_table_to_the_selected_regulation(site_url, open_page):
+    """C3 review: 'all' is its own archetype partition, and a regulation the
+    player never played shows empty tables rather than other regulations'."""
+    page = open_page()
+    page.goto(site_url + "?reg=all#/player/P000")
+    page.wait_for_selector("#player-archetype-table tbody tr")
+    rows = page.locator("#player-archetype-table tbody tr")
+    assert rows.count() == 2  # one per archetype, not one per regulation
+    assert "4–2" in rows.first.inner_text()
+
+    page.goto("about:blank")
+    page.goto(site_url + "?reg=m-b#/player/P900")
+    page.wait_for_selector("#player-header .event-title")
+    note = page.locator("#player-events-note").inner_text()
+    assert "No events in Reg M-B" in note and "Reg M-C (1)" in note
+    assert page.locator("#player-pokemon-table tbody tr").count() == 0
+    assert "No teams in this regulation" in page.locator("#player-pokemon-table").inner_text()
+    assert page.locator("#player-archetype-table tbody tr").count() == 0
+    assert not page.errors
+
+
+def test_a_tab_whose_script_loads_after_its_data_still_renders(site_url, open_page):
+    """Routing waits for every script: a slow players.js used to leave
+    "Find a player" empty, since its data arrived first."""
+    page = open_page()
+
+    def slow(route):
+        time.sleep(1.0)
+        route.continue_()
+
+    page.route("**/players.js", slow)
+    page.route("**/matchup.js", slow)
+    page.goto(site_url + "#/players")
+    page.wait_for_load_state("networkidle")
+    assert page.locator("#player-search-table tbody tr").count() == 8
+    assert not page.errors

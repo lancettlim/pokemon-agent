@@ -1296,4 +1296,8 @@ def test_player_index_has_one_row_per_player_with_their_record():
     assert zoe["best_placement"] == 3
     assert zoe["latest_event_date"] == "2026-09-01"
     assert zoe["regulations"] == "m-b|m-c"
+    # Per regulation too, so an M-C list can rank by M-C results.
+    assert zoe["teams_by_regulation"] == "m-b:1|m-c:1"
+    assert zoe["best_by_regulation"] == "m-b:12|m-c:3"
     assert index[0]["best_placement"] is None
+    assert index[0]["best_by_regulation"] == ""

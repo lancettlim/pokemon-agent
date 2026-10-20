@@ -748,6 +748,30 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "primary_archetype_key": "arch-0" if team["placement"] % 2 else "arch-1",
             }
             for team in teams
+        ]
+        # A newcomer with one M-C team, outside every top-cut view: a player
+        # page under M-B has nothing of theirs to show.
+        + [
+            {
+                "team_id": "EVT-BAL-T40",
+                "event_id": "EVT-BAL",
+                "event_name": EVENTS["EVT-BAL"][0],
+                "event_date": EVENTS["EVT-BAL"][1],
+                "event_tier": EVENTS["EVT-BAL"][2],
+                "regulation_code": "m-c",
+                "player_id": "P900",
+                "player_name": "Newcomer",
+                "player_country": "CA",
+                "placement": 40,
+                "event_team_count": EVENTS["EVT-BAL"][4],
+                "record_wins": 5,
+                "record_losses": 4,
+                "win_rate": round(5 / 9, 4),
+                "pokemon_keys": "|".join(KEYS[:6]),
+                "roster_size": 6,
+                "is_fully_reported": "true",
+                "primary_archetype_key": "arch-0",
+            }
         ],
     )
     _write(
@@ -808,18 +832,20 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
         [
             {
                 "player_id": f"P{p:03d}",
-                "regulation_code": "m-c",
+                "regulation_scope": scope,
                 "opponent_archetype_key": f"arch-{a}",
                 "opponent_pokemon_keys": (
                     "garchomp|incineroar|rillaboom",
                     "gholdengo|kingambit|sneasler",
                 )[a],
-                "matches_played": 4,
-                "wins": 3 - a,
-                "losses": 1 + a,
-                "win_rate": (3 - a) / 4,
+                # 'all' adds the M-B Worlds games on top of M-C's.
+                "matches_played": 4 if scope == "m-c" else 6,
+                "wins": 3 - a if scope == "m-c" else 4 - a,
+                "losses": 1 + a if scope == "m-c" else 2 + a,
+                "win_rate": (3 - a) / 4 if scope == "m-c" else (4 - a) / 6,
             }
             for p in range(4)
+            for scope in ("m-c", "all")
             for a in range(2)
         ],
     )

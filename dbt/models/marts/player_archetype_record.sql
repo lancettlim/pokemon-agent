@@ -6,9 +6,12 @@
 -- player's team beat that team. No source names the four Pokémon brought
 -- to a given game.
 --
--- One row per player x regulation x opponent archetype, from decided
--- Masters matches in RK9 pairings. Only rows with at least 2 matches are
--- kept: a single game against an archetype is that game, not a record.
+-- One row per player x regulation_scope x opponent archetype, from decided
+-- Masters matches in RK9 pairings. regulation_scope is each regulation plus
+-- 'all' (int_champions_roster_scoped), and the 2-match floor applies within
+-- each scope: one game in M-B and one in M-C make a record under 'all' but
+-- under neither regulation. A single game against an archetype is that
+-- game, not a record.
 with decided as (
   select event_id, team_id_1, team_id_2, winner_team_id
   from {{ ref('tournament_match') }}
@@ -26,8 +29,8 @@ sides as (
   from decided
 ),
 teams as (
-  select distinct team_id, player_id, regulation_code
-  from {{ ref('int_champions_roster') }}
+  select distinct team_id, player_id, regulation_scope
+  from {{ ref('int_champions_roster_scoped') }}
 ),
 archetypes as (
   select team_id, archetype_key
@@ -36,7 +39,7 @@ archetypes as (
 )
 select
   own.player_id,
-  own.regulation_code,
+  own.regulation_scope,
   opponent_archetype.archetype_key as opponent_archetype_key,
   -- The archetype's anchor core, so a consumer can name it without the
   -- whole archetype mart.
@@ -57,6 +60,6 @@ inner join archetypes opponent_archetype
   on opponent_archetype.team_id = sides.opponent_team_id
 left join {{ ref('detected_archetype_summary') }} summary
   on summary.archetype_key = opponent_archetype.archetype_key
-group by own.player_id, own.regulation_code, opponent_archetype.archetype_key
+group by own.player_id, own.regulation_scope, opponent_archetype.archetype_key
 having count(*) >= 2
-order by own.player_id, own.regulation_code, matches_played desc
+order by own.player_id, own.regulation_scope, matches_played desc

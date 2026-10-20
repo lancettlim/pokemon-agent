@@ -29,6 +29,21 @@
     return App.routeHash("player", [id]);
   }
 
+  // A player's team count and best finish in the selected regulation, from
+  // player_index's "m-b:1|m-c:3" fields; the combined figures for "all".
+  function scopedStats(r) {
+    if (App.regulationScope === App.ALL_SCOPE) {
+      return { team_count: r.team_count, best_placement: r.best_placement };
+    }
+    function lookup(field) {
+      var hit = String(field || "").split("|").filter(function (pair) {
+        return pair.split(":")[0] === App.regulationScope;
+      })[0];
+      return hit ? Number(hit.split(":")[1]) : null;
+    }
+    return { team_count: lookup(r.teams_by_regulation) || 0, best_placement: lookup(r.best_by_regulation) };
+  }
+
   function regulationsLabel(codes) {
     return String(codes || "").split("|").filter(Boolean).map(function (code) {
       return App.shortRegulation(code).replace("Reg ", "");
@@ -56,13 +71,13 @@
           render: function (r) { return '<a href="' + playerHref(r.player_id) + '">' + esc(r.player_name) + "</a>"; },
         },
         { key: "player_country", label: "Country", sortable: true, render: function (r) { return App.countryCell(r.player_country); } },
-        { key: "team_count", label: "Teams", type: "int", main: true },
+        { key: "scoped_team_count", label: "Teams", type: "int", main: true },
         {
-          key: "best_placement",
+          key: "scoped_best_placement",
           label: "Best finish",
           numeric: true,
           sortable: true,
-          render: function (r) { return r.best_placement ? App.ordinal(r.best_placement) : "—"; },
+          render: function (r) { return r.scoped_best_placement ? App.ordinal(r.scoped_best_placement) : "—"; },
         },
         { key: "latest_event_date", label: "Latest event", sortable: true, hideOnPhone: true },
         {
@@ -75,31 +90,45 @@
       ],
     });
 
+    // Teams and best finish are the selected regulation's (scopedStats), so
+    // a player who won M-B but placed 100th in M-C isn't an M-C winner.
+    var scopeName = App.shortRegulation(App.regulationScope);
+    var rowsWithScope = index.map(function (r) {
+      var stats = scopedStats(r);
+      var row = {};
+      for (var k in r) if (Object.prototype.hasOwnProperty.call(r, k)) row[k] = r[k];
+      row.scoped_team_count = stats.team_count;
+      row.scoped_best_placement = stats.best_placement;
+      return row;
+    });
+
     function draw() {
       var query = normalize(input && input.value);
       var rows;
       if (!query) {
         // No query: the most decorated players in this regulation.
-        rows = index.filter(function (r) {
-          return App.regulationScope === App.ALL_SCOPE ||
-            ("|" + r.regulations + "|").indexOf("|" + App.regulationScope + "|") !== -1;
-        }).filter(function (r) { return r.best_placement && r.best_placement <= 8; })
-          .sort(function (a, b) { return a.best_placement - b.best_placement || b.team_count - a.team_count; });
+        rows = rowsWithScope.filter(function (r) { return r.scoped_best_placement && r.scoped_best_placement <= 8; })
+          .sort(function (a, b) {
+            return a.scoped_best_placement - b.scoped_best_placement || b.scoped_team_count - a.scoped_team_count;
+          });
         if (note) {
           note.textContent = index.length.toLocaleString() + " players on record. Showing those with a top-8 finish in " +
-            App.scopeLabel(App.regulationScope) + "; search to find anyone.";
+            scopeName + "; search to find anyone. Teams and best finish are for " + scopeName + ".";
         }
       } else {
         var starts = [];
         var contains = [];
-        index.forEach(function (r) {
+        rowsWithScope.forEach(function (r) {
           var name = normalize(r.player_name);
           var words = name.split(" ");
           if (name.indexOf(query) === 0 || words.some(function (w) { return w.indexOf(query) === 0; })) starts.push(r);
           else if (name.indexOf(query) !== -1) contains.push(r);
         });
         rows = starts.concat(contains);
-        if (note) note.textContent = rows.length.toLocaleString() + " match" + (rows.length === 1 ? "" : "es") + ".";
+        if (note) {
+          note.textContent = rows.length.toLocaleString() + " match" + (rows.length === 1 ? "" : "es") +
+            ". Teams and best finish are for " + scopeName + ".";
+        }
       }
       table.setRows(rows);
     }
@@ -117,6 +146,7 @@
       sort: { key: "team_count", dir: "desc" },
       limit: 12,
       rowHref: App.pokemonRowHref,
+      empty: "No teams in this regulation.",
       columns: [
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
         {
@@ -224,7 +254,8 @@
       return App.teamCardHtml(t, App.teamSheet(t.team_id) ? { hidePlayer: true } : { useHref: null, hidePlayer: true });
     }).join("");
 
-    var source = inScope.length ? inScope : allTeams;
+    // This regulation's teams only; the links above switch regulation.
+    var source = inScope;
     var counts = {};
     source.forEach(function (t) {
       String(t.pokemon_keys || "").split("|").filter(Boolean).forEach(function (k) {
@@ -241,9 +272,10 @@
       };
     }));
 
+    // One row per archetype in each scope: "all" is its own partition, with
+    // the 2-match floor applied across regulations (player_archetype_record).
     archetypeTable.setRows((marts.player_archetype_record || []).filter(function (r) {
-      return r.player_id === playerId &&
-        (App.regulationScope === App.ALL_SCOPE || r.regulation_code === App.regulationScope);
+      return r.player_id === playerId && r.regulation_scope === App.regulationScope;
     }));
   }
 

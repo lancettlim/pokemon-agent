@@ -2930,7 +2930,7 @@
     function drawPressure(profile) {
       var summary = document.getElementById("profile-pressure-summary");
       // The type chart lives in matchup.js, which publishes it on the shared
-      // namespace once loaded (before any tab initialises).
+      // namespace once loaded; routing, and so any tab, starts after that.
       var effectiveness = window.DashboardApp && window.DashboardApp.typeEffectiveness;
       if (!effectiveness) return;
       var weights = metaAttackWeights();
@@ -3416,10 +3416,9 @@
   // floored at 2 recorded teams in pipelines/dashboard/data.py — see
   // MART_SLICERS there for why that floor is analytical, not cosmetic.
   function setupPlayers() {
-    // "Find a player" (C3) lives in players.js, loaded after this file.
-    if (window.DashboardApp && window.DashboardApp.setupPlayerSearch) {
-      window.DashboardApp.setupPlayerSearch();
-    }
+    // "Find a player" (C3) lives in players.js, which has always run by
+    // now: routing waits for every script (startRouting).
+    window.DashboardApp.setupPlayerSearch();
     setupPlayerRegions();
     setupPlayerSignatures();
     playersSubTabs = setupSubTabs(
@@ -4234,10 +4233,21 @@
     );
   }
 
-  setupNavigation(function (tabId) {
-    activeTabId = tabId;
-    initTab(tabId);
-  });
+  // Routing starts once every script has run, not here: matchup.js through
+  // players.js load after this file, and a tab opened now could have its
+  // data arrive before the module that renders it (a slow players.js left
+  // "Find a player" empty, with no retry).
+  function startRouting() {
+    setupNavigation(function (tabId) {
+      activeTabId = tabId;
+      initTab(tabId);
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startRouting);
+  } else {
+    startRouting();
+  }
 
   // Shared namespace for matchup.js/teams.js (loaded right after this
   // file) — avoids duplicating DATA access or any of the helpers above.

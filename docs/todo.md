@@ -894,7 +894,8 @@ table tracks sprint progress.
   the selected regulation as team cards (with sets where a top-16 sheet
   exists), links their other regulations, their most-brought Pokémon, and
   their team-level record against detected archetypes from the new
-  `player_archetype_record` mart (at least two matches, labelled team vs
+  `player_archetype_record` mart (per regulation and across all of them,
+  at least two matches in that scope, labelled team vs
   team). Code in `static/players.js`.
 - [x] Event-window filter, pre-rendered share cards, OG image, copy-with-citation, labelled baseline (C4).
   Usage's "Events" filter (latest, last N, since an event) compares the

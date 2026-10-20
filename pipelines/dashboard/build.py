@@ -158,7 +158,14 @@ def _write_mart_shards(
         (shard_dir / f"{name}.json").write_text(json.dumps(slim, default=str), encoding="utf-8")
         return f"{SHARD_DIR}/{name}.json"
 
-    scoped_names = [n for n, rows in marts.items() if rows and "regulation_scope" in rows[0]]
+    # A scoped mart is split across the scope files unless it's on-demand:
+    # those load whole, with the page that needs them, and copying one into
+    # every scope file too would put it in the default view's download.
+    scoped_names = [
+        n
+        for n, rows in marts.items()
+        if rows and "regulation_scope" in rows[0] and n not in ON_DEMAND_MARTS
+    ]
     core = {
         name: rows
         for name, rows in marts.items()
