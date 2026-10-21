@@ -31,12 +31,12 @@ static with no backend. Two constraints are new:
 
 | Item | State |
 |---|---|
-| M1–M4 Mobile and responsive | Proposed; gates every other track |
-| Q1–Q5 Quality and shell | Proposed |
-| V1–V8 Broadcast-grade visuals | Proposed |
+| M1–M4 Mobile and responsive | M1, M2 done (Sprint 10); M3 applied to each component as it ships; M4 proposed |
+| Q1–Q5 Quality and shell | Q1, Q2 done (Sprint 10); Q3–Q5 proposed |
+| V1–V8 Broadcast-grade visuals | V1, V2, V7 done (Sprint 10); V3–V6, V8 proposed |
 | E1–E5 Event weekend | Proposed |
-| S1–S5 Data sources | Proposed; S1–S3 need decisions D1–D3 |
-| D1–D5 Decisions | Open |
+| S1–S5 Data sources | Proposed |
+| D1–D5 Decisions | Taken as recommended, 2026-10-21 (see section 6) |
 
 ---
 
@@ -528,6 +528,12 @@ Sprint 11 on, each sprint's exit criteria also include the M1 matrix
 passing, and the PR shows its changed views at 360px and 768px.
 
 ## 6. Decisions needed
+
+All five were taken as recommended on 2026-10-21, when the cycle was
+built: Online and Ladder are separate, labelled scopes (D1, D2); Stat Point
+spreads appear only as a ladder mart (D3, with CLAUDE.md's rule reworded);
+Oswald is the one self-hosted display font (D4); and team share is the
+headline metric (D5).
 
 | # | Decision | Recommendation |
 |---|---|---|

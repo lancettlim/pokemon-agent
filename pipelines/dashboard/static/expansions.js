@@ -48,7 +48,7 @@
     var left = rows.find(function (r) { return r.pokemon_key === a.value; }) || {};
     var right = rows.find(function (r) { return r.pokemon_key === b.value; }) || {};
     var metrics = [
-      ["Usage share", percent(left.usage_share), percent(right.usage_share)],
+      ["Team share", percent(left.team_share), percent(right.team_share)],
       ["Win rate", percent(left.win_rate), percent(right.win_rate)],
       ["Teams with a record", metric(left.record_count), metric(right.record_count)],
       ["Base speed", metric(left.speed), metric(right.speed)],

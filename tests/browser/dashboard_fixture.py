@@ -160,6 +160,11 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
     def share(i):
         return round(0.1 - i * 0.008, 4)
 
+    # Team share (docs/upgrade-plan-2027q2.md, V1) reads about six times the
+    # roster-slot share: a team has six slots.
+    def tshare(i):
+        return round(share(i) * 6, 4)
+
     _write(
         marts_dir / "pokemon_usage_summary.csv",
         scoped(
@@ -170,6 +175,8 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                     "event_tier": tier,
                     "usage_count": 60 - i * 5,
                     "usage_share": share(i),
+                    "team_share": tshare(i),
+                    "scope_team_count": 100,
                     "usage_rank": i + 1,
                 }
                 for tier in ("", "Regional")
@@ -381,6 +388,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 {
                     "usage_count": 60 - i * 5,
                     "usage_share": share(i),
+                    "team_share": tshare(i),
                     "win_rate": round(0.56 - i * 0.015, 4),
                     "record_count": 60 - i * 5,
                 }
@@ -421,6 +429,8 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                     "top_cut_usage_share": round(0.12 - i * 0.01, 4),
                     "placement_weighted_score": 3.2 - i * 0.2,
                     "weighted_usage_share": round(0.11 - i * 0.009, 4),
+                    "top_cut_team_share": round(0.7 - i * 0.06, 4),
+                    "weighted_team_share": round(0.66 - i * 0.054, 4),
                     "weighted_usage_rank": i + 1,
                 }
                 for i, key in enumerate(KEYS)
@@ -482,6 +492,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "pokemon_key": key,
                 "usage_count": 50 - i * 4,
                 "usage_share": share(i) + (0.01 if code == "m-b" else 0),
+                "team_share": round((share(i) + (0.01 if code == "m-b" else 0)) * 6, 4),
                 "usage_rank": i + 1,
                 "win_rate": round(0.55 - i * 0.01, 4),
                 "record_count": 50 - i * 4,
@@ -504,6 +515,11 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "previous_usage_share": 0 if key == "pelipper" else round(0.09 - (i % 3) * 0.02, 4),
                 "previous_usage_rank": "" if key == "pelipper" else 8 - i,
                 "usage_share_delta": round(share(i) - (0.09 - (i % 3) * 0.02), 4),
+                "team_share": tshare(i),
+                "previous_team_share": 0
+                if key == "pelipper"
+                else round((0.09 - (i % 3) * 0.02) * 6, 4),
+                "team_share_delta": round((share(i) - (0.09 - (i % 3) * 0.02)) * 6, 4),
                 "rank_change": i - 3,
                 "win_rate": 0.53,
                 "previous_win_rate": 0.5,
@@ -525,6 +541,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "event_date": event[1],
                 "usage_count": 30 - i * 2,
                 "usage_share": share(i),
+                "team_share": tshare(i),
                 "usage_rank": i + 1,
             }
             for event in EVENTS.values()
@@ -576,6 +593,8 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "player_country": country,
                 "usage_count": 20 - i,
                 "usage_share": share(i),
+                "team_share": tshare(i),
+                "country_team_count": 40,
                 "country_usage_rank": i + 1,
             }
             for country in ("US", "JP", "GB")
@@ -804,6 +823,9 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "event_usage_share": round(share(i) + (0.02 if i % 2 else -0.02), 4),
                 "regulation_usage_share": share(i),
                 "usage_share_delta": 0.02 if i % 2 else -0.02,
+                "event_team_share": round((share(i) + (0.02 if i % 2 else -0.02)) * 6, 4),
+                "regulation_team_share": tshare(i),
+                "team_share_delta": 0.12 if i % 2 else -0.12,
                 "total_wins": 100,
                 "total_losses": 90,
             }

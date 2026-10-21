@@ -96,6 +96,43 @@ The dashboard degrades gracefully in several ways:
   renders an empty-state message rather than erroring (see "Pro Team
   Gallery" below).
 
+## The 2027 Q2 cycle ("Broadcast grade")
+
+`docs/upgrade-plan-2027q2.md` made the site read like the official
+competitive graphics and work on every screen. What changed, by sprint:
+
+**Sprint 10 — the board, on every screen.**
+
+- **Team share is the headline metric** (V1, decision D5). Every usage
+  figure is the share of *teams* that brought a Pokémon (Rillaboom: 1,958
+  of 3,770 M-C teams, 51.9%), the unit the official usage card,
+  Pikalytics and Smogon report, instead of the share of roster slots
+  (8.7%). The marts carry `team_share` beside `usage_share`; every
+  tooltip still shows the slot share, and the Overview announces the
+  change once. The Tier List's bands moved with it (S ≥ 24%, A 12–24%,
+  B 6–12%, C 3–6% of teams: the old bands times six).
+- **The Top 12 board** (V2) opens the Overview: six tiles, a title band
+  and six more, as on the official card, with hero art breaking each
+  tile's edge and the team share in gold display numerals. It reflows to
+  band-on-top with 4 columns on tablets and 3 on phones, and has a
+  Species / Forms toggle (Species folds each Mega into the Pokémon holding
+  its stone, as the official card does). It renders from the inline KPIs
+  (`top_12_boards`), so it needs no fetch; the KPI strip moved below it.
+- **Responsive matrix** (M1, M2, Q1). `tests/browser/
+  test_responsive_matrix.py` opens every route at 360, 390, 768, 1024 and
+  1440px plus three spot checks and fails on horizontal scroll, sub-44px
+  tap targets, sub-16px fields and oversized sticky chrome; CI uploads a
+  screenshot of every route at every width. It caught both review
+  findings: the profile 34px too wide on phones, and every route 39px too
+  wide from 721px to 807px.
+- **Stat Points** (Q2). Speed Tiers, the calculator and the glossary use
+  Champions' terms: 32 Stat Points, Stat Alignment, IVs fixed at 31.
+- **Broadcast tokens and a display font** (V7, D4). The board's palette
+  is a set of design tokens with dark values, and `fonts/` serves one
+  self-hosted display face, Oswald (OFL), as a 28KB Latin subset that
+  `build.py` copies from `static/fonts/`. The footer says the site is an
+  unofficial fan project.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -110,8 +147,8 @@ click a tab still work. Every Pokémon picker (Profile, Compare, Core
 Explorer, Matchup) carries a type-ahead search with sprites
 (`attachPokemonCombobox`), and `/` jumps to the Profile search.
 
-- **Tier List** bands Pokémon by usage share in the selected regulation
-  (S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%), each with a win-rate chip coloured
+- **Tier List** bands Pokémon by team share in the selected regulation
+  (S ≥ 24%, A 12–24%, B 6–12%, C 3–6% of teams), each with a win-rate chip coloured
   only when the 95% Wilson interval sits clearly above or below 50%.
   Clicking a Pokémon opens its profile.
 - **Team Builder** gains **Suggested partners**: Pokémon with a synergy
@@ -137,9 +174,10 @@ Teams, and restructured every remaining tab around
 **mart-wiring pass** (see "Marts wired in the mart-wiring pass" below)
 added Players & Regions and extended four of the existing tabs:
 
-- **Overview** — the KPI cards plus a "Top 12" `.grid-6xn`, ranked by
-  `usage_share`. (The old "Top 30" ranked list was removed — the Usage tab
-  is the full leaderboard now.)
+- **Overview** — the Top 12 board (2027 Q2, V2; see above), then "What
+  changed", the latest event and starter teams, and the KPI cards. (The
+  old "Top 30" ranked list and the Top 12 `.grid-6xn` were removed — the
+  Usage tab is the full leaderboard now.)
 - **Usage** — tier/regulation/type/role/usage-%/speed filters, a
   `.grid-6xn` of usage-share leaders, a full Usage leaders table, then the
   same grid+table pattern again for Win rate leaders (with a

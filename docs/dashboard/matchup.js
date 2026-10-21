@@ -14,10 +14,10 @@
  * fetched from PokéAPI.
  *
  * Scope, documented rather than silently approximated: this calculator
- * assumes a level-50, IV 31 / EV 252 "maximally invested" stat on
- * whichever offensive/defensive stat the chosen move uses (no source
- * publishes real EV/IV data at all, so an "actual spread" calculation is
- * not available to build; see docs/data-sources.md's Victory Road entry),
+ * assumes a level-50 stat with full investment, 32 Stat Points (IVs are
+ * fixed at 31 in Champions), on whichever offensive/defensive stat the
+ * chosen move uses: tournament team sheets publish no Stat Points, so an
+ * "actual spread" calculation is not available to build,
  * models STAB, type
  * effectiveness, stat stages, rain/sun weather boosts, sand/snow's
  * Rock-SpDef/Ice-Def boosts, and a curated set of common competitive
@@ -116,13 +116,19 @@
     return "—";
   }
 
-  // ---------- level-50 stat formula (IV 31 / EV 252 "maxed" baseline —
-  // see the file-header scope note) ----------
+  // ---------- level-50 stat formula (Champions Stat Points, full
+  // investment — see the file-header scope note) ----------
+  // Champions replaced EVs with Stat Points: 66 in total, at most 32 per
+  // stat, with IVs fixed at 31. At level 50 a stat is (base + SP + 20)
+  // before nature, and HP is base + SP + 75: the same numbers the old
+  // 252-EV/31-IV formula gave, so only the terms changed
+  // (docs/upgrade-plan-2027q2.md, Q2).
+  var MAX_STAT_POINTS = 32;
   function statAtLevel50(base) {
-    return Math.floor(Math.floor((2 * base + 31 + Math.floor(252 / 4)) * 50 / 100) + 5);
+    return base + MAX_STAT_POINTS + 20;
   }
   function hpAtLevel50(base) {
-    return Math.floor((2 * base + 31 + Math.floor(252 / 4)) * 50 / 100) + 50 + 10;
+    return base + MAX_STAT_POINTS + 75;
   }
   function stageMultiplier(stage) {
     stage = Math.max(-6, Math.min(6, stage || 0));

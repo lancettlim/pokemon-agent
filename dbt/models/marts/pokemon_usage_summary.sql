@@ -18,7 +18,29 @@
 -- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
 -- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
 -- each computed and ranked independently, via int_champions_roster_scoped.
-with overall as (
+--
+-- team_share (docs/upgrade-plan-2027q2.md, V1) is the headline metric:
+-- the share of *teams* in the partition that brought the Pokémon,
+-- usage_count / scope_team_count. A Pokémon appears at most once per team
+-- (species clause), so usage_count is also its team count. It is the unit
+-- the official usage card, Pikalytics and Smogon report, and reads about
+-- 6x usage_share, which divides by roster slots instead (six per team):
+-- Rillaboom on 1,958 of 3,770 M-C teams is 51.9% of teams, 8.7% of slots.
+-- scope_team_count counts every team in the partition, including any
+-- whose members fall outside the current legal pool.
+with team_totals as (
+  select regulation_scope, cast(null as varchar) as event_tier, count(distinct team_id) as scope_team_count
+  from {{ ref('int_champions_roster_scoped') }}
+  group by regulation_scope
+  union all
+  select member.regulation_scope, event.event_tier, count(distinct member.team_id) as scope_team_count
+  from {{ ref('int_champions_roster_scoped') }} member
+  inner join {{ ref('tournament_event') }} event
+    on event.event_id = member.event_id
+  where event.event_tier is not null
+  group by member.regulation_scope, event.event_tier
+),
+overall as (
   select
     member.regulation_scope,
     member.pokemon_key,
@@ -46,17 +68,22 @@ by_tier as (
   group by member.regulation_scope, member.pokemon_key, event.event_tier
 )
 select
-  regulation_scope,
-  pokemon_key,
-  event_tier,
-  usage_count,
+  usage.regulation_scope,
+  usage.pokemon_key,
+  usage.event_tier,
+  usage.usage_count,
   round(
-    usage_count::double / sum(usage_count) over (partition by regulation_scope, event_tier),
+    usage.usage_count::double / sum(usage.usage_count) over (partition by usage.regulation_scope, usage.event_tier),
     4
   ) as usage_share,
-  row_number() over (partition by regulation_scope, event_tier order by usage_count desc) as usage_rank
+  round(usage.usage_count::double / team_totals.scope_team_count, 4) as team_share,
+  team_totals.scope_team_count,
+  row_number() over (partition by usage.regulation_scope, usage.event_tier order by usage.usage_count desc) as usage_rank
 from (
   select * from overall
   union all
   select * from by_tier
-)
+) usage
+inner join team_totals
+  on team_totals.regulation_scope = usage.regulation_scope
+  and team_totals.event_tier is not distinct from usage.event_tier

@@ -12,22 +12,44 @@
 -- teams. Restricted to the current legal pool and to roster rows with a
 -- reported player_country (tournament_team.player_country is optional --
 -- not every MunchStats player row reports it).
+--
+-- team_share (docs/upgrade-plan-2027q2.md, V1): the share of the
+-- country's teams that brought the Pokémon, over country_team_count.
+with country_teams as (
+  select team.player_country, count(distinct member.team_id) as country_team_count
+  from {{ ref('int_champions_roster') }} member
+  inner join {{ ref('tournament_team') }} team
+    on team.team_id = member.team_id
+  where team.player_country is not null and team.player_country != ''
+  group by team.player_country
+),
+counted as (
+  select
+    member.pokemon_key,
+    team.player_country,
+    count(*) as usage_count
+  from {{ ref('int_champions_roster') }} member
+  inner join {{ ref('pokemon_stat_champions') }} champions
+    on champions.pokemon_key = member.pokemon_key
+    and champions.is_legal = true
+  inner join {{ ref('tournament_team') }} team
+    on team.team_id = member.team_id
+  where team.player_country is not null and team.player_country != ''
+  group by member.pokemon_key, team.player_country
+)
 select
-  member.pokemon_key,
-  team.player_country,
-  count(*) as usage_count,
+  counted.pokemon_key,
+  counted.player_country,
+  counted.usage_count,
   round(
-    count(*)::double / sum(count(*)) over (partition by team.player_country),
+    counted.usage_count::double / sum(counted.usage_count) over (partition by counted.player_country),
     4
   ) as usage_share,
+  round(counted.usage_count::double / country_teams.country_team_count, 4) as team_share,
+  country_teams.country_team_count,
   row_number() over (
-    partition by team.player_country order by count(*) desc
+    partition by counted.player_country order by counted.usage_count desc
   ) as country_usage_rank
-from {{ ref('int_champions_roster') }} member
-inner join {{ ref('pokemon_stat_champions') }} champions
-  on champions.pokemon_key = member.pokemon_key
-  and champions.is_legal = true
-inner join {{ ref('tournament_team') }} team
-  on team.team_id = member.team_id
-where team.player_country is not null and team.player_country != ''
-group by member.pokemon_key, team.player_country
+from counted
+inner join country_teams
+  on country_teams.player_country = counted.player_country

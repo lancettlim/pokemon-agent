@@ -107,7 +107,6 @@ def test_build_payload_joins_pokemon_names_and_computes_kpis(tmp_path):
             "event_tier": "",
             "usage_count": 100,
             "usage_rank": 1,
-            "usage_share": None,
             "pokemon_name": "Pikachu",
         }
     ]
@@ -500,7 +499,8 @@ def test_compute_kpis_top_12_and_cumulative_legal_pool():
     }
     kpis = data.compute_kpis(marts)
 
-    assert [r["pokemon_key"] for r in kpis["top_12_pokemon"]] == [f"mon-{i}" for i in range(1, 13)]
+    board = kpis["top_12_boards"]["all"]["forms"]
+    assert [r["pokemon_key"] for r in board] == [f"mon-{i}" for i in range(1, 13)]
     assert kpis["legal_pool_by_regulation"] == [
         {
             "regulation_code": "m-a",
@@ -932,6 +932,11 @@ def _mover(key, delta, share, *, new=False, teams=500, prev_teams=400):
         "usage_share": share,
         "previous_usage_share": share - delta,
         "usage_share_delta": delta,
+        # Team share (docs/upgrade-plan-2027q2.md, V1) is what the summary
+        # ranks by; about six times the slot share.
+        "team_share": share * 6,
+        "previous_team_share": (share - delta) * 6,
+        "team_share_delta": delta * 6,
         "usage_rank": 1,
         "previous_usage_rank": 2,
         "win_rate": 0.5,
@@ -1213,6 +1218,7 @@ def test_window_movers_compare_recent_events_with_earlier_ones():
             "pokemon_name": key.title(),
             "usage_count": count,
             "event_slot_count": 1000,
+            "event_team_count": 200,
         }
 
     rows = [
@@ -1233,6 +1239,8 @@ def test_window_movers_compare_recent_events_with_earlier_ones():
     assert summary["reliable"] is True
     assert [r["pokemon_key"] for r in summary["risers"]] == ["sneasler"]
     assert summary["risers"][0]["usage_share_delta"] == 0.08
+    # Ranked and reported by team share: 180 of 400 teams against 20 of 400.
+    assert summary["risers"][0]["team_share_delta"] == 0.4
     assert [r["pokemon_key"] for r in summary["fallers"]] == ["garchomp"]
     assert data.summarize_event_window_movers(rows, events[:1]) is None
 
@@ -1301,3 +1309,88 @@ def test_player_index_has_one_row_per_player_with_their_record():
     assert zoe["best_by_regulation"] == "m-b:12|m-c:3"
     assert index[0]["best_placement"] is None
     assert index[0]["best_by_regulation"] == ""
+
+
+# docs/upgrade-plan-2027q2.md, V1/V2: team share and the Top 12 board.
+
+
+def test_species_group_key_folds_megas_into_the_stone_holder():
+    assert data.species_group_key("charizard-mega-y") == "charizard"
+    assert data.species_group_key("lucario-mega-z") == "lucario"
+    assert data.species_group_key("salamence-mega") == "salamence"
+    assert data.species_group_key("meowstic-male-mega") == "meowstic-male"
+    # Every other form keeps its own key, as on the official card.
+    assert data.species_group_key("basculegion-male") == "basculegion-male"
+    assert data.species_group_key("floette-eternal") == "floette-eternal"
+    assert data.species_group_key("meganium") == "meganium"
+
+
+def _usage(key, count, rank, teams=1000):
+    return {
+        "pokemon_key": key,
+        "pokemon_name": data.display_name(key),
+        "event_tier": None,
+        "usage_count": count,
+        "usage_rank": rank,
+        "usage_share": round(count / (teams * 6), 4),
+        "team_share": round(count / teams, 4),
+        "scope_team_count": teams,
+    }
+
+
+def test_top_board_ranks_forms_by_team_share_with_their_denominator():
+    rows = [_usage("raichu-mega-y", 300, 2), _usage("rillaboom", 500, 1), _usage("raichu", 50, 3)]
+    profiles = {"rillaboom": {"type_1": "grass", "pokemon_name": "Rillaboom"}}
+    tiles = data.top_board(rows, profiles, "forms")
+    assert [t["pokemon_key"] for t in tiles] == ["rillaboom", "raichu-mega-y", "raichu"]
+    assert tiles[0]["team_share"] == 0.5
+    assert tiles[0]["team_total"] == 1000
+    assert tiles[0]["type_1"] == "grass"
+
+
+def test_top_board_species_folds_megas_and_takes_the_base_forms_identity():
+    rows = [
+        _usage("rillaboom", 500, 1),
+        _usage("raichu-mega-y", 300, 2),
+        _usage("raichu-mega-x", 150, 3),
+        _usage("raichu", 100, 4),
+    ]
+    profiles = {
+        "raichu": {"type_1": "electric", "pokemon_name": "Raichu"},
+        "raichu-mega-y": {
+            "type_1": "electric",
+            "type_2": "psychic",
+            "pokemon_name": "Mega Raichu Y",
+        },
+    }
+    tiles = data.top_board(rows, profiles, "species")
+    assert [t["pokemon_key"] for t in tiles] == ["raichu", "rillaboom"]
+    raichu = tiles[0]
+    # 550 of 1,000 teams: one Mega Stone per species, so no team counts twice.
+    assert raichu["team_share"] == 0.55
+    assert raichu["usage_count"] == 550
+    assert raichu["pokemon_name"] == "Raichu"
+    assert (raichu["type_1"], raichu["type_2"]) == ("electric", None)
+    assert raichu["form_keys"] == "raichu-mega-y|raichu-mega-x|raichu"
+
+
+def test_kpis_carry_a_board_per_player_scope():
+    marts = {
+        "pokemon_usage_summary": [_usage("rillaboom", 500, 1), _usage("sneasler", 400, 2)],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "tournament_event_summary": [
+            {
+                "event_id": "e1",
+                "regulation_code": "m-c",
+                "team_count": 1000,
+                "event_date": "2026-10-09",
+            }
+        ],
+    }
+    kpis = data.compute_kpis(marts, scope="m-c", regulations=[])
+    board = kpis["top_12_boards"]["all"]
+    assert board["label"] == "All players"
+    assert (board["team_count"], board["event_count"]) == (1000, 1)
+    assert [t["pokemon_key"] for t in board["forms"]] == ["rillaboom", "sneasler"]
+    assert [t["pokemon_key"] for t in board["species"]] == ["rillaboom", "sneasler"]

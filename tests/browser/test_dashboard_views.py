@@ -425,14 +425,14 @@ def test_pokemon_cards_show_type_icons_not_a_colour_bar(site_url, open_page):
     page = open_page()
     page.goto(site_url)
     page.wait_for_load_state("networkidle")
-    tiles = page.locator("#overview-top-12 .grid-6xn-tile")
+    tiles = page.locator("#top-board .board-tile")
     assert tiles.count() == 8
     for i in range(tiles.count()):
-        assert tiles.nth(i).locator(".grid-6xn-head .type-icons img.type-icon").count() in (1, 2)
+        assert tiles.nth(i).locator(".board-types .type-icons img.type-icon").count() in (1, 2)
     first = tiles.first.locator(".type-icons")
     assert first.get_attribute("role") == "img"
     assert first.get_attribute("aria-label") == "grass type"  # Rillaboom: one type
-    sneasler = page.locator('#overview-top-12 a[href="#/pokemon/sneasler"] .type-icons')
+    sneasler = page.locator('#top-board a[href="#/pokemon/sneasler"] .type-icons')
     assert sneasler.get_attribute("aria-label") == "fighting / poison type"
 
     page.goto(site_url + "#/builder/garchomp.0")

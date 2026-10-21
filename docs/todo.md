@@ -929,6 +929,55 @@ table tracks sprint progress.
   (the staleness banner repeating the rollover banner) is fixed. The drift
   alarm was also probed by withholding M-C.
 
+## 2027 Q2 upgrade plan — "Broadcast grade"
+
+The entries proposed in `docs/upgrade-plan-2027q2.md`, promoted here on
+acceptance (backlog → todo). Decisions D1–D5 were taken as the plan
+recommends. Each entry names its plan item; the plan's Status table tracks
+sprint progress.
+
+- [x] Responsive test matrix: every route at 360/390/768/1024/1440, spot checks at 430/721/landscape; width, tap-target, input-size and chrome-height assertions; screenshots as a CI artifact (M1).
+  `tests/browser/test_responsive_matrix.py` runs the full sweep under CI
+  (or `DASHBOARD_FULL_MATRIX=1`) and a three-route smoke otherwise; a
+  failure names the overflowing element. `ci.yml` uploads every
+  screenshot as the `dashboard-screenshots` artifact.
+- [x] Responsive rules in `docs/design-system.md`: four tiers, per-tier column counts, no page scroll, 44px targets, controls inside bands (M2).
+- [x] Fix `#/pokemon/<key>` overflow at every phone width, and the header, `.grid-6xn` and table overflow at 721–807px (Q1).
+  The profile's 34px came from the combobox's hidden `<select>`, now
+  pinned to its host's corner. The tablet header drops the brand suffix and
+  shows the regulation as "M-C"; `.grid-6xn` is 6/4/3/2 columns with
+  shrinkable tracks; wide tables scroll inside their own frame on tablets.
+  Every route now fits from 360px up, on the fixture and on real data.
+- [x] Speed Tiers and glossary: Stat Points and Stat Alignment instead of EVs (Q2).
+  The figures were already right: Champions' (base + SP + 20) × nature
+  with 32 SP equals the old 252-EV/31-IV formula, so `matchup.js` now
+  computes it in Stat Point terms and only the words changed.
+- [x] `team_share` on the usage marts; team share as the headline metric site-wide (V1).
+  Rillaboom reads 51.9% of M-C teams (1,958 of 3,770), not 8.7% of
+  roster slots. `pokemon_usage_summary` gains `team_share` and
+  `scope_team_count`; the regulation, movers, event, date, country,
+  profile, speed and placement marts gain team-share columns, and
+  `assert_team_share_bounded` gates them. Slot share stays in every
+  tooltip; a one-time Overview notice announces the change.
+- [x] Top 12 board on Overview: 6+band+6, hero art, gold numerals, Species/Forms toggle, scope switch (V2).
+- [x] Broadcast tokens and header band in the design system (V7).
+  Board, scrim, gold and series tokens with dark values; the
+  `.broadcast-band` slash and halftone; Oswald (OFL) as the one
+  self-hosted display face (D4), a 28KB Latin subset.
+- [ ] Every new component built to its M3 per-tier layout (V2–V8, E1–E3, S2, Q3)
+- [ ] Phone sharing through the Web Share API, and a 9:16 story card (M4)
+- [ ] Team strip v2 with item and Mega badges, replacing `teamCompositionHtml` everywhere, PNG cards included (V3)
+- [ ] Scoreboard rows (V4), phase chips (V5), square type badges (V6)
+- [ ] Mega usage panel on event and regulation views (E3)
+- [ ] `limitless_play` extractor, `event_tier = 'online'`, Official/Online/All scope, rollover fallback to Online (S1, after D1)
+- [ ] `pokemon_event_phase_usage` mart and the Day 2 conversion board (E1)
+- [ ] Top-cut bracket and player path on event pages (E2)
+- [ ] Top 12 share cards, 16:9, 4:5 and 9:16, per regulation and event; becomes the OG image (V8)
+- [ ] Event-weekend hourly refresh of RK9 pairings (E4)
+- [ ] Smogon ladder extractor; `ladder_pokemon_usage`, `ladder_checks_counters`; profile panel and ladder-vs-tournament view (S2, after D2)
+- [ ] Stat Point spreads from the ladder, labelled ladder-only (D3)
+- [ ] Check MunchStats for published in-game Battle Data ranks (S4)
+
 ## Release readiness (v1 definition of done)
 
 All release gates pass as of this writing (see

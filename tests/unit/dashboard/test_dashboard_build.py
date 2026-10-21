@@ -162,10 +162,18 @@ def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_pat
     for path in sorted(paths):
         for name, rows in json.loads((output_dir / path).read_text(encoding="utf-8")).items():
             reassembled.setdefault(name, []).extend(rows)
-    assert set(reassembled) == set(payload["marts"]) | {"data_dictionary", "release_tables"}
+    # Build-only marts (summarised into the KPIs) ship in no shard, but the
+    # dictionary still describes them.
+    build_only = set(files["build_only"])
+    assert build_only == set(build.BUILD_ONLY_MARTS) & set(payload["marts"])
+    assert set(reassembled) == (set(payload["marts"]) - build_only) | {
+        "data_dictionary",
+        "release_tables",
+    }
     assert {entry["table"] for entry in reassembled["data_dictionary"]} == set(payload["marts"])
     for name, rows in payload["marts"].items():
-        assert len(reassembled[name]) == len(rows), name
+        if name not in build_only:
+            assert len(reassembled[name]) == len(rows), name
 
     html = (output_dir / "index.html").read_text(encoding="utf-8")
     embedded = _embedded_payload(html)
@@ -361,7 +369,7 @@ def test_site_meta_describes_the_default_regulation(tmp_path):
     payload = {
         "default_scope": "m-c",
         "kpis": {
-            "top_used_pokemon": {"pokemon_name": "Rillaboom", "usage_share": 0.0866},
+            "top_used_pokemon": {"pokemon_name": "Rillaboom", "team_share": 0.5194},
             "team_count": 3770,
             "event_count": 5,
         },
@@ -370,7 +378,7 @@ def test_site_meta_describes_the_default_regulation(tmp_path):
     meta = build._site_meta(payload)
     assert meta["title"] == "Pokémon Champions Data — Reg M-C"
     assert meta["description"].startswith(
-        "Reg M-C: Rillaboom leads at 8.7% of roster slots across 3,770 teams from 5 events."
+        "Reg M-C: Rillaboom is on 51.9% of 3,770 teams from 5 events."
     )
     assert meta["og_image"] == build.SITE_URL + "images/cards/og.png"
 

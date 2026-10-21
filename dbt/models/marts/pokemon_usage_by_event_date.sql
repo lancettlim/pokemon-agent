@@ -11,7 +11,18 @@
 -- (mirroring pokemon_usage_summary's event_tier partitioning), so a
 -- Pokémon's share reflects its standing among that date's tournaments
 -- specifically.
-with counted as (
+--
+-- team_share (docs/upgrade-plan-2027q2.md, V1): the share of that date's
+-- teams that brought the Pokémon.
+with date_teams as (
+  select event.event_date, count(distinct member.team_id) as team_count
+  from {{ ref('int_champions_roster') }} member
+  inner join {{ ref('tournament_event') }} event
+    on event.event_id = member.event_id
+  where event.event_date is not null
+  group by event.event_date
+),
+counted as (
   select
     member.pokemon_key,
     event.event_date,
@@ -26,13 +37,16 @@ with counted as (
   group by member.pokemon_key, event.event_date
 )
 select
-  pokemon_key,
-  event_date,
-  usage_count,
+  counted.pokemon_key,
+  counted.event_date,
+  counted.usage_count,
   round(
-    usage_count::double / sum(usage_count) over (partition by event_date),
+    counted.usage_count::double / sum(counted.usage_count) over (partition by counted.event_date),
     4
   ) as usage_share,
-  row_number() over (partition by event_date order by usage_count desc) as usage_rank
+  round(counted.usage_count::double / date_teams.team_count, 4) as team_share,
+  row_number() over (partition by counted.event_date order by counted.usage_count desc) as usage_rank
 from counted
-order by event_date, usage_count desc
+inner join date_teams
+  on date_teams.event_date = counted.event_date
+order by counted.event_date, counted.usage_count desc

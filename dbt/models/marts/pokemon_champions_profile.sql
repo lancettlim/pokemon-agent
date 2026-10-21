@@ -12,18 +12,17 @@
 -- recorded roster", not zero.
 --
 -- max_investment_speed (backlog.md #16) is the Level-50 Speed stat under
--- the standard competitive "max speed investment" convention -- 252 EVs, a
--- beneficial nature, and a perfect (31) IV -- rather than the raw base
--- `speed` stat above, which is what a real team's Speed actually looks
--- like at the format's standard level and is what determines turn order
--- in practice. Exact EVs/nature per real roster entry would need Victory
--- Road's moveset data (backlog.md #25, still deferred); this is the
--- documented simplification that item calls out as the honest interim
--- convention. Formula (Bulbapedia's standard stat formula, Level 50, IV
--- 31, EV 252, nature 1.1x): floor((floor((2*base + 31 + floor(252/4)) *
--- 50/100) + 5) * 1.1), which simplifies exactly (2*base+94 is always
--- even) to floor((base_speed + 52) * 1.1) -- verified against a known
--- reference value: base speed 142 (Dragapult) -> 213.
+-- the standard competitive "max speed investment" convention -- 32 Stat
+-- Points in Speed (of the 66 a Pokémon gets), a beneficial Stat Alignment
+-- (nature), and IVs, which Champions fixes at 31 -- rather than the raw
+-- base `speed` stat above, which is what a real team's Speed actually
+-- looks like at the format's standard level and is what determines turn
+-- order in practice. Tournament team sheets publish no Stat Points
+-- (backlog.md #25), so this is the documented convention, not data.
+-- Formula (Champions, Level 50): (base + SP + 20) x 1.1 with SP = 32, i.e.
+-- floor((base_speed + 52) * 1.1) -- the same number the pre-Champions
+-- 252-EV/31-IV formula gave (docs/upgrade-plan-2027q2.md, Q2); verified
+-- against a known reference value: base speed 142 (Dragapult) -> 213.
 --
 -- regulation_scope (docs/upgrade-plan-2026q4.md, A3): every legal Pokémon
 -- gets one row per regulation plus 'all', carrying that scope's usage and
@@ -48,6 +47,7 @@ select
   champions.stat_total,
   usage.usage_count,
   usage.usage_share,
+  usage.team_share,
   win.win_rate,
   win.record_count
 from {{ ref('pokemon_stat_champions') }} champions

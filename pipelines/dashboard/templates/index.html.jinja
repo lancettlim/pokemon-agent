@@ -37,6 +37,19 @@
   } catch (e) {}
 </script>
 <style>
+  @font-face {
+    font-family: "Board Display";
+    src: url("fonts/oswald-latin-wght.woff2") format("woff2");
+    font-weight: 200 700;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Board Display Fallback";
+    src: local("Arial Narrow"), local("Arial");
+    size-adjust: 82%;
+    ascent-override: 120%;
+    descent-override: 29%;
+  }
   /* ---------------------------------------------------------------
    * Design tokens — see docs/design-system.md for the full token
    * reference, component catalog, and Pokémon-representation/naming
@@ -69,6 +82,30 @@
     --accent-red-bg: #fce7e8;
     --accent-gold: #f4b942;
     --accent-gold-bg: #fdf3dd;
+
+    /* Broadcast tokens (docs/upgrade-plan-2027q2.md, V7), from the official
+       "Top 12 Pokémon" card's grammar (R1) and the 2026 Worlds key graphic
+       (R3): a red field with darker-red ink, a white board, maroon tiles
+       with a darker scrim under the label, and gold for the one number a
+       tile carries. The four series colours are a categorical palette only,
+       never the arc device they come from. */
+    --board-field: #ea0028;
+    --board-field-ink: #84010c;
+    --board-surface: #fff;
+    --board-tile: #7f2629;
+    --board-scrim: #572931;
+    --board-gold: #ffc549;
+    --series-red: #e3323c;
+    --series-blue: #2b6fd6;
+    --series-green: #2e9a4f;
+    --series-yellow: #f2c230;
+    --phase-chip: #111;
+
+    /* The one display face (docs/upgrade-plan-2027q2.md, D4): Oswald, an
+       OFL condensed variable font, self-hosted as a ~28KB Latin subset and
+       used only for board numerals and headlines. The fallback is size-
+       adjusted so the swap doesn't move the layout. */
+    --font-display: "Board Display", "Board Display Fallback", "Arial Narrow", sans-serif;
 
     /* Icon-size scale (docs/design-system.md's "Icon size scale") — every
        sprite/item/type icon must use one of these three tokens, no other
@@ -148,6 +185,12 @@
       --panel-dark: #07080c;
       --accent-red-bg: #3a1a1d;
       --accent-gold-bg: #3a2f12;
+      --board-field: #9e0019;
+      --board-field-ink: #5c0009;
+      --board-surface: #181c25;
+      --board-tile: #5a1b1e;
+      --board-scrim: #3b1b21;
+      --phase-chip: #000;
       --speed-blazing: #ef6b6b;
       --speed-blazing-bg: #3a1717;
       --speed-fast: #e0a94a;
@@ -176,6 +219,12 @@
     --panel-dark: #07080c;
     --accent-red-bg: #3a1a1d;
     --accent-gold-bg: #3a2f12;
+    --board-field: #9e0019;
+    --board-field-ink: #5c0009;
+    --board-surface: #181c25;
+    --board-tile: #5a1b1e;
+    --board-scrim: #3b1b21;
+    --phase-chip: #000;
     --speed-blazing: #ef6b6b;
     --speed-blazing-bg: #3a1717;
     --speed-fast: #e0a94a;
@@ -226,7 +275,7 @@
   .more-menu { position: relative; }
   .more-menu-btn {
     min-width: 44px;
-    min-height: 40px;
+    min-height: 44px;
     font: inherit;
     font-size: 1.3rem;
     line-height: 1;
@@ -315,7 +364,14 @@
   .data-table .team-comp { justify-content: flex-start; }
   .core-names { display: block; font-size: var(--font-xs); margin-top: 2px; }
   .core-names a { color: inherit; }
-  @media (max-width: 600px) {
+  /* A table wider than its card scrolls inside its own frame on tablets
+     (docs/upgrade-plan-2027q2.md, M2: no page scroll at any width), with
+     U7's edge fades. Desktop has the room; phones use two-line rows. */
+  .data-table-scroll { position: relative; }
+  @media (min-width: 721px) and (max-width: 1023px) {
+    .data-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+  @media (max-width: 720px) {
     /* Two-line rows on phones: "main" columns on line one, the rest as
        labelled details on line two. */
     .data-table thead { display: none; }
@@ -420,7 +476,9 @@
   }
   /* Team cards (app.js teamCardHtml, C1/C2/P5): placement and record as
      the headline, then who and where, the six Pokémon, sets and actions. */
-  .team-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+  .team-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+  @media (max-width: 1023px) { .team-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { .team-card-grid { grid-template-columns: minmax(0, 1fr); } }
   .team-card { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--surface); display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
   .team-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
   .team-card-headline { font-size: var(--font-lg); font-weight: 800; }
@@ -450,9 +508,11 @@
   .latest-event h3 { margin: var(--space-1) 0; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--navy); }
   .latest-event h3 a { color: inherit; }
   .latest-event .team-comp { justify-content: flex-start; margin: var(--space-2) 0; }
-  .starter-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-3); }
+  .starter-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+  @media (max-width: 1023px) { .starter-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { .starter-strip { grid-template-columns: minmax(0, 1fr); } }
   .starter-strip .team-comp-slot img { width: 32px; height: 32px; }
-  @media (max-width: 900px) {
+  @media (max-width: 1023px) {
     .overview-row, .performer-columns { grid-template-columns: 1fr; }
   }
   /* Pokémon hub v2 (P2): recently viewed, per-regulation trend, pressure. */
@@ -585,11 +645,13 @@
   .combo-list li[aria-selected="true"] { background: var(--light-blue); }
   .combo-list .combo-empty { color: var(--muted); cursor: default; }
   .combo-list[hidden] { display: none; }
-  .combo-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .combo-host { position: relative; }
+  .combo-source { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   .theme-toggle { font: inherit; cursor: pointer; background: transparent; color: inherit; }
-  .regulation-picker { display: inline-flex; align-items: center; }
+  .regulation-picker { display: inline-flex; align-items: center; gap: 6px; }
+  .regulation-picker .reg-prefix { font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #b8bdd1; }
   .regulation-picker select {
-    min-height: 40px;
+    min-height: 44px;
     font: inherit;
     font-weight: 700;
     color: var(--navy);
@@ -807,7 +869,8 @@
      more uniform grid), collapsing to 3 columns at 720px and 2 at 480px
      per the existing breakpoint convention. Each tile bolds its headline
      percentage (.grid-6xn-value) per the "bold the percentage" ask. */
-  .grid-6xn { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--space-3); }
+  .grid-6xn { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-3); }
+  @media (max-width: 1023px) { .grid-6xn { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .grid-6xn-tile {
     border: 2px solid var(--border);
     border-radius: var(--radius-md);
@@ -1191,7 +1254,7 @@
     .team-builder-grid { grid-template-columns: minmax(0, 1fr); }
     .team-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .team-analysis-grid, .team-analysis-columns { grid-template-columns: 1fr; }
-    .grid-6xn { grid-template-columns: repeat(3, 1fr); }
+    .grid-6xn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .matchup-picker-grid { grid-template-columns: 1fr; }
   }
 
@@ -1205,6 +1268,7 @@
   @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }
   .site-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; color: var(--muted); font-size: 0.8rem; padding: 24px; }
   .site-footer span + span::before { content: none; }
+  .site-footer .footer-unofficial { flex-basis: 100%; text-align: center; }
 
   @media (max-width: 720px) {
     main { padding: var(--space-3) 16px 16px; }
@@ -1213,11 +1277,181 @@
     .kpi-card { padding: 6px 10px; }
   }
 
+  /* ---------------------------------------------------------------
+   * 2027 Q2 broadcast components (docs/upgrade-plan-2027q2.md). See
+   * docs/design-system.md for the component reference.
+   * --------------------------------------------------------------- */
+  /* Phase chip (V5): says what a view covers, in the broadcast's black
+     italic caps. Chips wrap onto a second line on phones, never truncate. */
+  .phase-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 4px;
+    background: var(--phase-chip);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .phase-chip.is-online { background: var(--series-blue); }
+  .phase-chip.is-ladder { background: var(--series-green); }
+  .phase-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  /* Segmented control: a small set of mutually exclusive choices, used in
+     a view's band (the board's scope and grouping, round tabs). */
+  .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; background: var(--surface); }
+  .segmented button { font: inherit; font-size: var(--font-xs); font-weight: 700; padding: 6px 12px; min-height: 36px; border: 0; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .segmented button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  .segmented button:disabled { opacity: 0.45; cursor: not-allowed; }
+  /* Broadcast band (V7): a diagonal slash and halftone drawn in CSS, our
+     own pattern rather than the official key graphic. */
+  .broadcast-band {
+    background-color: var(--panel-dark);
+    background-image:
+      linear-gradient(115deg, transparent 0 62%, var(--board-field) 62% 66%, transparent 66% 69%, var(--board-gold) 69% 70.5%, transparent 70.5%),
+      radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.4px);
+    background-size: auto, 8px 8px;
+    color: #fff;
+  }
+  .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-gold-bg); color: var(--navy); font-size: var(--font-sm); }
+  .notice[hidden] { display: none; }
+
+  /* The Overview has no card of its own: the board is its hero, and the
+     panels below it carry their own frames. */
+  .tab-panel[data-panel="overview"] { background: none; border: 0; padding: 0; overflow: visible; }
+  .overview-card { border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-4); }
+
+  /* Top 12 board (V2): the official card's 6 + band + 6 on desktop, band on
+     top with 4 columns on tablets and large phones and 3 on phones (M3).
+     The band is first in the DOM, so a screen reader hears the title and
+     sample before the tiles; on desktop it is placed on row 2 and the
+     tiles flow around it. Position is rank: the numeral stays small. */
+  .board {
+    margin: 0 0 var(--space-5);
+    padding: var(--space-3);
+    border-radius: 16px;
+    background-color: var(--board-field);
+    background-image:
+      radial-gradient(var(--board-field-ink) 1.1px, transparent 1.5px),
+      repeating-linear-gradient(135deg, transparent 0 26px, rgba(0, 0, 0, 0.1) 26px 34px);
+    background-size: 11px 11px, auto;
+  }
+  .board[hidden] { display: none; }
+  .board-inner { background: var(--board-surface); border-radius: 12px; padding: 40px var(--space-4) var(--space-4); }
+  .board-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 48px var(--space-3); }
+  .board-band { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: -16px 0 -8px; }
+  .board-band-block { border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 92px; min-width: 0; }
+  .board-band-title h3 { margin: 0; color: #fff; font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; }
+  .board-band-title p { margin: 0; color: #d7dbe8; font-size: var(--font-xs); }
+  .board-band-mark { background: var(--board-gold); color: #12131a; }
+  .board-band-mark strong { font-family: var(--font-display); font-size: 1.9rem; font-weight: 700; line-height: 1; text-transform: uppercase; }
+  .board-band-mark span { font-size: var(--font-sm); font-weight: 700; }
+  .board-band-scope { background: var(--board-tile); color: #fff; align-items: flex-start; }
+  .board-band-scope .segmented { border-color: rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.25); }
+  .board-band-scope .segmented button { color: #e8e0e1; }
+  .board-band-scope .segmented button[aria-pressed="true"] { background: #fff; color: var(--board-tile); }
+  .board-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .board-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    min-height: 172px;
+    border-radius: var(--radius-md);
+    background: var(--board-tile);
+    color: #fff;
+    text-decoration: none;
+  }
+  .board-tile:hover, .board-tile:focus-visible { box-shadow: 0 0 0 3px var(--board-gold); }
+  /* Hero art breaks the tile's top edge, as on the official card. */
+  .board-art { width: 112px; height: 112px; margin-top: -34px; object-fit: contain; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35)); }
+  .board-art-blank { display: block; width: 112px; height: 78px; }
+  .board-rank { position: absolute; top: 6px; left: 8px; font-size: 0.68rem; font-weight: 700; opacity: 0.6; }
+  .board-foot { align-self: stretch; margin-top: auto; padding: 6px 8px 8px; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--board-scrim); text-align: center; }
+  .board-value-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .board-value { font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; color: var(--board-gold); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .board-types { display: inline-flex; gap: 2px; }
+  .board-name { display: block; margin-top: 2px; font-weight: 800; font-size: var(--font-sm); line-height: 1.15; overflow-wrap: normal; }
+  .board-form { font-size: 0.78em; font-weight: 700; opacity: 0.85; }
+  .board-more { margin: var(--space-3) 0 0; text-align: right; font-size: var(--font-sm); }
+  .board-more a { color: var(--blue); font-weight: 700; }
+  @media (max-width: 1023px) {
+    .board-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 44px; }
+    .board-band { grid-row: auto; margin: 0 0 4px; }
+    .board-inner { padding-top: var(--space-4); }
+    .board-art { width: 104px; height: 104px; }
+  }
+  @media (max-width: 720px) {
+    /* Full-bleed on phones, so three tiles stay at least 104px wide at
+       360px with 16px gutters and 8px gaps. */
+    .board { margin-left: -16px; margin-right: -16px; padding: 8px; border-radius: 0; }
+    .board-inner { padding: 8px 8px 12px; }
+    .board-band { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .board-band-block { min-height: 0; padding: var(--space-2) var(--space-3); }
+    .board-band-title h3 { font-size: 1.7rem; }
+    .board-band-mark { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+    .board-band-mark strong { font-size: 1.4rem; }
+    .board-controls, .board-controls .segmented { width: 100%; }
+    .board-controls .segmented button { flex: 1 1 0; min-height: 44px; }
+    .board-grid { gap: 36px 8px; }
+  }
+  @media (max-width: 480px) {
+    .board-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .board-tile { min-height: 156px; }
+    .board-art { width: 88px; height: 88px; margin-top: -26px; }
+    /* One idea per line: the number on its own line, the types in the
+       tile's top-right corner, where U9 puts them on every card. */
+    .board-value-row { flex-direction: column; gap: 0; }
+    .board-types { position: absolute; top: 5px; right: 5px; }
+    .board-value { font-size: 1.75rem; }
+    .board-name { font-size: var(--font-xs); }
+    .board-form { display: block; }
+  }
+
+  /* ---------------------------------------------------------------
+   * Responsive tiers (docs/upgrade-plan-2027q2.md, M2; docs/design-
+   * system.md's "Responsive behavior"): phone <=480px, large phone
+   * 481-720px, tablet 721-1023px, desktop >=1024px. No width from 360px
+   * up scrolls the page sideways; tests/browser/test_responsive_matrix.py
+   * enforces it, with 44px tap targets and 16px inputs on phones.
+   * --------------------------------------------------------------- */
+  /* iOS Safari zooms into any field under 16px on focus. The selector
+     outranks component rules such as .combo-input's font: inherit. */
+  @media (max-width: 1023px) {
+    :root input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+    :root select,
+    :root textarea { font-size: 16px; }
+  }
+  /* Every control a thumb presses is at least 44px tall on phones (U7). */
+  @media (max-width: 720px) {
+    .movers-toggle button, .calc-mode-btn, .type-popover-btn, .segmented button { min-height: 44px; }
+  }
+  /* Tablet header (finding 2): the brand loses its suffix, the five
+     sections tighten and the regulation select shows only its code, so
+     the bar fits from 721px instead of overflowing until about 808px. */
+  @media (min-width: 721px) and (max-width: 1023px) {
+    .topbar { gap: var(--space-3); padding: 0 16px; }
+    .brand-sub { display: none; }
+    .section-btn { padding: 6px 10px; font-size: 0.9rem; }
+    .regulation-picker .reg-prefix { display: none; }
+  }
+  @media (max-width: 720px) {
+    .regulation-picker .reg-prefix { display: none; }
+  }
+  /* Landscape phones: give the content its height back. */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .tabs, .subtabs { position: static; }
+  }
+
   @media (max-width: 480px) {
     .controls select { width: 100%; }
     section { padding: var(--space-4); }
     section h2 { margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: var(--space-3) var(--space-4); }
-    .grid-6xn { grid-template-columns: repeat(2, 1fr); }
+    .grid-6xn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 </style>
 </head>
@@ -1241,12 +1475,14 @@
     {% if payload.kpis_by_scope %}
       {# Which regulation every figure on the page describes. static/app.js
          sets the selected option from ?reg= and reloads on change. #}
-      <label class="regulation-picker"><span class="visually-hidden">Regulation</span>
+      {# Options read "M-C" so the select stays compact on tablets and phones
+         (docs/upgrade-plan-2027q2.md, M3); "Reg" shows beside it on desktop. #}
+      <label class="regulation-picker"><span class="reg-prefix" aria-hidden="true">Reg</span>
         <select id="regulation-scope" aria-label="Regulation shown on this page">
           {% for scope in payload.kpis_by_scope %}
             {% set reg = payload.regulations | selectattr("regulation_code", "equalto", scope) | first %}
             <option value="{{ scope }}"{% if scope == payload.default_scope %} selected{% endif %}>
-              {%- if reg %}Reg {{ scope | upper }}{% else %}All regulations{% endif -%}
+              {%- if reg %}{{ scope | upper }}{% else %}All{% endif -%}
             </option>
           {% endfor %}
         </select>
@@ -1287,9 +1523,26 @@
   <button class="tab-btn" role="tab" data-section="data" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
 </nav>
 <main>
+  <section class="tab-panel" data-panel="overview" data-section="meta">
+    <h2 class="panel-title">Overview</h2>
+    {# A one-time note on the change of unit (docs/upgrade-plan-2027q2.md,
+       V1 and its risks), until the reader dismisses it. #}
+    <p class="notice" id="team-share-notice" role="status" hidden>
+      <span>Usage now counts the <strong>share of teams</strong> that brought a Pokémon, the unit the official usage card and other sites use. Every figure reads about six times the old share of roster slots, which is still in each tooltip.</span>
+      <button type="button" class="btn btn-sm" id="team-share-notice-dismiss">Got it</button>
+    </p>
+    {# The Top 12 board (V2), the Overview's hero; app.js renders it from
+       the inline KPIs, so it paints with no data fetch. #}
+    <div class="board" id="top-board" role="region" aria-labelledby="board-title"></div>
+    <section class="movers-panel" id="movers-panel" hidden></section>
+    <div class="overview-row" id="overview-row" hidden>
+      <div id="overview-latest-event"></div>
+      <div id="overview-starters" class="overview-card"></div>
+    </div>
+  {# One KPI row per regulation scope; app.js shows the selected one. It
+     sits under the Top 12 board (docs/upgrade-plan-2027q2.md, V2), which
+     now leads the Overview. #}
   <div id="kpi-strip">
-  {# One KPI row per regulation scope; app.js shows the selected one. The
-     whole strip shows on the Meta section only. #}
   {% for scope, scope_kpis in (payload.kpis_by_scope or {"all": payload.kpis}).items() %}
   <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
@@ -1310,7 +1563,7 @@
       <div class="kpi-body">
         <div class="label">Most used</div>
         <div class="value">{% if top_used %}<a href="#/pokemon/{{ top_used.pokemon_key }}">{{ top_used.pokemon_name }}</a>{% else %}—{% endif %}</div>
-        <div class="sub">{% if top_used %}{% if top_used.usage_share is not none %}{{ "%.1f"|format(top_used.usage_share * 100) }}% of roster slots · {% endif %}{{ "{:,}".format(top_used.usage_count) }} teams{% endif %}</div>
+        <div class="sub">{% if top_used %}{% if top_used.team_share is defined and top_used.team_share is not none %}On {{ "%.1f"|format(top_used.team_share * 100) }}% of teams · {% endif %}{{ "{:,}".format(top_used.usage_count) }} teams{% endif %}</div>
       </div>
     </div>
     <div class="kpi-card">
@@ -1337,16 +1590,6 @@
   {% endfor %}
   </div>
 
-  <section class="tab-panel" data-panel="overview" data-section="meta">
-    <h2 class="panel-title">Overview</h2>
-    <section class="movers-panel" id="movers-panel" hidden></section>
-    <div class="overview-row" id="overview-row" hidden>
-      <div id="overview-latest-event"></div>
-      <div id="overview-starters"></div>
-    </div>
-    <h3>Most used</h3>
-    <p class="lead" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
-    <div class="grid-6xn" id="overview-top-12"></div>
   </section>
 
   <section class="tab-panel" data-panel="tiers" data-section="meta" hidden>
@@ -1545,7 +1788,7 @@
     <h2 class="panel-title">Speed tiers</h2>
     <p class="lead">Who moves first under the scenario you pick. Enter an opposing Speed to see who outruns it.</p>
     <details class="method"><summary>How this is computed</summary>
-      <p>Everything but "Base stat" assumes <strong>max Speed investment</strong> at level 50 (252 EVs, a beneficial nature, a 31 IV). That's a convention, not data: no source publishes the EV spreads teams actually run.</p>
+      <p>Everything but "Base stat" assumes <strong>max Speed investment</strong> at level 50: 32 <abbr class="term" tabindex="0" data-tip="Champions' replacement for EVs: 66 points per Pokémon, at most 32 in one stat, with IVs fixed at 31.">Stat Points</abbr> (of 66 in total), a beneficial <abbr class="term" tabindex="0" data-tip="What Champions and the official team sheets call a nature.">Stat Alignment</abbr>, and IVs, which are fixed at 31. That's a convention, not data: tournament team sheets don't publish the Stat Points teams actually run.</p>
     </details>
     <div class="controls">
       <label>Scenario
@@ -1579,7 +1822,7 @@
     <h2 class="panel-title">Matchup</h2>
     <p class="lead">A damage estimate, type effectiveness and real head-to-head records for two Pokémon.</p>
     <details class="method"><summary>How this is computed</summary>
-      <p>The calculator assumes level 50 with full investment in the attacking and defending stat (no source publishes EV spreads). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
+      <p>The calculator assumes level 50 with full investment, 32 Stat Points, in the attacking and defending stat (tournament team sheets publish no Stat Points). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
       <p>Head-to-head is measured <strong>team vs team</strong>: no source publishes which Pokémon were brought to a given match.</p>
     </details>
     {# "vs the meta" (docs/upgrade-plan-2027q1.md, P3): one attacker and move
@@ -1623,7 +1866,7 @@
     <p class="sub" id="matchup-preset-note"></p>
     <div class="damage-result" id="matchup-damage-result"></div>
     <div id="matchup-meta" hidden>
-      <p class="sub">Estimated damage from the attacker's move against the 12 most-used Pokémon in the regulation, each with its own #1 set's Intimidate where it has one. An estimate: level 50 and full investment in the attacking and defending stats, since team sheets publish no EVs.</p>
+      <p class="sub">Estimated damage from the attacker's move against the 12 most-used Pokémon in the regulation, each with its own #1 set's Intimidate where it has one. An estimate: level 50 and full investment (32 Stat Points) in the attacking and defending stats, since team sheets publish no Stat Points.</p>
       <div id="matchup-meta-table"></div>
     </div>
 
@@ -1933,7 +2176,7 @@
         <li><strong>Every percentage has a denominator.</strong> Hover a figure (or see its row) for "N of M"; sample sizes appear as <em>n</em>.</li>
         <li><strong>Small samples say so.</strong> Win rates rank by their Wilson bound, deltas are withheld below 100 teams, and thin sets are marked.</li>
         <li><strong>Matchups are team vs team.</strong> No source says which four Pokémon were brought to a game.</li>
-        <li><strong>There are no EVs.</strong> Team sheets publish ability, item, nature and moves only; anything that needs stats assumes full investment.</li>
+        <li><strong>There are no Stat Point spreads in tournament data.</strong> Team sheets publish ability, item, Stat Alignment (nature) and moves only; anything that needs stats assumes full investment: 32 Stat Points and IVs fixed at 31.</li>
       </ul>
       <h3>Glossary</h3>
       <dl class="glossary" id="ds-glossary"></dl>
@@ -2055,11 +2298,12 @@
           two would be comparing different games.
         </li>
         <li>
-          <strong>No EV or IV spreads exist anywhere in this dataset.</strong>
-          Official team sheets publish ability, held item, nature and moves
-          and nothing more. The damage calculator therefore assumes a
-          maximally-invested level-50 baseline on both sides rather than any
-          real spread.
+          <strong>Tournament data has no Stat Point spreads.</strong>
+          Official team sheets publish ability, held item, Stat Alignment
+          (nature) and moves and nothing more. The damage calculator
+          therefore assumes a fully invested level-50 baseline on both
+          sides (32 Stat Points, IVs fixed at 31) rather than any real
+          spread.
         </li>
         <li>
           <strong>Legality has a single snapshot date</strong>, so nothing on
@@ -2086,6 +2330,10 @@
   {% if payload.provenance.validation_available %}<span>{% if payload.provenance.release_blocking_findings %}{{ payload.provenance.release_blocking_findings | length }} gate failure(s){% else %}all release gates passing{% endif %}</span>{% endif %}
   <span>built {{ payload.generated_at_utc[:10] }}</span>
   <a href="#/data">Data &amp; sources</a>
+  {# The site borrows the official broadcast grammar, never its marks
+     (docs/upgrade-plan-2027q2.md): it must never be mistaken for an
+     official product. #}
+  <span class="footer-unofficial">Unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, The Pokémon Company or Play! Pokémon.</span>
 </footer>
 
 <script>window.DASHBOARD_DATA = {{ data_json | safe }};</script>

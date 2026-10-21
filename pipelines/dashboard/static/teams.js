@@ -14,13 +14,12 @@
  * ability, and up to 4 moves are all user-selectable (defaulting to that
  * Pokémon's top recorded choices), drawn from real recorded usage data
  * (pokemon_item_usage/pokemon_ability_usage/pokemon_move_usage) — never
- * invented options. There is deliberately no stat/EV selector: no source
- * publishes real EV/IV data at all -- official tournament team sheets
- * carry ability, item, nature and moves and nothing more -- so building
- * one would mean presenting invented numbers as if they were sourced (see
- * docs/backlog.md item #25 and docs/data-sources.md's Victory Road entry).
- * Nature IS published (100% of Champions roster slots) but is not part of
- * this builder's model. */
+ * invented options. There is deliberately no Stat Point selector:
+ * official tournament team sheets carry ability, item, Stat Alignment
+ * (nature) and moves and nothing more, so building one would mean
+ * presenting invented numbers as if they were sourced (see docs/backlog.md
+ * item #25). Stat Alignment IS published (100% of Champions roster
+ * slots) and each slot carries it. */
 (function () {
   "use strict";
 
@@ -512,7 +511,7 @@
         li.innerHTML =
           App.spriteImg(r.pokemon_key, App.ICON_SIZES.md) +
           '<div class="roster-info"><div class="roster-name">' + App.escapeHtml(r.pokemon_name) + "</div>" +
-          '<div class="roster-sub">' + App.formatPercent(r.usage_share) + " usage · " +
+          '<div class="roster-sub">On ' + App.formatPercent(r.team_share) + " of teams · " +
           App.formatPercent(r.win_rate) + " win rate · " + (r.speed != null ? r.speed : "—") + " speed</div></div>" +
           '<button class="btn btn-sm" type="button"' + (full ? " disabled" : "") + ">Add</button>";
         li.querySelector("button").addEventListener("click", function () {
@@ -763,7 +762,7 @@
       var avgSpeed = avg("speed");
       summaryEl.innerHTML =
         '<div class="stat"><strong>' + (avgSpeed !== null ? Math.round(avgSpeed) : "—") + "</strong>Avg. speed</div>" +
-        '<div class="stat"><strong>' + App.formatPercent(avg("usage_share")) + "</strong>Avg. usage share</div>" +
+        '<div class="stat"><strong>' + App.formatPercent(avg("team_share")) + "</strong>Avg. team share</div>" +
         '<div class="stat"><strong>' + App.formatPercent(avg("win_rate")) + "</strong>Avg. win rate</div>";
     }
 
@@ -1269,7 +1268,7 @@
     { onRoute: loadFromRoute }
   );
   App.registerTab("top-teams", setupTopTeams, {
-    extraMarts: ["tournament_team_sheets", "team_list_sheets"],
+    extraMarts: ["tournament_team_sheets", "team_list_sheets", "team_list_convergence"],
     onRoute: function (route) {
       topTeamsRoute(route);
     },

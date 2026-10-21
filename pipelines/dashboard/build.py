@@ -53,6 +53,7 @@ from pipelines.render import template as render_template
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_ICONS_DIR = STATIC_DIR / "icons"
+STATIC_FONTS_DIR = STATIC_DIR / "fonts"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "docs" / "dashboard"
 DEFAULT_ITEM_ICON_CACHE_DIR = REPO_ROOT / "data" / "assets" / "dashboard_icons"
@@ -126,7 +127,17 @@ ON_DEMAND_MARTS = (
     "team_list_sheets",
     "player_archetype_record",
     "player_index",
+    # docs/upgrade-plan-2027q2.md: team share widened the usage marts, so
+    # two more single-view marts left core.json to hold its budget: the
+    # Players tab's region view and Top Teams' converged lists.
+    "pokemon_usage_by_country",
+    "team_list_convergence",
 )
+
+# Marts the build summarises into the inline KPIs and no view reads raw:
+# kept out of every shard file. pokemon_regulation_movers feeds "What
+# changed" through compute_kpis' summarize_movers.
+BUILD_ONLY_MARTS = ("pokemon_regulation_movers",)
 
 
 def _write_mart_shards(
@@ -164,17 +175,21 @@ def _write_mart_shards(
     scoped_names = [
         n
         for n, rows in marts.items()
-        if rows and "regulation_scope" in rows[0] and n not in ON_DEMAND_MARTS
+        if rows
+        and "regulation_scope" in rows[0]
+        and n not in ON_DEMAND_MARTS
+        and n not in BUILD_ONLY_MARTS
     ]
     core = {
         name: rows
         for name, rows in marts.items()
-        if name not in scoped_names and name not in ON_DEMAND_MARTS
+        if name not in scoped_names and name not in ON_DEMAND_MARTS and name not in BUILD_ONLY_MARTS
     }
     index: dict[str, Any] = {
         "core": write("core", core),
         "scopes": {},
         "on_demand": {},
+        "build_only": [name for name in BUILD_ONLY_MARTS if name in marts],
         "name_fields": [list(pair) for pair in data.NAME_JOINS],
     }
     for scope in scopes:
@@ -257,18 +272,18 @@ def _load_share_cards(output_dir: Path) -> dict[str, Any]:
 def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
     """Open Graph title/description for link unfurls (docs/upgrade-plan-
     2027q1.md, C4), refreshed on every build from the default regulation's
-    headline: "Reg M-C: Rillaboom leads at 8.7% of roster slots across
-    3,770 teams from 5 events."""
+    headline, in team share (docs/upgrade-plan-2027q2.md, V1): "Reg M-C:
+    Rillaboom is on 51.9% of 3,770 teams from 5 events."""
     kpis = payload.get("kpis") or {}
     scope = payload.get("default_scope") or data.ALL_SCOPE
     label = "All regulations" if scope == data.ALL_SCOPE else f"Reg {scope.upper()}"
     top = kpis.get("top_used_pokemon")
     description = f"{label}: usage, real sets, events and teams from Pokémon Champions tournaments."
-    if top and top.get("usage_share") is not None:
+    if top and top.get("team_share") is not None:
         description = (
-            f"{label}: {top.get('pokemon_name')} leads at {top['usage_share'] * 100:.1f}% of "
-            f"roster slots across {kpis.get('team_count') or 0:,} teams from "
-            f"{kpis.get('event_count') or 0} events. Real sets, event pages and a team builder."
+            f"{label}: {top.get('pokemon_name')} is on {top['team_share'] * 100:.1f}% of "
+            f"{kpis.get('team_count') or 0:,} teams from {kpis.get('event_count') or 0} events. "
+            "Real sets, event pages and a team builder."
         )
     og_image = (payload.get("share_cards") or {}).get("og_image")
     return {
@@ -498,6 +513,10 @@ def build(
     (output_dir / "index.html").write_text(html, encoding="utf-8")
     for script_name in SCRIPT_NAMES:
         shutil.copyfile(STATIC_DIR / script_name, output_dir / script_name)
+    # The one self-hosted display font and its licence (docs/upgrade-plan-
+    # 2027q2.md, D4), served from fonts/ beside the page.
+    if STATIC_FONTS_DIR.exists():
+        shutil.copytree(STATIC_FONTS_DIR, output_dir / "fonts", dirs_exist_ok=True)
     # backlog.md #32's JSON feed: data.json carries every non-mart key plus
     # `mart_files`, the index of the shard files holding the marts (see
     # _write_mart_shards). Together they are the complete payload, still

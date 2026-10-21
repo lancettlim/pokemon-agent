@@ -17,7 +17,28 @@
 -- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
 -- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
 -- each computed and ranked independently, via int_champions_roster_scoped.
-with legal_appearances as (
+--
+-- top_cut_team_share/weighted_team_share (docs/upgrade-plan-2027q2.md,
+-- V1) are the same two views over teams instead of roster slots: the share
+-- of top-8 teams that brought the Pokémon, and its teams' summed
+-- 1/placement weight over every placed team's.
+with placed_teams as (
+  select distinct member.regulation_scope, member.team_id, team.placement
+  from {{ ref('int_champions_roster_scoped') }} member
+  inner join {{ ref('tournament_team') }} team
+    on team.team_id = member.team_id
+  where team.placement is not null
+    and team.placement > 0
+),
+team_weights as (
+  select
+    regulation_scope,
+    count(*) filter (where placement <= 8) as top_cut_team_count,
+    sum(1.0 / placement) as total_team_weight
+  from placed_teams
+  group by regulation_scope
+),
+legal_appearances as (
   select member.regulation_scope, member.pokemon_key, team.placement
   from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('tournament_team') }} team
@@ -52,6 +73,11 @@ select
     placement_weighted_score / nullif(sum(placement_weighted_score) over (partition by regulation_scope), 0),
     4
   ) as weighted_usage_share,
+  round(top_cut_usage_count::double / nullif(team_weights.top_cut_team_count, 0), 4)
+    as top_cut_team_share,
+  round(placement_weighted_score / nullif(team_weights.total_team_weight, 0), 4)
+    as weighted_team_share,
   row_number() over (partition by regulation_scope order by placement_weighted_score desc) as weighted_usage_rank
 from per_pokemon
+inner join team_weights using (regulation_scope)
 order by regulation_scope, placement_weighted_score desc

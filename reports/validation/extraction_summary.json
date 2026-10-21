@@ -1,6 +1,6 @@
 {
   "description": "Phase 1 ingestion check: source availability and row-level parsing success for each staging extractor. Distinct from validation_report.json, which gates normalized-table release readiness.",
-  "generated_at_utc": "2026-10-19T15:33:35Z",
+  "generated_at_utc": "2026-10-21T06:50:00Z",
   "dataset_version": "0.3.0",
   "sources": [
     {
@@ -23,7 +23,7 @@
       "request_success_rate": 1.0,
       "rows_written": 6954,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:29:37Z"
+      "checked_at_utc": "2026-10-21T06:46:34Z"
     },
     {
       "source_name": "MunchStats",
@@ -34,7 +34,7 @@
       "request_success_rate": 1.0,
       "rows_written": 131122,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:26:46Z"
+      "checked_at_utc": "2026-10-21T06:26:17Z"
     },
     {
       "source_name": "OP.GG Pok\u00e9mon Champions",
@@ -45,7 +45,7 @@
       "request_success_rate": 1.0,
       "rows_written": 352,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:29:39Z"
+      "checked_at_utc": "2026-10-21T06:46:36Z"
     },
     {
       "source_name": "Pok\u00e9API",
@@ -56,7 +56,7 @@
       "request_success_rate": 1.0,
       "rows_written": 1351,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:31:40Z"
+      "checked_at_utc": "2026-10-21T06:48:22Z"
     },
     {
       "source_name": "Pok\u00e9API (ability detail)",
@@ -67,7 +67,7 @@
       "request_success_rate": 0.9958,
       "rows_written": 239,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:33:13Z"
+      "checked_at_utc": "2026-10-21T06:49:42Z"
     },
     {
       "source_name": "Pok\u00e9API (artwork)",
@@ -78,7 +78,7 @@
       "request_success_rate": 1.0,
       "rows_written": 351,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:32:09Z"
+      "checked_at_utc": "2026-10-21T06:48:54Z"
     },
     {
       "source_name": "Pok\u00e9API (item detail)",
@@ -89,7 +89,7 @@
       "request_success_rate": 0.9957,
       "rows_written": 232,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:33:35Z"
+      "checked_at_utc": "2026-10-21T06:50:00Z"
     },
     {
       "source_name": "Pok\u00e9API (move detail)",
@@ -100,7 +100,7 @@
       "request_success_rate": 0.9983,
       "rows_written": 578,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:32:56Z"
+      "checked_at_utc": "2026-10-21T06:49:25Z"
     },
     {
       "source_name": "Pok\u00e9Base",
@@ -111,7 +111,7 @@
       "request_success_rate": 1.0,
       "rows_written": 924,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:29:39Z"
+      "checked_at_utc": "2026-10-21T06:46:36Z"
     },
     {
       "source_name": "RK9.gg",
@@ -122,7 +122,7 @@
       "request_success_rate": 1.0,
       "rows_written": 31912,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-19T15:28:41Z"
+      "checked_at_utc": "2026-10-21T06:45:33Z"
     }
   ]
 }

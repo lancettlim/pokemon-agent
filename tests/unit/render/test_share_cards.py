@@ -13,16 +13,16 @@ def _summary(**extra):
             {
                 "pokemon_key": "garchomp-mega-z",
                 "pokemon_name": "Mega Garchomp Z",
-                "usage_share": 0.043,
-                "usage_share_delta": 0.032,
+                "team_share": 0.258,
+                "team_share_delta": 0.192,
             }
         ],
         "fallers": [
             {
                 "pokemon_key": "salamence-mega",
                 "pokemon_name": "Mega Salamence",
-                "usage_share": 0.023,
-                "usage_share_delta": -0.029,
+                "team_share": 0.138,
+                "team_share_delta": -0.174,
             }
         ],
         **extra,
@@ -48,11 +48,11 @@ def test_whats_changed_card_follows_the_overviews_default_comparison():
     rising = context["columns"][0]["rows"][0]
     assert (rising["name"], rising["share"], rising["delta"]) == (
         "Mega Garchomp Z",
-        "4.3%",
-        "+3.2 pts",
+        "25.8%",
+        "+19.2 pts",
     )
     assert rising["sprite"] == "data:garchomp-mega-z"
-    assert context["columns"][1]["rows"][0]["delta"] == "-2.9 pts"
+    assert context["columns"][1]["rows"][0]["delta"] == "-17.4 pts"
     assert "dataset 0.3.0" in context["footer"]
 
     kpis["movers"]["baseline_thin"] = False

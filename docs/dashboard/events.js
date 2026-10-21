@@ -25,9 +25,10 @@
   // panel's regulation-to-regulation deltas (data.py's MIN_MOVER_TEAMS).
   var MIN_EVENT_DELTA_TEAMS = 100;
   var MAX_PERFORMERS = 8;
-  // A Pokémon this rare in both the event and the regulation isn't an
-  // over- or under-performer worth listing, whatever its delta.
-  var MIN_PERFORMER_SHARE = 0.005;
+  // A Pokémon on this few teams in both the event and the regulation isn't
+  // an over- or under-performer worth listing, whatever its delta (0.5% of
+  // roster slots before team share became the unit).
+  var MIN_PERFORMER_SHARE = 0.03;
 
   function regulationLink(code) {
     return code ? esc(App.shortRegulation(code)) : "";
@@ -140,22 +141,23 @@
       columns: [
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
         {
-          key: "event_usage_share",
+          key: "event_team_share",
           label: "At this event",
           type: "share",
           main: true,
           title: function (r) {
-            return r.usage_count.toLocaleString() + " of " + r.event_slot_count.toLocaleString() + " roster slots";
+            return r.usage_count.toLocaleString() + " of " + r.event_team_count.toLocaleString() + " teams · " +
+              App.formatPercent(r.event_usage_share) + " of roster slots";
           },
         },
-        { key: "regulation_usage_share", label: "Regulation", type: "percent" },
+        { key: "regulation_team_share", label: "Regulation", type: "percent" },
         {
-          key: "usage_share_delta",
+          key: "team_share_delta",
           label: "Difference",
           numeric: true,
           sortable: true,
           render: function (r) {
-            var pts = (r.usage_share_delta || 0) * 100;
+            var pts = (r.team_share_delta || 0) * 100;
             return '<span class="badge ' + (pts > 0 ? "badge-positive" : "badge-negative") + '">' +
               (pts > 0 ? "+" : "") + pts.toFixed(1) + " pts</span>";
           },
@@ -222,20 +224,20 @@
 
     var rows = (marts.pokemon_event_usage_vs_regulation || []).filter(function (r) {
       return r.event_id === eventId &&
-        Math.max(r.event_usage_share || 0, r.regulation_usage_share || 0) >= MIN_PERFORMER_SHARE;
+        Math.max(r.event_team_share || 0, r.regulation_team_share || 0) >= MIN_PERFORMER_SHARE;
     });
     var thin = (event.team_count || 0) < MIN_EVENT_DELTA_TEAMS;
     perfBody.hidden = thin || !rows.length;
     perfNote.textContent = thin
       ? "Only " + (event.team_count || 0) + " teams: too few to compare this event's usage with the regulation's."
-      : "Share of roster slots at this event against the whole of " + App.shortRegulation(event.regulation_code) +
+      : "Share of teams at this event against the whole of " + App.shortRegulation(event.regulation_code) +
         ", across " + Number(event.team_count).toLocaleString() + " teams.";
     if (!thin) {
-      overTable.setRows(rows.filter(function (r) { return r.usage_share_delta > 0; })
-        .sort(function (a, b) { return b.usage_share_delta - a.usage_share_delta; })
+      overTable.setRows(rows.filter(function (r) { return r.team_share_delta > 0; })
+        .sort(function (a, b) { return b.team_share_delta - a.team_share_delta; })
         .slice(0, MAX_PERFORMERS));
-      underTable.setRows(rows.filter(function (r) { return r.usage_share_delta < 0; })
-        .sort(function (a, b) { return a.usage_share_delta - b.usage_share_delta; })
+      underTable.setRows(rows.filter(function (r) { return r.team_share_delta < 0; })
+        .sort(function (a, b) { return a.team_share_delta - b.team_share_delta; })
         .slice(0, MAX_PERFORMERS));
     }
   }

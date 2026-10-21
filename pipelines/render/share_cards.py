@@ -94,16 +94,16 @@ def whats_changed_context(
             {
                 "name": entry.get("pokemon_name") or entry["pokemon_key"],
                 "sprite": sprite_uri(entry["pokemon_key"]),
-                "share": f"{(entry.get('usage_share') or 0) * 100:.1f}%",
-                "delta": _points(entry.get("usage_share_delta")),
-                "delta_points": (entry.get("usage_share_delta") or 0) * 100,
+                "share": f"{(entry.get('team_share') or 0) * 100:.1f}%",
+                "delta": _points(entry.get("team_share_delta")),
+                "delta_points": (entry.get("team_share_delta") or 0) * 100,
             }
             for entry in entries[:MAX_MOVERS_ON_CARD]
         ]
 
     footer_bits = [
         f"dataset {dataset_version}" if dataset_version else None,
-        "shares of roster slots",
+        "shares of teams",
     ]
     return {
         "title": title,
