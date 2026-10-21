@@ -30,8 +30,10 @@ See `docs/` for the full document set:
   operations, snapshot comparisons, and the battle-log/replay research plan
 - `docs/todo.md` — outstanding work items and definition of done for the v1
   release
-- `docs/upgrade-plan-2027q1.md` — the current product cycle: UI review
-  findings and planned features, sequenced into sprints
+- `docs/upgrade-plan-2027q2.md` — the current product cycle: official VGC
+  graphics research, candidate data sources and a ranked list of UI
+  features, sequenced into sprints (`docs/upgrade-plan-2027q1.md`, the
+  previous cycle, has shipped)
 - `docs/backlog.md` — post-v1 feature wish list, sized and dependency-tagged
   (not a commitment; items graduate into `docs/todo.md` once accepted)
 
