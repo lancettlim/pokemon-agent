@@ -89,3 +89,15 @@ def test_newest_event_top_cut_orders_by_placement():
     event, teams = share_cards.newest_event_top_cut(payload)
     assert event["event_id"] == "new"
     assert [t["team_id"] for t in teams] == ["n1", "n2"]
+
+
+def test_square_badge_draws_our_glyph_on_the_type_colour():
+    """docs/upgrade-plan-2027q2.md, V6: one definition for site and cards."""
+    from pipelines.render import type_glyphs
+    from pipelines.render.template import TYPE_COLORS
+
+    assert set(type_glyphs.GLYPHS) == {name for name in TYPE_COLORS if name}
+    html = str(type_glyphs.square_badge_html("Fire", 20))
+    assert TYPE_COLORS["fire"] in html and 'aria-label="Fire type"' in html
+    assert "<svg" in html and 'fill="#fff"' in html
+    assert str(type_glyphs.square_badge_html("unknown")) == ""

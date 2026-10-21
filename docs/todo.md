@@ -966,9 +966,16 @@ sprint progress.
   self-hosted display face (D4), a 28KB Latin subset.
 - [ ] Every new component built to its M3 per-tier layout (V2–V8, E1–E3, S2, Q3)
 - [ ] Phone sharing through the Web Share API, and a 9:16 story card (M4)
-- [ ] Team strip v2 with item and Mega badges, replacing `teamCompositionHtml` everywhere, PNG cards included (V3)
-- [ ] Scoreboard rows (V4), phase chips (V5), square type badges (V6)
-- [ ] Mega usage panel on event and regulation views (E3)
+- [x] Team strip v2 with item and Mega badges, replacing `teamCompositionHtml` everywhere, PNG cards included (V3)
+  `teamStripHtml` in `static/app.js`; a tile with a known set opens it in a
+  popover. `teamCompositionHtml` is now the strip's compact entry point.
+  The PNG template draws the item and Mega badges on each sprite.
+- [x] Scoreboard rows (V4), phase chips (V5), square type badges (V6)
+  The 18 square-badge glyphs are our own (`pipelines/render/type_glyphs.py`),
+  shared by the page and the PNG cards. Scoreboard rows carry E2's bracket.
+- [x] Mega usage panel on event and regulation views (E3)
+  `mega_stone_usage` and `team_mega_count`, each with a regulation and an
+  event grain, behind `#/usage/megas` and every event page.
 - [ ] `limitless_play` extractor, `event_tier = 'online'`, Official/Online/All scope, rollover fallback to Online (S1, after D1)
 - [ ] `pokemon_event_phase_usage` mart and the Day 2 conversion board (E1)
 - [ ] Top-cut bracket and player path on event pages (E2)

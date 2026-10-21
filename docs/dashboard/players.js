@@ -199,6 +199,7 @@
     var eventsNote = document.getElementById("player-events-note");
     var entry = (marts.player_index || []).filter(function (r) { return r.player_id === playerId; })[0];
     if (!entry) {
+      header.className = "";
       header.innerHTML = '<p class="empty-state">No player with id “' + esc(playerId || "") + '” in this dataset. ' +
         '<a href="' + App.routeHash("players", []) + '">Search players</a>.</p>';
       teamsEl.innerHTML = "";
@@ -226,9 +227,13 @@
     var best = allTeams.filter(function (t) { return t.placement; })
       .sort(function (a, b) { return a.placement - b.placement; })[0];
 
+    header.className = "page-band broadcast-band";
     header.innerHTML =
       '<p class="eyebrow"><a href="' + App.routeHash("players", []) + '">Players</a></p>' +
-      '<h2 class="event-title">' + esc(entry.player_name) + " " + App.countryCell(entry.player_country) + "</h2>" +
+      '<h2 class="event-title">' + App.playerLineHtml({
+        player_name: entry.player_name,
+        player_country: entry.player_country,
+      }, { noLink: true }) + "</h2>" +
       '<p class="event-meta">' + entry.team_count + " team" + (entry.team_count === 1 ? "" : "s") + " on record" +
       (best ? " · best finish " + App.ordinal(best.placement) + " at " + esc(App.shortEventName(best.event_name)) : "") +
       " · " + esc(regulationsLabel(entry.regulations)) + "</p>";

@@ -257,6 +257,9 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ),
     ),
     "player_archetype_record": (("matches_played", "wins", "losses"), ("win_rate",)),
+    # docs/upgrade-plan-2027q2.md, E3: the Mega usage panel.
+    "mega_stone_usage": (("team_count", "scope_team_count", "usage_rank"), ("team_share",)),
+    "team_mega_count": (("mega_count", "team_count"), ("team_share",)),
 }
 
 # Two of the marts above are far larger than anything the dashboard can
@@ -861,9 +864,12 @@ def short_event_name(event_name: str | None) -> str:
     return short or event_name
 
 
-def _latest_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _latest_event(
+    events: list[dict[str, Any]], sheets: list[dict[str, Any]] | None = None
+) -> dict[str, Any] | None:
     """The newest event in a scope, for the Overview's "Latest event" card
-    (docs/upgrade-plan-2027q1.md, C1)."""
+    (docs/upgrade-plan-2027q1.md, C1), with the winner's sheet when it is
+    published, so the card's team strip can show held items (V3)."""
     if not events:
         return None
     newest = max(events, key=lambda e: (e.get("event_date") or "", e.get("event_id") or ""))
@@ -880,9 +886,22 @@ def _latest_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
         "winner_record_losses",
         "winner_pokemon_keys",
     )
+    winner_sets = sorted(
+        (
+            row
+            for row in sheets or []
+            if newest.get("winner_team_id") and row.get("team_id") == newest["winner_team_id"]
+        ),
+        key=lambda row: row.get("slot_number") or 0,
+    )
     return {
         **{key: newest.get(key) for key in keys},
         "short_name": short_event_name(newest.get("event_name")),
+        "winner_team_id": newest.get("winner_team_id"),
+        "winner_sets": [
+            {k: row.get(k) for k in ("pokemon_key", "item_name", "ability", "nature", "moves")}
+            for row in winner_sets
+        ],
     }
 
 
@@ -1242,7 +1261,7 @@ def compute_kpis(
         "scope": scope,
         "event_count": len(events),
         "team_count": team_count,
-        "latest_event": _latest_event(events),
+        "latest_event": _latest_event(events, marts.get("tournament_team_sheets")),
         "starter_teams": starter_teams(marts, scope),
         "current_regulation": _current_regulation_kpi(
             legal_pool_by_regulation,

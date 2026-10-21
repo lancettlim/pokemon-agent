@@ -458,37 +458,190 @@
     );
   }
 
-  // A team drawn as the six Pokémon it actually is. `pokemonKeys` is the
-  // pipe-delimited, slot-ordered string the team marts publish
-  // (top_tournament_teams.pokemon_keys, team_list_convergence.pokemon_keys).
-  // Before this existed, a six-Pokémon team was rendered as its first
-  // slot's sprite alone, which misrepresented the team rather than merely
-  // under-illustrating it.
+  // ---------- team strip (docs/upgrade-plan-2027q2.md, V3) ----------
+  // Every team on the site is one component, after the game's own battle
+  // UI and the broadcast (R2): six square tiles, each with its held item
+  // in a white circle at the top-right corner and a Mega badge on the Mega
+  // holder, because the item is the team. A tile whose set is known opens
+  // it on tap or click (a popover with the item, ability, Stat Alignment,
+  // moves and a link to the profile); without a set it links straight to
+  // the profile. The strip stays one row of six, and wraps to 3x2 where a
+  // tile would fall under the 44px tap minimum (a container query).
+  //
+  // slots: [{pokemon_key, item_name?, ability?, nature?, moves?}] in slot
+  // order. opts.compact draws small inline sprites for a table cell, where
+  // the row is the tap target; opts.label names the team for a screen
+  // reader.
+  var stripSets = {};
+  var stripCount = 0;
+
+  function isMegaKey(key) {
+    return String(key || "").split("-").indexOf("mega") !== -1;
+  }
+
+  function teamStripHtml(slots, opts) {
+    opts = opts || {};
+    slots = (slots || []).filter(function (slot) { return slot && slot.pokemon_key; });
+    if (!slots.length) return "";
+    var names = slots.map(function (slot) { return pokemonNames[slot.pokemon_key] || slot.pokemon_key; });
+    var label = opts.label || "Team: " + names.join(", ");
+    var tiles = slots.map(function (slot, i) {
+      var key = slot.pokemon_key;
+      var sprite = sprites[key];
+      var img = sprite
+        ? '<img class="team-strip-art" src="' + sprite + '" alt="" loading="lazy" decoding="async">'
+        : '<span class="team-comp-blank"></span>';
+      var badges = "";
+      if (!opts.compact) {
+        var itemSrc = slot.item_name && itemIcons[slot.item_name];
+        if (slot.item_name) {
+          badges += '<span class="strip-item" title="' + escapeHtml(slot.item_name) + '">' +
+            (itemSrc ? '<img src="' + itemSrc + '" alt="">' : '<span class="strip-item-dot"></span>') + "</span>";
+        }
+        if (isMegaKey(key)) badges += '<span class="strip-mega" title="Mega Evolution">M</span>';
+      }
+      var title = names[i] + (slot.item_name ? " @ " + slot.item_name : "");
+      var hasSet = !opts.compact && (slot.ability || slot.nature || slot.moves || slot.item_name);
+      if (hasSet) {
+        stripCount += 1;
+        var id = "strip-" + stripCount;
+        stripSets[id] = slot;
+        return '<button type="button" class="team-strip-slot" data-strip-set="' + id + '" aria-label="' +
+          escapeHtml(title + ": show set") + '" aria-haspopup="dialog">' + img + badges + "</button>";
+      }
+      return '<a class="team-strip-slot" href="' + pokemonHref(key) + '" title="' + escapeHtml(title) + '"' +
+        (opts.compact ? ' tabindex="-1"' : "") + ">" + img + badges +
+        '<span class="visually-hidden">' + escapeHtml(names[i]) + "</span></a>";
+    }).join("");
+    // A strip shorter than six (a core) gets as many columns as it has tiles.
+    return '<div class="team-strip-host' + (opts.compact ? " is-compact" : "") + '"><div class="team-strip' + (opts.compact ? " is-compact" : "") +
+      '"' + (slots.length < 6 ? ' style="--strip-n:' + slots.length + '"' : "") +
+      ' role="group" aria-label="' + escapeHtml(label) + '">' + tiles + "</div></div>";
+  }
+
+  // The pipe-delimited, slot-ordered pokemon_keys the team marts publish,
+  // drawn as a strip with no sets (no item badges). Kept as the entry point
+  // for cores, archetypes and table cells; a 32px-or-smaller size draws
+  // the compact strip.
   function teamCompositionHtml(pokemonKeys, sizePx) {
-    var keys = String(pokemonKeys || "")
-      .split("|")
-      .filter(Boolean);
-    if (!keys.length) return "";
-    var size = sizePx || ICON_SIZES.sm;
-    return (
-      '<div class="team-comp">' +
-      keys
-        .map(function (key) {
-          var img = spriteImg(key, size);
-          // Keep the slot even when its sprite is unresolvable, so the
-          // composition still reads as six Pokémon rather than silently
-          // shrinking to five.
-          return (
-            '<a class="team-comp-slot" href="' + pokemonHref(key) + '" title="' +
-            escapeHtml(pokemonNames[key] || key) +
-            '">' +
-            (img || '<span class="team-comp-blank"></span>') +
-            "</a>"
-          );
-        })
-        .join("") +
-      "</div>"
-    );
+    var keys = String(pokemonKeys || "").split("|").filter(Boolean);
+    return teamStripHtml(keys.map(function (key) { return { pokemon_key: key }; }), {
+      compact: (sizePx || ICON_SIZES.sm) <= 32,
+    });
+  }
+
+  // The set popover a strip tile opens. One element, reused; it closes on
+  // a click elsewhere, Escape, scroll or a route change.
+  var stripPop = null;
+  var stripPopOwner = null;
+  function closeStripPop() {
+    if (stripPop) stripPop.hidden = true;
+    if (stripPopOwner) stripPopOwner.setAttribute("aria-expanded", "false");
+    stripPopOwner = null;
+  }
+  function openStripPop(owner) {
+    var slot = stripSets[owner.getAttribute("data-strip-set")];
+    if (!slot) return;
+    if (!stripPop) {
+      stripPop = document.createElement("div");
+      stripPop.className = "strip-pop";
+      stripPop.setAttribute("role", "dialog");
+      stripPop.hidden = true;
+      document.body.appendChild(stripPop);
+    }
+    var name = pokemonNames[slot.pokemon_key] || slot.pokemon_key;
+    var moves = splitMoves(slot.moves);
+    stripPop.innerHTML = '<p class="strip-pop-name"><a href="' + pokemonHref(slot.pokemon_key) + '">' +
+      escapeHtml(name) + " &rarr;</a></p><dl>" +
+      (slot.item_name ? "<dt>Item</dt><dd>" + itemCell(slot.item_name) + "</dd>" : "") +
+      (slot.ability ? "<dt>Ability</dt><dd>" + escapeHtml(slot.ability) + "</dd>" : "") +
+      (slot.nature ? "<dt>" + termHtml("alignment", "Stat Alignment") + "</dt><dd>" + escapeHtml(slot.nature) + "</dd>" : "") +
+      "</dl>" +
+      (moves.length ? '<ul class="strip-pop-moves">' + moves.map(function (m) { return "<li>" + escapeHtml(m) + "</li>"; }).join("") + "</ul>" : "");
+    stripPop.setAttribute("aria-label", name + "'s set");
+    stripPop.hidden = false;
+    stripPopOwner = owner;
+    owner.setAttribute("aria-expanded", "true");
+    var rect = owner.getBoundingClientRect();
+    var width = Math.min(280, window.innerWidth - 24);
+    stripPop.style.width = width + "px";
+    var left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
+    stripPop.style.left = left + window.scrollX + "px";
+    stripPop.style.top = rect.bottom + 8 + window.scrollY + "px";
+    var link = stripPop.querySelector("a");
+    if (link) link.focus({ preventScroll: true });
+  }
+  document.addEventListener("click", function (e) {
+    var owner = e.target.closest && e.target.closest("[data-strip-set]");
+    if (owner) {
+      e.preventDefault();
+      if (stripPopOwner === owner && stripPop && !stripPop.hidden) closeStripPop();
+      else openStripPop(owner);
+      return;
+    }
+    if (stripPop && !stripPop.hidden && !(e.target.closest && e.target.closest(".strip-pop"))) closeStripPop();
+    else if (e.target.closest && e.target.closest(".strip-pop a")) closeStripPop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && stripPop && !stripPop.hidden) {
+      var owner = stripPopOwner;
+      closeStripPop();
+      if (owner) owner.focus();
+    }
+  });
+  window.addEventListener("scroll", function () {
+    if (stripPop && !stripPop.hidden && !stripPop.contains(document.activeElement)) closeStripPop();
+  }, { passive: true });
+
+  // ---------- player lines, scoreboard rows and phase chips (V4, V5) ----------
+  // "A player is name · country · record, in chips and in that order"
+  // (docs/upgrade-plan-2027q2.md, rule 5). player: {player_id?,
+  // player_name, player_country?, record_wins?, record_losses?}.
+  function playerLineHtml(player, opts) {
+    opts = opts || {};
+    if (!player || !player.player_name) return "";
+    var name = player.player_id && !opts.noLink
+      ? '<a class="sb-name" href="' + routeHash("player", [player.player_id]) + '">' + escapeHtml(player.player_name) + "</a>"
+      : '<span class="sb-name">' + escapeHtml(player.player_name) + "</span>";
+    var flag = countryFlag(player.player_country);
+    var country = player.player_country
+      ? '<span class="sb-chip sb-cc" title="Country">' + (flag ? '<span aria-hidden="true">' + flag + "</span> " : "") +
+        escapeHtml(player.player_country) + "</span>"
+      : "";
+    var record = recordText(player.record_wins, player.record_losses);
+    return '<span class="sb-player">' + name + country +
+      (record ? '<span class="sb-chip sb-rec" title="Record (wins–losses)">' + record + "</span>" : "") + "</span>";
+  }
+
+  // A match as a scoreboard row: "NAME [CC] [W–L] [score]" for each side,
+  // the winner in bold (R2's scoreboard bar). On a phone the two sides
+  // stack. Match results are team vs team: callers label the view so.
+  // match: {a: player, b: player, winner: "a" | "b" | null, score_a?,
+  // score_b?, label?}.
+  function scoreboardRowHtml(match) {
+    function side(player, score, won, which) {
+      return '<span class="sb-side sb-' + which + (won ? " is-winner" : "") + '">' + playerLineHtml(player) +
+        '<span class="sb-score" aria-label="' + (won ? "won" : "lost") + '">' +
+        (score != null ? escapeHtml(score) : won ? "W" : "L") + "</span></span>";
+    }
+    return '<div class="scoreboard-row">' + (match.label ? '<span class="phase-chip">' + escapeHtml(match.label) + "</span>" : "") +
+      side(match.a, match.score_a, match.winner === "a", "a") +
+      '<span class="sb-vs" aria-hidden="true">vs</span>' +
+      side(match.b, match.score_b, match.winner === "b", "b") + "</div>";
+  }
+
+  // A small black italic chip saying what a view covers (rule 6).
+  function phaseChipHtml(label, cls) {
+    return label ? '<span class="phase-chip' + (cls ? " " + cls : "") + '">' + escapeHtml(label) + "</span>" : "";
+  }
+
+  // The phase a finish reached: top 8, top 16, or Swiss.
+  function placementPhase(placement) {
+    if (placement == null) return "";
+    if (placement === 1) return "Champion";
+    if (placement <= 8) return "Top 8";
+    if (placement <= 16) return "Top 16";
+    return "Swiss";
   }
 
   // A `typeFn` for renderGrid6xn that resolves a row's types through
@@ -552,12 +705,31 @@
   // the type-colour side bar). One role="img" with both types in its label,
   // so a screen reader hears "dragon / ground type" once; each emblem keeps
   // its title for a desktop hover. No type data -> "".
-  function typeIconsHtml(type1, type2, sizePx) {
+  // square: true draws V6's square badges, for broadcast components.
+  function typeIconsHtml(type1, type2, sizePx, square) {
     var types = [type1, type2].filter(Boolean).map(function (t) { return String(t).toLowerCase(); });
-    var icons = types.map(function (t) { return typeIconImg(t, sizePx || 20); }).filter(Boolean);
+    var icons = types.map(function (t) {
+      return square ? typeBadgeSquare(t, sizePx || 20) : typeIconImg(t, sizePx || 20);
+    }).filter(Boolean);
     if (!icons.length) return "";
     return '<span class="type-icons" role="img" aria-label="' + escapeHtml(types.join(" / ") + " type") + '">' +
       icons.join("") + "</span>";
+  }
+
+  // Square type badge (docs/upgrade-plan-2027q2.md, V6): the type's colour
+  // filled, our own white glyph on it (pipelines/render/type_glyphs.py, in
+  // the payload as type_glyphs), never the official icon. Broadcast
+  // components use it; dense tables keep the round emblems.
+  var typeGlyphs = DATA.type_glyphs || {};
+  function typeBadgeSquare(typeName, sizePx) {
+    var type = String(typeName || "").toLowerCase();
+    var glyph = typeGlyphs[type];
+    if (!glyph) return typeIconImg(type, sizePx);
+    var size = sizePx || 22;
+    var inner = Math.round(size * 0.72);
+    return '<span class="type-sq" title="' + escapeHtml(type) + '" style="width:' + size + "px;height:" + size +
+      "px;background:" + typeColor(type) + '"><svg viewBox="0 0 24 24" width="' + inner + '" height="' + inner +
+      '" fill="#fff" fill-rule="evenodd" aria-hidden="true">' + glyph + "</svg></span>";
   }
 
   // Renders a Pokémon's type_1/type_2 into `container` as a type-badge row
@@ -918,11 +1090,12 @@
       : "";
     var who = [];
     if (team.player_name && !opts.hidePlayer) {
-      who.push(
-        (team.player_id ? '<a href="' + routeHash("player", [team.player_id]) + '">' : "<span>") +
-        escapeHtml(team.player_name) + (team.player_id ? "</a>" : "</span>") +
-        (team.player_country ? " " + countryCell(team.player_country) : "")
-      );
+      // Name and country as chips (V4); the record is already the headline.
+      who.push(playerLineHtml({
+        player_id: team.player_id,
+        player_name: team.player_name,
+        player_country: team.player_country,
+      }));
     }
     if (team.event_id && !opts.hideEvent) {
       who.push('<a href="' + routeHash("event", [team.event_id]) + '" title="' + escapeHtml(team.event_name || "") + '">' +
@@ -942,10 +1115,20 @@
     if (card) {
       actions.push('<a class="btn btn-sm" href="' + escapeHtml(card) + '" download>Download card</a>');
     }
+    // The strip carries each slot's held item when the sheet is published
+    // (V3); otherwise it draws the six Pokémon alone.
+    var keys = String(team.pokemon_keys || "").split("|").filter(Boolean);
+    var slots = sets && sets.length && (!keys.length || sets.length === keys.length)
+      ? sets
+      : keys.map(function (key) { return { pokemon_key: key }; });
+    var phase = opts.phase !== undefined ? opts.phase : placementPhase(team.placement);
     return '<article class="team-card">' +
       '<header class="team-card-head"><span class="team-card-headline">' + headline + "</span>" + winRate + "</header>" +
-      (who.length ? '<div class="team-card-who">' + who.join(" · ") + "</div>" : "") +
-      teamCompositionHtml(team.pokemon_keys, 40) +
+      (phase || who.length
+        ? '<div class="team-card-who">' + phaseChipHtml(phase) + who.join(" · ") + "</div>"
+        : "") +
+      teamStripHtml(slots, { label: (team.player_name ? team.player_name + "'s team: " : "Team: ") +
+        keys.map(function (k) { return pokemonNames[k] || k; }).join(", ") }) +
       (sets && sets.length
         ? '<details class="team-card-sets"><summary>Sets</summary><ul>' + sets.map(compactSetHtml).join("") + "</ul></details>"
         : "") +
@@ -1661,6 +1844,7 @@
     var tabChanged = route.tab !== currentRoute.tab;
     // A tip opened by the tap that changed the view would outlive its owner.
     hideTip();
+    closeStripPop();
     // An event or player page titles the tab after itself; everything else
     // keeps the site's title.
     if (tabChanged) document.title = DEFAULT_TITLE;
@@ -1962,7 +2146,7 @@
       '<span class="board-rank" aria-hidden="true">' + (index + 1) + "</span>" + img +
       '<span class="board-foot" aria-hidden="true"><span class="board-value-row">' +
       '<span class="board-value">' + formatPercent(tile.team_share) + "</span>" +
-      '<span class="board-types">' + typeIconsHtml(tile.type_1, tile.type_2, 20) + "</span></span>" +
+      '<span class="board-types">' + typeIconsHtml(tile.type_1, tile.type_2, 22, true) + "</span></span>" +
       '<span class="board-name">' + boardNameHtml(tile.pokemon_name) + "</span></span></a>";
   }
 
@@ -2481,6 +2665,15 @@
 
     setupUsageSuccess();
     setupUsageTrends();
+    renderMegaPanel(
+      {
+        note: document.getElementById("usage-mega-note"),
+        count: document.getElementById("usage-mega-count"),
+        table: document.getElementById("usage-mega-table"),
+      },
+      { scope_kind: "regulation", scope_code: regulationScope },
+      "in " + shortRegulation(regulationScope)
+    );
 
     usageSubTabs = setupSubTabs(
       document.querySelectorAll('.tab-panel[data-panel="usage"] .subtab-btn'),
@@ -2491,6 +2684,70 @@
   }
   var usageSubTabs = null;
   var usageWindowRoute = function () {};
+
+  // ---------- Mega usage panel (docs/upgrade-plan-2027q2.md, E3) ----------
+  // "Which Mega Stones are teams carrying": each Mega's share of teams, and
+  // the share of teams carrying zero, one, two or more. Shared by the Usage
+  // tab's Megas view (a regulation scope) and event pages (one event).
+  // where: {scope_kind: "regulation" | "event", scope_code?, event_id?}.
+  var MEGA_COUNT_COLORS = ["var(--muted)", "var(--series-blue)", "var(--series-red)", "var(--series-green)"];
+  function megaRowsFor(martName, where) {
+    return (marts[martName] || []).filter(function (r) {
+      if (r.scope_kind !== where.scope_kind) return false;
+      return where.scope_kind === "event" ? r.event_id === where.event_id : r.scope_code === where.scope_code;
+    });
+  }
+
+  function renderMegaPanel(els, where, sampleLabel) {
+    var stones = megaRowsFor("mega_stone_usage", where);
+    var counts = megaRowsFor("team_mega_count", where).sort(function (a, b) { return a.mega_count - b.mega_count; });
+    if (els.note) {
+      var teams = counts.reduce(function (sum, r) { return sum + (r.team_count || 0); }, 0);
+      els.note.textContent = stones.length
+        ? "Share of the " + teams.toLocaleString() + " teams " + sampleLabel + " that carried each Mega Stone. " +
+          "A Mega holder is recorded as its Mega form on the team sheet."
+        : "No Mega Stones recorded " + sampleLabel + ".";
+    }
+    if (els.count) {
+      els.count.innerHTML = counts.length
+        ? '<p class="eyebrow">Mega Stones per team</p><div class="mega-count-bar" role="img" aria-label="' +
+          escapeHtml(counts.map(function (r) { return r.mega_count + ": " + formatPercent(r.team_share); }).join(", ")) + '">' +
+          counts.map(function (r) {
+            return '<span style="width:' + (r.team_share * 100).toFixed(2) + "%;background:" +
+              MEGA_COUNT_COLORS[Math.min(r.mega_count, 3)] + '">' + (r.team_share >= 0.08 ? formatPercent(r.team_share) : "") + "</span>";
+          }).join("") + '</div><ul class="mega-count-list">' + counts.map(function (r) {
+            return '<li><span class="mega-swatch" style="background:' + MEGA_COUNT_COLORS[Math.min(r.mega_count, 3)] + '"></span>' +
+              (r.mega_count === 0 ? "No Mega Stone" : r.mega_count === 1 ? "One Mega Stone" : r.mega_count + " Mega Stones") +
+              '<strong data-tip="' + escapeHtml(r.team_count.toLocaleString() + " teams") + '">' + formatPercent(r.team_share) + "</strong></li>";
+          }).join("") + "</ul>"
+        : "";
+    }
+    if (els.table) {
+      if (!els.table.megaTable) {
+        els.table.megaTable = createDataTable(els.table, {
+          caption: "Mega Stones carried",
+          sort: { key: "team_share", dir: "desc" },
+          limit: 12,
+          rowHref: pokemonRowHref,
+          empty: "No Mega Stones recorded.",
+          columns: [
+            { key: "usage_rank", label: "#", type: "rank", main: true },
+            { key: "pokemon_name", label: "Mega", type: "pokemon", main: true, sortable: true },
+            { key: "item_name", label: "Stone", sortable: true, render: function (r) { return itemCell(r.item_name); } },
+            {
+              key: "team_share",
+              label: "Teams",
+              term: "usage",
+              type: "share",
+              main: true,
+              title: function (r) { return r.team_count.toLocaleString() + " of " + r.scope_team_count.toLocaleString() + " teams"; },
+            },
+          ],
+        });
+      }
+      els.table.megaTable.setRows(stones);
+    }
+  }
 
   // Success subtab (backlog #8's pokemon_placement_weighted_usage): the
   // "popular vs. successful" split. rank_movement is computed here rather
@@ -3420,9 +3677,10 @@
       });
     renderGrid6xn(document.getElementById("detected-archetype-grid"), rows, {
       iconHtmlFn: function (r) {
+        // Compact: three tiles in a narrow card can't each reach 44px.
         return teamCompositionHtml(
           [r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c].join("|"),
-          ICON_SIZES.sm
+          32
         );
       },
       labelFn: function (r) {
@@ -4340,7 +4598,7 @@
   });
   registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage, {
-    extraMarts: ["pokemon_event_usage_vs_regulation"],
+    extraMarts: ["pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count"],
     onRoute: function (route) {
       if (usageSubTabs) usageSubTabs.fromRoute(route);
       usageWindowRoute(route);
@@ -4430,6 +4688,14 @@
     spriteImg: spriteImg,
     heroImg: heroImg,
     teamCompositionHtml: teamCompositionHtml,
+    teamStripHtml: teamStripHtml,
+    isMegaKey: isMegaKey,
+    playerLineHtml: playerLineHtml,
+    scoreboardRowHtml: scoreboardRowHtml,
+    phaseChipHtml: phaseChipHtml,
+    placementPhase: placementPhase,
+    typeBadgeSquare: typeBadgeSquare,
+    closeStripPop: closeStripPop,
     typeColor: typeColor,
     typeIconsHtml: typeIconsHtml,
     typeFnFromProfile: typeFnFromProfile,
@@ -4449,6 +4715,7 @@
     pokemonRowHref: pokemonRowHref,
     registerTab: registerTab,
     setupSubTabs: setupSubTabs,
+    renderMegaPanel: renderMegaPanel,
     ensureData: ensureData,
     regulationScope: regulationScope,
     scopeLabel: scopeLabel,

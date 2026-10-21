@@ -1104,3 +1104,58 @@ models:
 # dashboard-facing output and aren't part of the release package (see
 # CLAUDE.md's "Repository structure"), so a mart-quality failure should be
 # visible and actionable without blocking `pipelines.cli release`.
+  - name: mega_stone_usage
+    description: >
+      Which Mega Stones teams carry (docs/upgrade-plan-2027q2.md, E3): one
+      row per Mega form per regulation scope (scope_kind 'regulation',
+      event_id null) and per event (scope_kind 'event'), with its share of
+      the scope's teams. A Mega holder is recorded as its Mega form, so the
+      roster holds this directly. Written to data/marts/mega_stone_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['scope_kind', 'scope_code', 'event_id', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: mega_stone_usage}
+    columns:
+      - name: scope_kind
+        description: >
+          'regulation' (the whole regulation scope, event_id null) or 'event'
+          (one event's teams).
+      - name: scope_code
+        description: >
+          The regulation ("m-c", ..., or 'all') for a 'regulation' row; the
+          event's regulation for an 'event' row.
+      - name: item_name
+        description: >
+          The Mega Stone that form holds (its most common held item).
+      - name: team_count
+        description: >
+          Teams in the scope carrying this Mega form.
+      - name: scope_team_count
+        description: >
+          Teams in the scope: the regulation's (or 'all') or the event's.
+      - name: team_share
+        description: >
+          team_count over scope_team_count: the share of teams carrying
+          this Mega.
+  - name: team_mega_count
+    description: >
+      The share of teams carrying zero, one, two (or, rarely, more) Mega
+      forms, per regulation scope and per event, the second half of the
+      Mega usage panel (docs/upgrade-plan-2027q2.md, E3). Written to
+      data/marts/team_mega_count.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['scope_kind', 'scope_code', 'event_id', 'mega_count']
+          config:
+            meta: {category: mart_quality, table_name: team_mega_count}
+    columns:
+      - name: mega_count
+        description: >
+          How many Mega forms a team's sheet lists.
+      - name: team_share
+        description: >
+          The share of the scope's teams with exactly mega_count Megas; the
+          rows of one scope sum to 1.

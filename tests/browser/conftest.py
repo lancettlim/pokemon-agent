@@ -17,7 +17,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from dashboard_fixture import write_fixture_manifest, write_fixture_marts
+from dashboard_fixture import write_fixture_manifest, write_fixture_marts, write_fixture_mega_marts
 
 from pipelines.dashboard import build
 from pipelines.regulations import Regulation, load_regulations
@@ -34,6 +34,7 @@ def _build_site(root: Path, regulations: list[Regulation] | None = None) -> Path
     marts_dir = root / "marts"
     normalized_dir = root / "normalized"
     write_fixture_marts(marts_dir, normalized_dir)
+    write_fixture_mega_marts(marts_dir)
     write_fixture_manifest(root / "manifests")
     output_dir = root / "site"
     build.build(

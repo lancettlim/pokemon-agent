@@ -49,6 +49,7 @@ from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
 from pipelines.render import template as render_template
+from pipelines.render import type_glyphs
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -97,6 +98,7 @@ _CRITICAL_PAYLOAD_KEYS = (
     "mart_files",
     "share_cards",
     "site",
+    "type_glyphs",
 )
 
 # The marts are split into shards so the page downloads only what the view
@@ -132,6 +134,10 @@ ON_DEMAND_MARTS = (
     # Players tab's region view and Top Teams' converged lists.
     "pokemon_usage_by_country",
     "team_list_convergence",
+    # The Mega usage panel (E3), on event pages and the Usage tab's Megas
+    # view; one file holds every scope's and event's rows.
+    "mega_stone_usage",
+    "team_mega_count",
 )
 
 # Marts the build summarises into the inline KPIs and no view reads raw:
@@ -471,6 +477,9 @@ def build(
     )
     payload["type_icons"] = _copy_type_icons(output_dir)
     payload["type_colors"] = _type_colors()
+    # Our own white glyphs for the square type badge (V6), shared with the
+    # share-card templates.
+    payload["type_glyphs"] = type_glyphs.GLYPHS
     payload["item_icons"] = _resolve_item_icons(
         payload["marts"],
         output_dir=output_dir,

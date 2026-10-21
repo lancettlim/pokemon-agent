@@ -112,3 +112,95 @@ def test_speed_tiers_speak_stat_points_not_evs(site_url, open_page):
     page.wait_for_function("document.getElementById('ds-glossary').textContent.length > 0")
     glossary = page.locator("#ds-glossary").inner_text()
     assert "Stat Points" in glossary and "Stat Alignment" in glossary
+
+
+def test_team_cards_draw_the_team_strip_with_items_and_open_a_set(site_url, open_page):
+    """V3: six square tiles with item badges; a tap opens the set."""
+    page = open_page()
+    page.goto(site_url + "#/event/EVT-LOU")
+    page.wait_for_load_state("networkidle")
+    card = page.locator("#event-top8 .team-card").first
+    slots = card.locator(".team-strip-slot")
+    assert slots.count() == 6
+    assert card.locator(".strip-item").count() == 6
+    # One row of six on desktop.
+    tops = {
+        round(box["top"])
+        for box in _boxes(page, "#event-top8 .team-card:first-child .team-strip-slot")
+    }
+    assert len(tops) == 1
+    slots.first.click()
+    pop = page.locator(".strip-pop")
+    assert pop.is_visible()
+    text = pop.inner_text()
+    assert "Ability" in text and "Item" in text
+    assert pop.locator("a").first.get_attribute("href").startswith("#/pokemon/")
+    page.keyboard.press("Escape")
+    assert pop.is_hidden()
+    assert not page.errors
+
+
+def test_team_strip_keeps_one_row_of_six_on_a_360px_phone(site_url, open_page):
+    """M3: tiles of at least 44px, in one row, inside a card."""
+    page = open_page(360, 780, touch=True)
+    page.goto(site_url + "#/event/EVT-LOU")
+    page.wait_for_load_state("networkidle")
+    boxes = page.evaluate(
+        """() => Array.from(document.querySelectorAll(
+            '#event-top8 .team-card:first-child .team-strip-slot')).map((el) => {
+            const r = el.getBoundingClientRect();
+            return {top: Math.round(r.top), width: r.width};
+        })"""
+    )
+    assert len(boxes) == 6
+    assert len({b["top"] for b in boxes}) == 1
+    assert min(b["width"] for b in boxes) >= 44
+
+
+def test_player_lines_and_phase_chips_say_who_and_what(site_url, open_page):
+    """V4/V5: name · country in chips; each card says the phase it reached."""
+    page = open_page()
+    page.goto(site_url + "#/event/EVT-LOU")
+    page.wait_for_load_state("networkidle")
+    first = page.locator("#event-top8 .team-card").first
+    assert first.locator(".phase-chip").inner_text().lower() == "champion"
+    assert (
+        page.locator("#event-top8 .team-card").nth(1).locator(".phase-chip").inner_text().lower()
+        == "top 8"
+    )
+    line = first.locator(".sb-player")
+    assert line.locator(".sb-name").text_content() == "Player 1"
+    assert "US" in line.locator(".sb-cc").inner_text()
+    header = page.locator("#event-header")
+    assert header.locator(".sb-rec").count() == 1  # the winner's record chip
+    assert "page-band" in header.get_attribute("class")
+
+
+def test_board_tiles_use_square_type_badges(site_url, open_page):
+    """V6: the broadcast board draws our own square badges."""
+    page = open_page()
+    page.goto(site_url)
+    page.wait_for_load_state("networkidle")
+    badge = page.locator("#top-board .board-tile").first.locator(".type-sq").first
+    assert badge.locator("svg path").count() >= 1
+    assert badge.get_attribute("title") == "grass"
+
+
+def test_mega_panel_on_events_and_the_usage_megas_view(site_url, open_page):
+    """E3: each Mega's share of teams and the teams-per-Mega-count split."""
+    page = open_page()
+    page.goto(site_url + "#/event/EVT-LOU")
+    page.wait_for_load_state("networkidle")
+    rows = page.locator("#event-mega-table tbody tr")
+    assert rows.count() == 2
+    assert "Garchompite" in rows.first.inner_text()
+    assert "50.0%" in rows.first.inner_text()  # 180 of 360 teams
+    counts = page.locator("#event-mega-count .mega-count-list li")
+    assert counts.count() == 3
+    assert "60.0%" in counts.nth(2).inner_text()
+    page.goto("about:blank")
+    page.goto(site_url + "#/usage/megas")
+    page.wait_for_load_state("networkidle")
+    assert page.locator("#usage-mega-table tbody tr").count() == 2
+    assert "100 teams" in page.locator("#usage-mega-note").inner_text()
+    assert not page.errors

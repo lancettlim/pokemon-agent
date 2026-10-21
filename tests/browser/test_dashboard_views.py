@@ -99,7 +99,8 @@ def test_event_page_lists_the_top_8_and_the_fields_outliers(site_url, open_page)
     cards = page.locator("#event-top8 .team-card")
     assert cards.count() == 8
     first = cards.first.inner_text()
-    assert first.startswith("1st") and "Player 1" in first
+    # The player line is caps chips (docs/upgrade-plan-2027q2.md, V4).
+    assert first.startswith("1st") and "Player 1" in cards.first.text_content()
     assert cards.first.locator("[data-copy]").count() == 1
     assert page.locator("#event-over-table tbody tr").count() > 0
     assert page.locator("#event-under-table tbody tr").count() > 0
@@ -312,7 +313,7 @@ def test_player_search_opens_the_player_page(site_url, open_page):
     page.locator("#player-search-table tbody tr").first.get_by_text("Player 1").click()
     page.wait_for_function("location.hash === '#/player/P000'")
 
-    assert "Player 1" in page.locator("#player-header").inner_text()
+    assert "Player 1" in page.locator("#player-header").text_content()
     assert "best finish 1st" in page.locator("#player-header").inner_text()
     # Two M-C events on the page; the M-B one is a link away.
     cards = page.locator("#player-teams .team-card")
@@ -428,7 +429,8 @@ def test_pokemon_cards_show_type_icons_not_a_colour_bar(site_url, open_page):
     tiles = page.locator("#top-board .board-tile")
     assert tiles.count() == 8
     for i in range(tiles.count()):
-        assert tiles.nth(i).locator(".board-types .type-icons img.type-icon").count() in (1, 2)
+        # The board's broadcast tiles carry V6's square badges.
+        assert tiles.nth(i).locator(".board-types .type-icons .type-sq").count() in (1, 2)
     first = tiles.first.locator(".type-icons")
     assert first.get_attribute("role") == "img"
     assert first.get_attribute("aria-label") == "grass type"  # Rillaboom: one type

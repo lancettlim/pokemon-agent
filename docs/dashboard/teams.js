@@ -599,6 +599,7 @@
         function (value) {
           slot.item = value;
           persist();
+          renderStrip();
         }
       );
       itemSelect.setAttribute("aria-label", "Held item");
@@ -697,7 +698,13 @@
       return el;
     }
 
+    var stripEl = document.getElementById("team-builder-strip");
+    function renderStrip() {
+      if (stripEl) stripEl.innerHTML = team.length ? App.teamStripHtml(team.map(slotToSet), { label: "Your team" }) : "";
+    }
+
     function renderSlots() {
+      renderStrip();
       if (!slotsEl) return;
       slotsEl.innerHTML = "";
       for (var i = 0; i < MAX_TEAM_SIZE; i++) {
@@ -1170,6 +1177,8 @@
           },
           {
             headline: n + (n === 1 ? " player" : " players"),
+            // Limitless lists cover the day-2 cut only (V5's phase).
+            phase: "Day 2",
             meta: meta.join(" · "),
             useHref: App.routeHash("team-builder", ["list", r.team_list_id]),
           }

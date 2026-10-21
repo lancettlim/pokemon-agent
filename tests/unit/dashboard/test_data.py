@@ -1394,3 +1394,22 @@ def test_kpis_carry_a_board_per_player_scope():
     assert (board["team_count"], board["event_count"]) == (1000, 1)
     assert [t["pokemon_key"] for t in board["forms"]] == ["rillaboom", "sneasler"]
     assert [t["pokemon_key"] for t in board["species"]] == ["rillaboom", "sneasler"]
+
+
+def test_latest_event_carries_the_winners_sheet_for_the_team_strip():
+    """docs/upgrade-plan-2027q2.md, V3: the Overview's winner strip shows held
+    items without fetching the sheets."""
+    events = [
+        {"event_id": "old", "event_date": "2026-09-01", "winner_team_id": "t0"},
+        {"event_id": "new", "event_date": "2026-10-09", "winner_team_id": "t1", "event_name": "X"},
+    ]
+    sheets = [
+        {"team_id": "t1", "slot_number": 2, "pokemon_key": "b", "item_name": "Focus Sash"},
+        {"team_id": "t1", "slot_number": 1, "pokemon_key": "a", "item_name": "Choice Scarf"},
+        {"team_id": "t0", "slot_number": 1, "pokemon_key": "z", "item_name": "Leftovers"},
+    ]
+    latest = data._latest_event(events, sheets)
+    assert latest["event_id"] == "new"
+    assert [s["pokemon_key"] for s in latest["winner_sets"]] == ["a", "b"]
+    assert latest["winner_sets"][0]["item_name"] == "Choice Scarf"
+    assert data._latest_event(events)["winner_sets"] == []

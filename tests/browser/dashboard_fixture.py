@@ -873,6 +873,49 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
     )
 
 
+# docs/upgrade-plan-2027q2.md, E3: two Megas stand in for the format's (the
+# fixture's Pokémon have no Mega forms; the panel doesn't check).
+MEGAS = (("garchomp", "Garchompite"), ("kingambit", "Kingambitite"))
+
+
+def write_fixture_mega_marts(marts_dir: Path) -> None:
+    stones = []
+    counts = []
+    scopes = [("regulation", scope, "", 100) for scope in SCOPES]
+    scopes += [
+        ("event", regulation, event_id, n) for event_id, (_, _, _, regulation, n) in EVENTS.items()
+    ]
+    for kind, scope, event_id, teams in scopes:
+        for rank, (key, stone) in enumerate(MEGAS, start=1):
+            team_count = teams // (rank + 1)
+            stones.append(
+                {
+                    "scope_kind": kind,
+                    "scope_code": scope,
+                    "event_id": event_id,
+                    "pokemon_key": key,
+                    "item_name": stone,
+                    "team_count": team_count,
+                    "scope_team_count": teams,
+                    "team_share": round(team_count / teams, 4),
+                    "usage_rank": rank,
+                }
+            )
+        for mega_count, share in ((0, 0.1), (1, 0.3), (2, 0.6)):
+            counts.append(
+                {
+                    "scope_kind": kind,
+                    "scope_code": scope,
+                    "event_id": event_id,
+                    "mega_count": mega_count,
+                    "team_count": round(teams * share),
+                    "team_share": share,
+                }
+            )
+    _write(marts_dir / "mega_stone_usage.csv", stones)
+    _write(marts_dir / "team_mega_count.csv", counts)
+
+
 def write_fixture_manifest(manifests_dir: Path) -> None:
     """A 0.4.0-style manifest, distributed as a Release asset (its
     `package` block), for the Data section's table cards (D1/D2)."""

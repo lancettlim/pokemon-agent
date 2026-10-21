@@ -50,12 +50,23 @@
         '<p class="sub">' + esc(latest.event_date) + " · " + esc(latest.event_tier || "") + " · " +
         Number(latest.team_count || 0).toLocaleString() + " teams</p>" +
         (latest.winner_player_name
-          ? '<p class="latest-event-winner">Won by <strong>' + esc(latest.winner_player_name) + "</strong> " +
-            App.countryCell(latest.winner_player_country) +
-            (latest.winner_record_wins != null
-              ? " · " + App.recordText(latest.winner_record_wins, latest.winner_record_losses)
-              : "") + "</p>" +
-            App.teamCompositionHtml(latest.winner_pokemon_keys, 40)
+          ? '<p class="latest-event-winner">' + App.phaseChipHtml("Champion") + " " +
+            App.playerLineHtml({
+              player_name: latest.winner_player_name,
+              player_country: latest.winner_player_country,
+              record_wins: latest.winner_record_wins,
+              record_losses: latest.winner_record_losses,
+            }) + "</p>" +
+            // The winner's sheet rides in the inline KPIs, so the strip
+            // shows held items with no fetch (V3).
+            App.teamStripHtml(
+              (latest.winner_sets && latest.winner_sets.length)
+                ? latest.winner_sets
+                : String(latest.winner_pokemon_keys || "").split("|").filter(Boolean).map(function (k) {
+                    return { pokemon_key: k };
+                  }),
+              { label: latest.winner_player_name + "'s winning team" }
+            )
           : "") +
         '<p><a class="btn btn-sm" href="' + App.routeHash("event", [latest.event_id]) + '">Top 8 and sets</a> ' +
         '<a class="btn btn-sm" href="' + App.routeHash("events", []) + '">All events</a></p>' +
@@ -183,6 +194,7 @@
     var perfNote = document.getElementById("event-performers-note");
     var perfBody = document.getElementById("event-performers");
     if (!event) {
+      header.className = "";
       header.innerHTML = '<p class="empty-state">No event with id “' + esc(eventId || "") +
         '” in this dataset. <a href="' + App.routeHash("events", []) + '">See all events</a>.</p>';
       top8.innerHTML = "";
@@ -195,9 +207,18 @@
     var sources = [];
     if (event.pairings_url) sources.push('<a href="' + esc(event.pairings_url) + '" rel="noopener">RK9 pairings</a>');
     if (event.source_url) sources.push('<a href="' + esc(event.source_url) + '" rel="noopener">' + esc(event.source_name || "Team sheets") + "</a>");
+    header.className = "page-band broadcast-band";
     header.innerHTML =
       '<p class="eyebrow"><a href="' + App.routeHash("events", []) + '">Events</a></p>' +
       "<h2 class=\"event-title\">" + esc(event.event_name) + "</h2>" +
+      (event.winner_player_name
+        ? '<p class="event-winner">' + App.phaseChipHtml("Champion") + " " + App.playerLineHtml({
+            player_name: event.winner_player_name,
+            player_country: event.winner_player_country,
+            record_wins: event.winner_record_wins,
+            record_losses: event.winner_record_losses,
+          }) + "</p>"
+        : "") +
       '<p class="event-meta">' + [
         esc(event.event_date),
         esc(event.event_tier || ""),
@@ -232,6 +253,15 @@
       ? "Only " + (event.team_count || 0) + " teams: too few to compare this event's usage with the regulation's."
       : "Share of teams at this event against the whole of " + App.shortRegulation(event.regulation_code) +
         ", across " + Number(event.team_count).toLocaleString() + " teams.";
+    App.renderMegaPanel(
+      {
+        note: document.getElementById("event-mega-note"),
+        count: document.getElementById("event-mega-count"),
+        table: document.getElementById("event-mega-table"),
+      },
+      { scope_kind: "event", event_id: eventId },
+      "at this event"
+    );
     if (!thin) {
       overTable.setRows(rows.filter(function (r) { return r.team_share_delta > 0; })
         .sort(function (a, b) { return b.team_share_delta - a.team_share_delta; })
@@ -245,7 +275,7 @@
   renderOverviewCards();
   App.registerTab("events", setupEvents);
   App.registerTab("event", setupEvent, {
-    extraMarts: ["tournament_team_sheets", "pokemon_event_usage_vs_regulation"],
+    extraMarts: ["tournament_team_sheets", "pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count"],
     onRoute: renderEvent,
   });
 })();

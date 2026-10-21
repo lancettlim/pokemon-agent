@@ -91,7 +91,9 @@ TAP_TARGETS = ", ".join(
         ".calc-mode-btn",
         ".segmented button",
         ".board-tile",
-        ".team-strip-slot",
+        # A compact strip is inline sprites in a row that is itself the
+        # target (a table cell, a saved team).
+        ".team-strip:not(.is-compact) .team-strip-slot",
         ".round-tab",
         ".type-popover-btn",
         ".more-menu-btn",

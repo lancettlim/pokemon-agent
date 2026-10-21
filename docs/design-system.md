@@ -669,12 +669,68 @@ no data fetch.
 - **One number per tile.** Win rate, slot share and sample live in the
   tooltip, the profile and the Usage table, never on the tile.
 
+### Team strip (2027 Q2, V3)
+
+`teamStripHtml(slots, opts)` in `app.js` is every team on the site: Top
+Teams, event top 8, player pages, Copy and play, the Overview's winner,
+the Builder's preview, saved teams, and (as its own markup) the PNG team
+cards. It replaced `teamCompositionHtml`, which drew sprites only and is
+now a thin entry point onto the strip for cores and table cells.
+
+- **Six square tiles**, the held item in a white circle at each tile's
+  top-right corner and a Mega badge (a four-colour circle with an "M", our
+  own mark) under it on the Mega holder: the item is the team, as in the
+  game's battle UI and the broadcast (R2).
+- **A tile whose set is known opens it** on tap or click: a popover with
+  the item, ability, Stat Alignment and moves, and a link to the profile.
+  Without a set, the tile is a plain link to the profile.
+- **One row of six**, 64px tiles on desktop, 56px on tablets and about 45px
+  on a 360px phone (team card grids bleed into the panel's padding there).
+  A container query wraps the strip to 3 × 2 wherever a tile would fall
+  under the 44px tap minimum.
+- **Compact strips** (`opts.compact`, or `teamCompositionHtml` at 32px or
+  less) draw small inline sprites for table cells and saved-team rows,
+  where the row is the tap target; they carry no badges.
+
+### Square type badge (2027 Q2, V6)
+
+`typeBadgeSquare(type, size)` (and `typeIconsHtml(t1, t2, size, true)`)
+draws the type's colour as a rounded square with a white glyph on it.
+The 18 glyphs are our own simple shapes, defined once in
+`pipelines/render/type_glyphs.py`: `build.py` ships them to the page as
+`type_glyphs` and the share-card templates call `square_badge_html`, so the
+site and its PNG cards draw the same badge. Never the official icons.
+Broadcast components (the board, team cards' PNGs) use square badges;
+dense tables keep the round emblems.
+
+### Player line and scoreboard row (2027 Q2, V4)
+
+`playerLineHtml(player)` reads "NAME [CC] [W–L]": the name in caps (a
+link to the player page), then the country and record as chips, in that
+order (rule 5). A team card's line drops the record chip, since its
+headline is the record. `scoreboardRowHtml(match)` sets two player lines
+against each other with each side's score, the winner bold and red-scored,
+as one line on wider screens and two stacked lines on a phone. Match views
+built on it are labelled team vs team.
+
+### Mega usage panel (2027 Q2, E3)
+
+`renderMegaPanel(els, where, label)` shows which Mega Stones teams carry:
+a stacked bar and list of the share of teams with zero, one, two or more
+Mega forms, then a data table of each Mega with its stone and team share.
+It reads `mega_stone_usage` and `team_mega_count` (on demand) and serves
+the Usage tab's Megas view (`#/usage/megas`, the regulation) and every
+event page (the event's teams). Below 1024px the two halves stack.
+
 ### Phase chip (2027 Q2, V5)
 
 `.phase-chip` is a small black italic all-caps chip saying what a view
 covers: "ALL PLAYERS", "DAY 2", "TOP 8", "SWISS R9", "ONLINE" (blue,
 `.is-online`), "LADDER" (green, `.is-ladder`). Every event-scoped view
-and card carries one. On phones they wrap; they never truncate.
+and card carries one: a team card says the phase its finish reached
+(`placementPhase`: Champion, Top 8, Top 16 or Swiss; a converged list,
+Day 2), and event sections say "All players" where they cover the whole
+field. On phones they wrap; they never truncate.
 
 ### Segmented control (2027 Q2)
 

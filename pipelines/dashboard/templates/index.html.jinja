@@ -316,7 +316,7 @@
   a { color: var(--blue); }
   /* Pokémon names and sprites are real links (U1), styled as the text they
      replace. */
-  a.pokemon-link, a.grid-6xn-tile, a.tier-chip, a.mover-link, a.team-comp-slot { color: inherit; text-decoration: none; }
+  a.pokemon-link, a.grid-6xn-tile, a.tier-chip, a.mover-link, a.team-strip-slot { color: inherit; text-decoration: none; }
   a.pokemon-link:hover span, a.mover-link:hover .mover-name { text-decoration: underline; }
   /* "How this is computed": the intro line stays one sentence; the method
      sits behind a disclosure (U2). */
@@ -361,7 +361,6 @@
   .share-bar { height: 8px; border-radius: 999px; background: var(--blue); justify-self: start; }
   .share-value { text-align: right; }
   .data-table th, .data-table td { padding: 4px 10px; }
-  .data-table .team-comp { justify-content: flex-start; }
   .core-names { display: block; font-size: var(--font-xs); margin-top: 2px; }
   .core-names a { color: inherit; }
   /* A table wider than its card scrolls inside its own frame on tablets
@@ -478,7 +477,12 @@
      the headline, then who and where, the six Pokémon, sets and actions. */
   .team-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
   @media (max-width: 1023px) { .team-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 480px) { .team-card-grid { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 480px) {
+    /* One column, bled into the panel's padding, so a card's team strip
+       keeps one row of six tiles of at least 44px at 360px (M3). */
+    .team-card-grid { grid-template-columns: minmax(0, 1fr); margin-left: -12px; margin-right: -12px; }
+    .team-card { padding: 10px; }
+  }
   .team-card { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--surface); display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
   .team-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
   .team-card-headline { font-size: var(--font-lg); font-weight: 800; }
@@ -486,7 +490,6 @@
   .team-card-wr { font-size: var(--font-xs); color: var(--muted); font-weight: 600; white-space: nowrap; }
   .team-card-who { font-size: var(--font-sm); color: var(--muted); }
   .team-card-who a { color: var(--navy); font-weight: 600; }
-  .team-card .team-comp { justify-content: flex-start; }
   .team-card-sets summary { cursor: pointer; font-size: var(--font-sm); font-weight: 600; color: var(--blue); }
   .team-card-sets ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--font-sm); }
   .team-card-sets a { font-weight: 700; color: var(--navy); }
@@ -500,18 +503,16 @@
   .performer-columns h4 { margin: 0 0 var(--space-2); }
   .performer-columns[hidden] { display: none; }
   .winner-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
-  .winner-cell .team-comp { flex-wrap: nowrap; gap: 0; }
   /* Overview: latest event + "Copy and play" (C1, P5). */
   .overview-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); margin-bottom: var(--space-5); }
   .overview-row[hidden] { display: none; }
   .latest-event { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-4); height: 100%; }
   .latest-event h3 { margin: var(--space-1) 0; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--navy); }
   .latest-event h3 a { color: inherit; }
-  .latest-event .team-comp { justify-content: flex-start; margin: var(--space-2) 0; }
+  .latest-event .team-strip-host { margin: var(--space-2) 0; }
   .starter-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
   @media (max-width: 1023px) { .starter-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 480px) { .starter-strip { grid-template-columns: minmax(0, 1fr); } }
-  .starter-strip .team-comp-slot img { width: 32px; height: 32px; }
   @media (max-width: 1023px) {
     .overview-row, .performer-columns { grid-template-columns: 1fr; }
   }
@@ -538,7 +539,6 @@
   .saved-teams-list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; border: 1px solid var(--light-blue); border-radius: var(--radius-sm); padding: var(--space-2); }
   .saved-teams-list .saved-name { font-weight: 700; flex: 1 1 140px; min-width: 0; }
   .saved-teams-list .saved-meta { display: block; font-weight: 400; font-size: var(--font-xs); color: var(--muted); }
-  .saved-teams-list .team-comp { gap: 0; }
   /* Glossary terms (app.js termHtml, U4): a dotted underline marks a term
      with a tooltip. */
   .term { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
@@ -891,17 +891,7 @@
   .type-icons { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
   .type-icons .type-icon { width: 20px; height: 20px; }
 
-  /* A team drawn as its six Pokémon (app.js's teamCompositionHtml). Wraps
-     to two rows at narrow widths rather than overflowing its tile. */
-  .team-comp {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-1);
-  }
-  .team-comp-slot { display: inline-flex; align-items: center; }
-  .team-comp-slot img { display: block; }
-  /* Placeholder for a roster slot whose sprite didn't resolve, so a
+  /* Placeholder for a team-strip slot whose sprite didn't resolve, so a
      six-Pokémon team still reads as six. */
   .team-comp-blank {
     display: inline-block;
@@ -1309,15 +1299,115 @@
   /* Broadcast band (V7): a diagonal slash and halftone drawn in CSS, our
      own pattern rather than the official key graphic. */
   .broadcast-band {
+    --slash-at: 62%;
     background-color: var(--panel-dark);
     background-image:
-      linear-gradient(115deg, transparent 0 62%, var(--board-field) 62% 66%, transparent 66% 69%, var(--board-gold) 69% 70.5%, transparent 70.5%),
+      linear-gradient(115deg, transparent 0 var(--slash-at), var(--board-field) var(--slash-at) calc(var(--slash-at) + 4%), transparent calc(var(--slash-at) + 4%) calc(var(--slash-at) + 7%), var(--board-gold) calc(var(--slash-at) + 7%) calc(var(--slash-at) + 8.5%), transparent calc(var(--slash-at) + 8.5%)),
       radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.4px);
     background-size: auto, 8px 8px;
     color: #fff;
   }
+  /* On a page header the slash sits at the far right, clear of the title. */
+  .page-band.broadcast-band { --slash-at: 80%; }
+  @media (max-width: 720px) { .page-band.broadcast-band { --slash-at: 90%; } }
   .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-gold-bg); color: var(--navy); font-size: var(--font-sm); }
   .notice[hidden] { display: none; }
+
+  /* Square type badge (V6): the type's colour with our own white glyph. */
+  .type-sq { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14); vertical-align: middle; }
+  .type-sq svg { filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)); }
+  /* Team strip (V3): six square tiles, the held item in a white circle at
+     each tile's top-right and a Mega badge under it. One row of six;
+     3 x 2 where a tile would fall under 44px (6 x 44 + 5 gaps = 284px). */
+  .team-strip-host { container-type: inline-size; width: 100%; }
+  /* A compact strip sizes to its sprites, inline in a row or a cell. */
+  .team-strip-host.is-compact { container-type: normal; display: inline-block; width: auto; }
+  .grid-6xn-tile .team-strip-host { text-align: center; }
+  .team-strip { --strip-n: 6; display: grid; grid-template-columns: repeat(var(--strip-n), minmax(0, 64px)); gap: 4px; }
+  @container (max-width: 287px) {
+    .team-strip:not(.is-compact) { grid-template-columns: repeat(3, minmax(0, 64px)); }
+  }
+  .team-strip-slot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--light-blue);
+    border-radius: var(--radius-sm);
+    background: var(--light-blue);
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .team-strip-slot:hover, .team-strip-slot[aria-expanded="true"] { border-color: var(--blue); }
+  .team-strip-art { width: 88%; height: 88%; object-fit: contain; }
+  .team-strip-slot .team-comp-blank { width: 70%; height: 70%; }
+  .strip-item { position: absolute; top: -5px; right: -5px; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+  .strip-item img { width: 16px; height: 16px; object-fit: contain; }
+  .strip-item-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .strip-mega { position: absolute; top: 17px; right: -5px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--series-red), var(--series-yellow), var(--series-green), var(--series-blue), var(--series-red)); color: #fff; font-size: 0.62rem; font-weight: 900; text-shadow: 0 0 2px rgba(0, 0, 0, 0.7); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+  .team-strip.is-compact { display: inline-flex; flex-wrap: nowrap; gap: 0; }
+  .team-strip.is-compact .team-strip-slot { width: 32px; border: 0; background: none; }
+  .data-table .team-strip.is-compact .team-strip-slot { width: 26px; }
+  @media (max-width: 1023px) { .team-strip { grid-template-columns: repeat(var(--strip-n), minmax(0, 56px)); } }
+  .strip-pop { position: absolute; z-index: 70; padding: var(--space-3); border-radius: var(--radius-md); border: 2px solid var(--border); background: var(--surface); color: var(--navy); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: var(--font-sm); }
+  .strip-pop[hidden] { display: none; }
+  .strip-pop-name { margin: 0 0 var(--space-2); font-weight: 800; }
+  .strip-pop dl { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); margin: 0 0 var(--space-2); align-items: center; }
+  .strip-pop dt { color: var(--muted); font-weight: 600; }
+  .strip-pop dd { margin: 0; font-weight: 600; }
+  .strip-pop .cell-icon { width: 24px; height: 24px; }
+  .strip-pop-moves { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px var(--space-2); }
+  /* Player line and scoreboard row (V4): name · country · record in chips. */
+  .sb-player { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+  .sb-name { font-weight: 800; color: var(--navy); text-transform: uppercase; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+  a.sb-name { text-decoration: none; }
+  a.sb-name:hover { text-decoration: underline; }
+  .sb-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; background: var(--light-blue); color: var(--navy); font-size: 0.72rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sb-rec { background: var(--panel-dark); color: #fff; }
+  .scoreboard-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--light-blue); }
+  .scoreboard-row > .phase-chip { grid-column: 1 / -1; justify-self: start; }
+  .sb-side { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; color: var(--muted); }
+  .sb-side.sb-b { flex-direction: row-reverse; text-align: right; }
+  .sb-side.sb-b .sb-player { justify-content: flex-end; }
+  .sb-side.is-winner { color: var(--navy); }
+  .sb-side:not(.is-winner) .sb-name { font-weight: 600; }
+  .sb-score { flex: 0 0 auto; min-width: 28px; padding: 2px 6px; border-radius: 4px; background: var(--light-blue); text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .sb-side.is-winner .sb-score { background: var(--accent-red); color: #fff; }
+  .sb-vs { color: var(--muted); font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; }
+  @media (max-width: 480px) {
+    /* Two stacked lines on a phone, A over B, result at the right. */
+    .scoreboard-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .sb-vs { display: none; }
+    .sb-side.sb-b { flex-direction: row; text-align: left; }
+    .sb-side.sb-b .sb-player { justify-content: flex-start; }
+  }
+  .team-card-who .phase-chip { margin-right: 6px; }
+  /* Event and player pages open on a broadcast band (V7). */
+  .page-band { margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) var(--space-4); padding: var(--space-4) var(--space-6); }
+  .page-band .eyebrow, .page-band .eyebrow a, .page-band .event-meta, .page-band .sub, .page-band .sub a { color: #d7dbe8; }
+  .page-band h2.event-title, .page-band .sb-name { color: #fff; }
+  .page-band .sb-chip { background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .page-band .sb-rec { background: var(--board-gold); color: #12131a; }
+  .event-winner { margin: 0 0 var(--space-1); }
+  .builder-strip { margin-bottom: var(--space-3); }
+  .builder-strip:empty { display: none; }
+  @media (max-width: 480px) { .page-band { margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-4); padding: var(--space-3) var(--space-4); } }
+  /* Mega usage panel (E3): the count split as a stacked bar, then a table. */
+  .mega-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-5); align-items: start; }
+  .mega-count-bar { display: flex; height: 28px; border-radius: var(--radius-sm); overflow: hidden; margin: var(--space-2) 0; }
+  .mega-count-bar span { display: flex; align-items: center; justify-content: center; min-width: 0; color: #fff; font-size: var(--font-xs); font-weight: 800; white-space: nowrap; overflow: hidden; }
+  .mega-count-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--font-sm); }
+  .mega-count-list li { display: flex; align-items: center; gap: var(--space-2); }
+  .mega-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+  .mega-count-list strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+  @media (max-width: 1023px) { .mega-panel { grid-template-columns: minmax(0, 1fr); } }
+  .section-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
+  .section-head h3 { margin: 0; }
 
   /* The Overview has no card of its own: the board is its hero, and the
      panels below it carry their own frames. */
@@ -1610,6 +1700,7 @@
       <button class="subtab-btn" role="tab" data-subtab="win-rate-leaders" data-route="win-rate" aria-selected="false">Win rate</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-success" data-route="success" aria-selected="false">Success</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-trends" data-route="trends" aria-selected="false">Trends</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-megas" data-route="megas" aria-selected="false">Megas</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-leaders">
@@ -1695,6 +1786,16 @@
         </label>
       </div>
       <div id="usage-trend-table"></div>
+    </div>
+
+    {# The Mega usage panel (docs/upgrade-plan-2027q2.md, E3). #}
+    <div class="subtab-panel" data-subpanel="usage-megas" hidden>
+      <p class="lead">Which Mega Stones teams carry, and how many each team brings.</p>
+      <p class="sub" id="usage-mega-note"></p>
+      <div class="mega-panel">
+        <div id="usage-mega-count"></div>
+        <div id="usage-mega-table"></div>
+      </div>
     </div>
   </section>
 
@@ -1933,6 +2034,9 @@
       </div>
       <div class="team-roster">
         <h3>Your team (<span id="team-builder-count">0</span>/6)</h3>
+        {# The team as the strip every team on the site uses (V3), held items
+           and Mega badges included; it follows the slots' edits. #}
+        <div class="builder-strip" id="team-builder-strip"></div>
         <div class="team-slots" id="team-builder-slots"></div>
         <div class="pokepaste-actions">
           <button class="btn btn-sm" id="team-builder-clear" type="button">Clear team</button>
@@ -2048,13 +2152,21 @@
   {# One event (docs/upgrade-plan-2027q1.md, C1): #/event/<event_id>. #}
   <section class="tab-panel" data-panel="event" data-section="teams" hidden>
     <div id="event-header"></div>
-    <h3>Top 8</h3>
+    {# Every event-scoped section says its phase (docs/upgrade-plan-2027q2.md, V5). #}
+    <div class="section-head"><h3>Top 8</h3></div>
     <div class="team-card-grid" id="event-top8"></div>
-    <h3>Over- and under-performers</h3>
+    <div class="section-head"><h3>Over- and under-performers</h3><span class="phase-chip">All players</span></div>
     <p class="sub" id="event-performers-note"></p>
     <div class="performer-columns" id="event-performers">
       <div><h4>Used more than usual</h4><div id="event-over-table"></div></div>
       <div><h4>Used less than usual</h4><div id="event-under-table"></div></div>
+    </div>
+    {# The Mega usage panel (E3): which Mega Stones this event's teams carried. #}
+    <div class="section-head"><h3>Mega Stones</h3><span class="phase-chip">All players</span></div>
+    <p class="sub" id="event-mega-note"></p>
+    <div class="mega-panel" id="event-mega">
+      <div id="event-mega-count"></div>
+      <div id="event-mega-table"></div>
     </div>
   </section>
 

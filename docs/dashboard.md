@@ -133,6 +133,23 @@ competitive graphics and work on every screen. What changed, by sprint:
   `build.py` copies from `static/fonts/`. The footer says the site is an
   unofficial fan project.
 
+**Sprint 11 — teams look like teams.**
+
+- **Team strip** (V3). Every team is six square tiles with its held items
+  and a Mega badge on the Mega holder; a tile opens its set. The
+  Overview's winner strip reads the winner's sheet from the inline KPIs
+  (`latest_event.winner_sets`), and the PNG team cards carry the same
+  badges.
+- **Player lines and scoreboard rows** (V4): "NAME [CC] [W–L]" chips on
+  team cards, event headers and player pages.
+- **Phase chips** (V5) on every team card and event section.
+- **Square type badges** (V6) from our own glyphs
+  (`pipelines/render/type_glyphs.py`), on the board and the PNG cards.
+- **Mega usage panel** (E3): `mega_stone_usage` and `team_mega_count`
+  (on-demand shards) behind the Usage tab's Megas view and a section on
+  every event page. In M-C, 81.6% of teams carry two Mega Stones.
+- Event and player pages open on a broadcast band.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
