@@ -17,15 +17,21 @@ does three things:
 
 Constraints carry over: no EV/IV fields (see decision D3 for Stat Points),
 team-vs-team grain stays labelled wherever it appears, and the site stays
-static with no backend. One constraint is new: **borrow the official design
-grammar, never the official marks.** That rules out logos, wordmarks, the
-Champions 2D art set and "Play! Pokémon" branding. The site must never be
-mistaken for an official product.
+static with no backend. Two constraints are new:
+
+- **Borrow the official design grammar, never the official marks.** That
+  rules out logos, wordmarks, the Champions 2D art set and "Play! Pokémon"
+  branding. The site must never be mistaken for an official product.
+- **Every component ships with its phone and tablet layout.** The official
+  graphics are 16:9 TV frames, while players read this site on a phone at
+  the venue. Track M defines how each new piece reflows, and no item is
+  done until it passes the responsive test matrix (M1) at every width.
 
 ## Status
 
 | Item | State |
 |---|---|
+| M1–M4 Mobile and responsive | Proposed; gates every other track |
 | Q1–Q5 Quality and shell | Proposed |
 | V1–V8 Broadcast-grade visuals | Proposed |
 | E1–E5 Event weekend | Proposed |
@@ -38,18 +44,21 @@ mistaken for an official product.
 
 ### 1a. The current UI
 
-These are screenshots of the published `docs/dashboard/` build at 1440px and
-390px, plus a scripted horizontal-overflow check of every route.
+These are screenshots of the published `docs/dashboard/` build at 1440px,
+768px and 390px, plus a scripted horizontal-overflow check
+(`document.documentElement.scrollWidth` against the viewport) of 19 routes
+at 360, 390, 430, 721–1024 and 1440px.
 
 | # | Finding | Evidence |
 |---|---|---|
-| 1 | **The Pokémon profile is wider than a phone.** | At 390px, `#/pokemon/<key>` has `scrollWidth` 424. The stat bars, the per-regulation trend and the Real sets Exact/Core toggle are cut off, and the page scrolls sideways. The culprit is `select.combo-source` (right edge at 424px) and the rows beside it. Every other route measures 390. `tests/browser/` fails on console errors and empty panels but never checks width, so nothing caught it. |
-| 2 | **The Top 12 is the last thing on Overview.** | On desktop it starts about 1,200px down, after the KPI strip, "What changed", the latest event and Copy and play. The official card (reference R1 below) makes the Top 12 the hero. |
-| 3 | **Our usage headline is about 6× smaller than every number players compare it with.** | The site leads with *share of roster slots*: Rillaboom 8.7%. The official card, Pikalytics and Smogon all report *share of teams*. Rillaboom is on 1,958 of 3,770 M-C teams, which is 51.9%. A player who sees "8.7%" here and "52%" elsewhere concludes one of them is wrong. |
-| 4 | **Teams are six bare sprites.** | Held items and Mega Stones sit behind a "Sets" disclosure. The game's own battle UI and the broadcast (R2) put the held item on every slot, because the item *is* the team: a Mega Stone, Choice Scarf or Focus Sash changes how the team plays. |
-| 5 | **Speed Tiers talks about EVs, which Champions doesn't have.** | `index.html.jinja` line 1548 reads "level 50 (252 EVs, a beneficial nature, a 31 IV)". Champions uses Stat Points: 66 in total, at most 32 per stat, with IVs fixed at 31. Its formula, (Base + SP + 20) × nature, gives the same Level 50 numbers as the old one, so **the figures are right and only the wording is wrong**. ([Bulbapedia: Stat point](https://bulbapedia.bulbagarden.net/wiki/Stat_point)) |
-| 6 | **Baselines are thin exactly when they matter most.** | M-B is 395 teams from a single event (Worlds). After M-D starts on 2026-12-03, U3's fallback will show M-C until the first regional reports. Online events (S1) fill both gaps within days. |
-| 7 | **Event pages have no bracket.** | Event pages list the top 8, but the round-by-round RK9 pairings already in `tournament_match` never appear as a bracket or as a "path to the title". |
+| 1 | **The Pokémon profile is wider than a phone.** | `#/pokemon/<key>` is 34px too wide at every phone width: `scrollWidth` 394 at 360px, 424 at 390px and 464 at 430px. The stat bars, the per-regulation trend and the Real sets Exact/Core toggle are cut off, and the page scrolls sideways. The culprit is `select.combo-source` and the rows beside it. Every other route fits at phone widths. `tests/browser/` runs only at 1440 and 390 (`VIEWPORTS` in `test_dashboard_routes.py`) and fails on console errors and empty panels, but never checks width, so nothing caught it. |
+| 2 | **Every route is too wide on a tablet.** | At 768px all 19 routes measure `scrollWidth` 807, and Overview measures 807 at every width checked from 721px to 800px (it fits from 820px). The header's regulation select and ⋯ menu run off the right edge, so at 768px the ⋯ menu, and the theme toggle inside it, is cut off. Above 720px the phone header and bottom bar switch off, but the desktop header doesn't fit until about 808px. This range covers iPad mini (744) and iPad (768) in portrait and many Android phones held landscape. At 768px two content problems sit outside any scroll container as well: the fixed six-column `.grid-6xn` on Overview and Matchup (tiles reach 809px and 822px), and the `data-table` on Events (878px) and Players (778px). No test runs between 390 and 1440. |
+| 3 | **The Top 12 is the last thing on Overview.** | On desktop it starts about 1,200px down, after the KPI strip, "What changed", the latest event and Copy and play. The official card (reference R1 below) makes the Top 12 the hero. |
+| 4 | **Our usage headline is about 6× smaller than every number players compare it with.** | The site leads with *share of roster slots*: Rillaboom 8.7%. The official card, Pikalytics and Smogon all report *share of teams*. Rillaboom is on 1,958 of 3,770 M-C teams, which is 51.9%. A player who sees "8.7%" here and "52%" elsewhere concludes one of them is wrong. |
+| 5 | **Teams are six bare sprites.** | Held items and Mega Stones sit behind a "Sets" disclosure. The game's own battle UI and the broadcast (R2) put the held item on every slot, because the item *is* the team: a Mega Stone, Choice Scarf or Focus Sash changes how the team plays. |
+| 6 | **Speed Tiers talks about EVs, which Champions doesn't have.** | `index.html.jinja` line 1548 reads "level 50 (252 EVs, a beneficial nature, a 31 IV)". Champions uses Stat Points: 66 in total, at most 32 per stat, with IVs fixed at 31. Its formula, (Base + SP + 20) × nature, gives the same Level 50 numbers as the old one, so **the figures are right and only the wording is wrong**. ([Bulbapedia: Stat point](https://bulbapedia.bulbagarden.net/wiki/Stat_point)) |
+| 7 | **Baselines are thin exactly when they matter most.** | M-B is 395 teams from a single event (Worlds). After M-D starts on 2026-12-03, U3's fallback will show M-C until the first regional reports. Online events (S1) fill both gaps within days. |
+| 8 | **Event pages have no bracket.** | Event pages list the top 8, but the round-by-round RK9 pairings already in `tournament_match` never appear as a bracket or as a "path to the title". |
 
 ### 1b. Iconography: what the official VGC graphics do
 
@@ -83,7 +92,7 @@ copied: official images must not be committed to this repository.
 | Name | White, bold, under the number. Long forms use a condensed cut: "Floette (Eternal Flower)", "Basculegion (Male)", "Lycanroc (Dusk Form)" | Names stay one line; forms in parentheses shrink rather than wrap |
 | Types | Small **square** badges with rounded corners: the type colour filled, with a white glyph (the in-game Champions style) | A square badge variant of `typeIconsHtml` for broadcast components |
 | Grouping | Species level: "Charizard", not "Mega Charizard Y" | A Species / Forms toggle. Forms stays the default (Pikalytics and Smogon also split Megas), and Species matches the official card |
-| Metric | Share of **teams** (Kingambit 70.7%) | Finding 3: team share becomes the headline everywhere |
+| Metric | Share of **teams** (Kingambit 70.7%) | Finding 4: team share becomes the headline everywhere |
 
 #### R2, anatomy of the broadcast frame
 
@@ -131,6 +140,34 @@ sheets carry no spreads.
 7. **Square type badges** on broadcast components. Circular emblems stay
    in dense tables.
 
+#### The grammar on a phone
+
+The references are 16:9 TV frames; a phone is a 9:19.5 portrait screen read
+with one thumb. The rules above hold, and they adapt like this:
+
+- **The band moves to the top.** On a phone the title band (title, sample,
+  scope) becomes the board's header instead of its middle row, followed by
+  the twelve tiles in reading order. Rank stays positional.
+- **Fewer columns, never smaller tiles.** The board drops from 6 columns
+  to 4 on a tablet and 3 on a phone. A tile never gets narrower than
+  104px, which is 3 columns at 360px with 16px gutters and 8px gaps.
+- **One idea per line.** The gold number gets its own line on a phone. The
+  type badges move to the tile's top-right corner, where U9 already puts
+  them, rather than sharing the number's line.
+- **Names wrap, they don't truncate.** A long form such as "Floette
+  (Eternal Flower)" puts the form on a second, smaller line. An ellipsis
+  that hides the form would make two Pokémon look the same.
+- **A team stays one row of six.** At 360px with 4px gaps a tile is about
+  51px, or about 47px inside a card with 14px padding. Wherever a tile
+  would fall below 44px, the team wraps to 3×2 rather than shrinking past
+  the tap minimum.
+- **Tap, not hover.** Anything a desktop shows on hover (a held item's
+  name, a set, a denominator) opens on tap as a popover. The design system
+  already notes that `title` isn't reachable on touch.
+- **Trees become steps.** A bracket or a path becomes a list of rounds
+  with round tabs; a scatter becomes a ranked list. Nothing relies on
+  horizontal page scrolling.
+
 What we will not copy: the Worlds and International Championship logos and
 wordmarks, the Pokémon wordmark, the Champions 2D art set, the official
 key-graphic patterns, and the four-colour arcs *as a mark*. The four colours
@@ -173,14 +210,93 @@ versioned releases, and citation-ready numbers.
 
 ## 3. Tracks
 
+### Track M — Mobile and responsive (P0, gates every track)
+
+**M1. A responsive test matrix.** `tests/browser/` grows from two
+viewports (1440 and 390) to the widths people actually use:
+
+- **Full sweep of every route** at 360×780 (the floor), 390×844, 768×1024,
+  1024×768 and 1440×900.
+- **Spot checks** at 430×932, at 721×1024 (the first tablet pixel, where
+  finding 2 starts) and on a landscape phone at 844×390.
+
+The checks:
+
+1. `scrollWidth <= innerWidth` on every route. This catches findings 1
+   and 2.
+2. On phones, every nav item, sub-tab, chip, segmented control, board
+   tile and team-strip tile is at least 44×44px. U7 set that target; this
+   enforces it.
+3. Every input and select computes to at least 16px, so iOS Safari
+   doesn't zoom on focus.
+4. The sticky chrome is at most 120px tall on phones and 200px on
+   desktop. These are U2's targets, now enforced.
+5. CI uploads a screenshot of every route at every width as an artifact,
+   so reviewers can see the phone layout on every PR.
+
+**M2. Responsive rules.** These become the "Responsive behavior" section
+of `docs/design-system.md` on acceptance.
+
+- **Four tiers**: phone ≤480px, large phone 481–720px, tablet 721–1023px,
+  desktop ≥1024px. The stylesheet's stray 600px and 900px breakpoints fold
+  into these.
+- **No horizontal page scroll** at any width from 360px up. Only an
+  explicit `.table-scroll` may scroll sideways, and it carries U7's edge
+  fades.
+- **Every grid gets a column count per tier.** No fixed `repeat(6, 1fr)`
+  above 720px, which is what breaks finding 2. Tracks use
+  `minmax(0, 1fr)`, the fix U9 found for the Builder.
+- **Tap targets are at least 44px**, and every hover affordance has a tap
+  equivalent.
+- **New controls go inside a view's band**, never in a new sticky row:
+  the scope switch, the Species/Forms toggle, the round tabs.
+- **Bottom sheets respect `env(safe-area-inset-bottom)`**, as the bottom
+  bar already does. On landscape phones (`max-height: 500px`) the sub-tab
+  row stops sticking, which gives the content back its height.
+- **Images keep their intrinsic size** (the existing rule). Board rows
+  below the first screen lazy-load. Hero art is a 256px WebP of about
+  16KB (347 files, 5.6MB), the right size for a ~96px tile at 2–3× pixel
+  density, so phones need no smaller variant. Twelve of them come to about
+  195KB, of which a phone loads the first six eagerly.
+- **The display font (D4)** loads with `font-display: swap` and a
+  size-adjusted fallback, so the swap doesn't move the layout.
+
+**M3. Every new component's layout, per tier.**
+
+| Component | Phone (≤480) | Large phone (481–720) | Tablet (721–1023) | Desktop (≥1024) |
+|---|---|---|---|---|
+| Header | Brand mark, regulation select, search, ⋯; sections in the bottom bar (as today) | The same, with the wordmark | Brand mark, five sections, a compact regulation select ("M-C ▾"), search, ⋯. It must fit at 721px (finding 2) | As today, plus search |
+| Top 12 board (V2) | Band on top, then 3 columns × 4 rows of 104–114px tiles; 88px art; number on its own line; type badges top-right | Band on top, 4 × 3 | Band on top, 4 × 3 | 6 + band + 6, as R1 |
+| Team strip (V3) | One row of six 47–51px tiles; 18px item badge top-right, Mega badge stacked under it; tap opens the set; wraps to 3×2 below 44px | 56px tiles | 56px tiles | 64px tiles |
+| Team card grids (Top Teams, Copy and play, event top 8) | 1 column | 2 columns | 2 columns | 3 columns |
+| Scoreboard row (V4) | Two stacked lines, player A over player B. Each line has the name (ellipsis, full name on tap), country chip and record chip; the result sits at the right and the winner is bold | One line: A, score, B | One line | One line |
+| Phase chips (V5) | Wrap onto a second line, never truncated | Wrap | One line | One line |
+| Scope switch, Species/Forms | Full-width segmented controls inside the band, 44px tall | Inline in the band | Inline | Inline |
+| Day 2 conversion, Mega panel (E1, E3) | U5's two-line rows: name and conversion, then "All 34.1% → Day 2 41.0% · n" | Two-line rows | Full table | Full table |
+| Bracket (E2) | Round tabs (Top 16 · QF · SF · Final) over a vertical list of match rows; a player's path is a vertical timeline | Round tabs | Quarterfinals → Final tree in 3 columns | Full tree |
+| Ladder vs tournament (S2) | Two ranked lists, "Over-rated on ladder" and "Under-rated on ladder" | Two lists | Scatter with 44px hit areas | Scatter |
+| Checks and counters (S2) | List rows (sprite, KO-or-switch %, n), top 6 with "Show all" | List rows | Two-column list | Two-column list |
+| Global search (Q3) | Full-screen sheet with the keyboard up and recent searches | Full-screen sheet | Dropdown under the header | Dropdown |
+| Speed line (list #24) | Vertical: fastest at the top, sticky scenario chips | Vertical | Horizontal number line | Horizontal |
+| Share cards (V8, M4) | "Share" opens the system share sheet with the 4:5 and 9:16 cards | Share sheet | Download; 16:9 default | Download |
+| Compare tray (list #34) | Bottom sheet above the bottom bar | Bottom sheet | Side panel | Side panel |
+
+**M4. Sharing from a phone.** The share buttons use the Web Share API
+(`navigator.canShare({files})`), which hands the PNG straight to the
+system share sheet, and fall back to a download where that isn't
+available. V8 adds a 9:16 (1080×1920) story card to its 16:9 and 4:5
+cards. "Copy for Showdown" confirms with a toast on touch devices, where
+there is no hover feedback.
+
 ### Track Q — Quality and shell (P0)
 
-**Q1. Phone overflow fix, and a width test.** Fix `#/pokemon/<key>` at
-390px (finding 1). Add a check to `tests/browser/` that every route at 390px
-has `scrollWidth <= innerWidth`, so this class of bug can't ship again.
+**Q1. Overflow fixes on phones and tablets.** Fix `#/pokemon/<key>` at
+every phone width (finding 1), and the header, `.grid-6xn` and table
+overflow between 721px and 807px (finding 2). M1's matrix keeps both
+fixed.
 
 **Q2. Stat Points copy.** Speed Tiers says "32 Stat Points (66 total),
-beneficial Stat Alignment, IVs fixed at 31" instead of 252 EVs (finding 5).
+beneficial Stat Alignment, IVs fixed at 31" instead of 252 EVs (finding 6).
 The glossary gains entries for "Stat Points" and "Stat Alignment", the terms
 the game and the official team sheets use.
 
@@ -197,7 +313,7 @@ convention Wi-Fi.
 
 ### Track V — Broadcast-grade visuals (P0/P1)
 
-**V1. Team share becomes the headline metric** (finding 3). It is the
+**V1. Team share becomes the headline metric** (finding 4). It is the
 number of teams carrying a Pokémon divided by the teams in scope. Every
 usage tile, table and share card leads with it. Share of roster slots
 moves to the tooltip and the dictionary. Add a `team_share` column to the
@@ -213,7 +329,8 @@ changed".
   players / Day 2 (needs E1) / Online (needs S1).
 - Each tile shows hero art overflowing its top edge, team share in gold
   numerals, square type badges and the name. A tap opens the profile.
-- At 390px it becomes a 3×4 grid with the band on top.
+- It reflows per M3: 6 + band + 6 on desktop, the band on top with 4
+  columns on tablets and large phones, and 3 columns on phones.
 - A Species / Forms toggle (R1's grouping).
 - The board and the existing table share one data path, so this is a new
   view of the mart, not a new mart.
@@ -249,9 +366,10 @@ blue, green and yellow) for categorical highlights. Add a CSS-drawn diagonal
 slash/halftone band for page headers. Dark-mode values come with them, per
 `docs/design-system.md`.
 
-**V8. Top 12 share card** (R1). Add 16:9 (1920×1080) and 4:5 (1080×1350)
-PNGs per regulation and per event ("All players" and "Day 2") through
-`pipelines/render/share_cards.py`. They carry the citation line and the
+**V8. Top 12 share card** (R1). Add 16:9 (1920×1080), 4:5 (1080×1350) and
+9:16 (1080×1920) PNGs per regulation and per event ("All players" and "Day
+2") through `pipelines/render/share_cards.py`. The two portrait formats use
+the phone board layout (band on top, 3 columns), not a squeezed 16:9. They carry the citation line and the
 site URL. The Overview's Open Graph image becomes this card.
 
 ### Track E — Event weekend (P1)
@@ -353,30 +471,30 @@ a new mart (mart) or a new source (S1–S5).
 
 | # | Feature | Why | Data | Size | Item |
 |---|---|---|---|---|---|
-| 1 | **Fix the 390px profile overflow and add a width test to every route** | It's broken on phones today | ✓ | S | Q1 |
+| 1 | **Fix the phone (profile) and tablet (every route) overflow; responsive test matrix from 360 to 1440** | Broken on phones and tablets today, and untested between 390 and 1440 | ✓ | M | Q1, M1, M2 |
 | 2 | **Team share as the headline metric** | Our numbers read 6× lower than the official ones | mart column | M | V1 |
-| 3 | **The Top 12 board as the Overview hero** | The single most recognisable VGC graphic | ✓ | M | V2 |
+| 3 | **The Top 12 board as the Overview hero, 6/4/3 columns by tier** | The single most recognisable VGC graphic | ✓ | M | V2, M3 |
 | 4 | **Team strip with held-item and Mega badges everywhere** | The item is the team; matches the game and broadcast UI | ✓ | M | V3 |
 | 5 | **Online events scope (Official / Online / All)** | 3× the M-C sample; M-D data within days | S1 | L | S1 |
 | 6 | **Day 2 conversion board and table** | VGC's classic "who converts" stat; R1's Phase Two | mart | M | E1 |
-| 7 | **Top-cut bracket with each player's path** | Every event hub has one; we hold the pairings already | ✓ | M | E2 |
-| 8 | **Top 12 share card (16:9 and 4:5)** | The image people post; links unfurl with it | ✓ | M | V8 |
+| 7 | **Top-cut bracket with each player's path (round tabs on phones)** | Every event hub has one; we hold the pairings already | ✓ | M | E2 |
+| 8 | **Top 12 share card (16:9, 4:5, 9:16), shared through the phone's share sheet** | The image people post; links unfurl with it | ✓ | M | V8, M4 |
 | 9 | **Checks and counters on the profile (ladder)** | The first real "what beats X" signal | S2 | M | S2 |
 | 10 | **Stat Points copy and glossary** | Wrong game terminology on the site | ✓ | S | Q2 |
 | 11 | Scoreboard rows for matches and players | A broadcast-native way to read a result | ✓ | S | V4 |
 | 12 | Phase chips on event-scoped views | Every view says what it covers | ✓ | S | V5 |
 | 13 | Mega usage panel | Every recap publishes one | ✓ | S | E3 |
-| 14 | Ladder vs tournament scatter | Shows over- and under-rated picks | S2 | M | S2 |
+| 14 | Ladder vs tournament scatter (two ranked lists on phones) | Shows over- and under-rated picks | S2 | M | S2 |
 | 15 | Species / Forms toggle | Matches the official grouping when wanted | ✓ | S | V2 |
 | 16 | Square type badges on broadcast components | The in-game style; reads faster at size | art | S | V6 |
 | 17 | Broadcast tokens and header band | One visual identity across site and cards | ✓ | S | V7 |
-| 18 | Global search (Pokémon, players, events) | One entry point | ✓ | M | Q3 |
+| 18 | Global search (Pokémon, players, events), as a full-screen sheet on phones | One entry point | ✓ | M | Q3 |
 | 19 | Rank-change column on Usage (vs the previous event window) | Pikalytics' most-read column | ✓ | S | — |
 | 20 | Event-weekend hourly refresh | Live Swiss standings and Day 1 usage | ✓ | M | E4 |
 | 21 | Open Team Sheet image export from the Builder | Players share sheets as images | ✓ | M | — |
 | 22 | Builder legality warnings (regulation legal pool, item clause) | Prevents illegal teams | ✓ | S | — |
 | 23 | Builder threat list upgraded with checks and counters | Turns the screen into prep | S2 | M | — |
-| 24 | Speed line: a horizontal number line of sprites, with Tailwind and Trick Room toggles | The standard speed-tier visual | ✓ | M | — |
+| 24 | Speed line: a number line of sprites (vertical on phones), with Tailwind and Trick Room toggles | The standard speed-tier visual | ✓ | M | — |
 | 25 | Localised Pokémon names | Japan and Brazil audiences | ✓ | M | Q4 |
 | 26 | Offline at the venue (service worker) | Convention Wi-Fi | ✓ | S | Q5 |
 | 27 | Bring rate and lead pairs | "Which four did they bring" | S3 | L | S3 |
@@ -386,7 +504,7 @@ a new mart (mart) or a new source (S1–S5).
 | 31 | Upcoming online events with local times | Players pick events | S1 | S | — |
 | 32 | Stat Point spreads (ladder) | The #1 thing competitors show that we don't | S2 | M | D3 |
 | 33 | Embeddable Top 12 / usage widget with a citation for creators | Distribution | ✓ | M | — |
-| 34 | Compare tray: pin up to 4 Pokémon across pages | Fewer round trips to Compare | ✓ | M | — |
+| 34 | Compare tray: pin up to 4 Pokémon across pages (a bottom sheet on phones) | Fewer round trips to Compare | ✓ | M | — |
 
 ---
 
@@ -394,7 +512,7 @@ a new mart (mart) or a new source (S1–S5).
 
 | Sprint (≈1 wk) | Scope | Exit criteria |
 |---|---|---|
-| **10 — Broadcast board** | Q1, Q2, V1, V2, V7 | No route overflows at 390px, enforced by a test. Overview opens on the Top 12 board in team share. The Speed Tiers copy says Stat Points. |
+| **10 — Broadcast board, every screen** | M1, M2, Q1, Q2, V1, V2, V7 | The M1 matrix passes: no route overflows at any width from 360 to 1440, including 721–807. Overview opens on the Top 12 board in team share, in 6, 4 or 3 columns by tier. The Speed Tiers copy says Stat Points. |
 | **11 — Teams look like teams** | V3, V4, V5, V6, E3 | Every team on the site shows item and Mega badges. Matches read as scoreboard rows. |
 | **12 — Online events** (before 2026-12-03) | S1 (after D1) | 300+ M-C online teams in the dataset, gated and labelled. The scope switch works. A rollover fixture shows Online when Official is thin. |
 | **13 — Event weekend** | E1, E2, V8, E4 | Day 2 conversion and the bracket on every event page with RK9 pairings. The Top 12 card renders per event. |
@@ -404,6 +522,10 @@ a new mart (mart) or a new source (S1–S5).
 Sprint 12 is pinned before 2026-12-03 for the same reason U3 was: online
 events report the new regulation within days, and official events take
 weeks.
+
+M1 lands in Sprint 10 so that every later sprint is built against it. From
+Sprint 11 on, each sprint's exit criteria also include the M1 matrix
+passing, and the PR shows its changed views at 360px and 768px.
 
 ## 6. Decisions needed
 
@@ -425,11 +547,17 @@ weeks.
 | Limitless changes or limits its API | Retry/backoff and incremental extraction already exist (backlog #43/#44); apply for a key; the source is optional per scope |
 | Team share changes every number and breaks shared screenshots | A changelog entry, a one-time banner on Overview, and roster share still in tooltips |
 | The hourly event-weekend refresh burns Actions minutes | Only while an event in `tournament_event` is live; RK9 pairings only |
-| Hero art makes the board heavier | 256px WebP already ships; lazy-load below the first row; the U8 budget test covers the payload |
+| Hero art makes the board heavier | 256px WebP already ships (about 16KB each); a phone loads the first six eagerly and the rest lazily; the U8 budget test covers the payload |
+| Broadcast layouts are 16:9 and break in portrait | Each component has a per-tier layout in M3 before it's built, and the M1 matrix fails any route that overflows from 360px up |
+| The matrix slows CI | About 100 page loads per run (19 routes at five widths, plus spot checks); run the full sweep in CI and a three-route smoke locally, and share one built site across the sweep |
 
 ## Proposed `todo.md` entries (on acceptance)
 
-- [ ] Fix `#/pokemon/<key>` overflow at 390px; browser test asserts `scrollWidth <= innerWidth` on every route (Q1)
+- [ ] Responsive test matrix: every route at 360/390/768/1024/1440, spot checks at 430/721/landscape; width, tap-target, input-size and chrome-height assertions; screenshots as a CI artifact (M1)
+- [ ] Responsive rules in `docs/design-system.md`: four tiers, per-tier column counts, no page scroll, 44px targets, controls inside bands (M2)
+- [ ] Fix `#/pokemon/<key>` overflow at every phone width, and the header, `.grid-6xn` and table overflow at 721–807px (Q1)
+- [ ] Every new component built to its M3 per-tier layout (V2–V8, E1–E3, S2, Q3)
+- [ ] Phone sharing through the Web Share API, and a 9:16 story card (M4)
 - [ ] Speed Tiers and glossary: Stat Points and Stat Alignment instead of EVs (Q2)
 - [ ] `team_share` on the usage marts; team share as the headline metric site-wide (V1)
 - [ ] Top 12 board on Overview: 6+band+6, hero art, gold numerals, Species/Forms toggle, scope switch (V2)
