@@ -2,7 +2,11 @@
  * event" card and "Copy and play" starter teams (C1, P5). Loaded after
  * app.js/teams.js and reuses window.DashboardApp.
  *
- *   #/events            every event in the selected regulation
+ *   #/events            every official event in the selected regulation,
+ *                       then its Limitless online tournaments
+ *                       (docs/upgrade-plan-2027q2.md, S1), which link out
+ *                       to play.limitlesstcg.com rather than to an event
+ *                       page of ours
  *   #/event/<event_id>  one event: header, top 8 with full sets, and the
  *                       Pokémon its field over- and under-used against the
  *                       regulation average
@@ -41,11 +45,17 @@
     var startersEl = document.getElementById("overview-starters");
     var kpis = App.DATA.kpis || {};
     var latest = kpis.latest_event;
+    // An online tournament ("LP-" id) has no event page to link to; the
+    // build never puts one here (data.py's OFFICIAL_ONLY_KPIS), and this
+    // keeps it that way.
+    if (latest && String(latest.event_id || "").indexOf("LP-") === 0) latest = null;
     var starters = kpis.starter_teams || [];
     if (latestEl && latest) {
       latestEl.innerHTML =
         '<div class="latest-event">' +
-        '<p class="eyebrow">Latest event</p>' +
+        // Online events have no event pages: on an Online or All scope the
+        // card is the regulation's latest official event, and says so.
+        '<p class="eyebrow">' + (App.isOfficialScope ? "Latest event" : "Latest official event") + "</p>" +
         '<h3><a href="' + App.routeHash("event", [latest.event_id]) + '">' + esc(latest.event_name) + "</a></h3>" +
         '<p class="sub">' + esc(latest.event_date) + " · " + esc(latest.event_tier || "") + " · " +
         Number(latest.team_count || 0).toLocaleString() + " teams</p>" +
@@ -75,7 +85,7 @@
     if (startersEl && starters.length) {
       startersEl.innerHTML =
         '<p class="eyebrow">Copy and play</p>' +
-        '<p class="sub">The top-placing fully reported teams in ' + esc(App.scopeLabel(App.regulationScope)) +
+        '<p class="sub">The top-placing fully reported teams in ' + esc(App.officialScopeName) +
         ", ready to paste into Showdown.</p>" +
         '<div class="starter-strip">' + starters.map(function (team) {
           return App.teamCardHtml(team);
@@ -87,6 +97,7 @@
   // ---------- Events index ----------
   function setupEvents() {
     var table = App.createDataTable(document.getElementById("events-table"), {
+      officialOnly: true,
       caption: "Champions events",
       sort: { key: "event_date", dir: "desc" },
       rowHref: function (r) { return App.routeHash("event", [r.event_id]); },
@@ -131,9 +142,69 @@
     if (note) {
       var events = App.eventsInScope();
       var teams = events.reduce(function (sum, e) { return sum + (e.team_count || 0); }, 0);
-      note.textContent = events.length + " event" + (events.length === 1 ? "" : "s") + " · " +
-        teams.toLocaleString() + " teams in " + App.scopeLabel(App.regulationScope) + ".";
+      note.textContent = events.length + " official event" + (events.length === 1 ? "" : "s") + " · " +
+        teams.toLocaleString() + " teams in " + App.scopeLabel(App.regulationCode) + ".";
     }
+    setupOnlineEvents();
+  }
+
+  // Online tournaments (S1): their own list, never mixed into the official
+  // one above. Handles are not legal names, so a winner is shown as the
+  // platform spells them, with no player page.
+  function setupOnlineEvents() {
+    var rows = (marts.online_event_summary || []).filter(function (e) {
+      return App.regulationCode === App.ALL_SCOPE || e.regulation_code === App.regulationCode;
+    });
+    var head = document.getElementById("online-events-head");
+    var note = document.getElementById("online-events-note");
+    var container = document.getElementById("online-events-table");
+    if (!container || !rows.length) return;
+    head.hidden = false;
+    note.hidden = false;
+    var teams = rows.reduce(function (sum, e) { return sum + (e.team_count || 0); }, 0);
+    note.textContent = rows.length.toLocaleString() + " Limitless online tournament" + (rows.length === 1 ? "" : "s") +
+      " with at least 16 players · " + teams.toLocaleString() + " published team sheets in " +
+      App.scopeLabel(App.regulationCode) + ". Each links to its page on Limitless. " +
+      "The Online scope (the Events select at the top) puts their usage figures beside the official ones.";
+    App.createDataTable(container, {
+      caption: "Online tournaments",
+      // Cited as what it is, whichever scope the page shows.
+      citation: function () {
+        return {
+          scope: "Limitless online tournaments, " + App.shortRegulation(App.regulationCode),
+          sample: "n = " + teams.toLocaleString() + " teams",
+        };
+      },
+      sort: { key: "event_date", dir: "desc" },
+      limit: 50,
+      empty: "No online tournament in this regulation yet.",
+      columns: [
+        {
+          key: "event_name",
+          label: "Tournament",
+          main: true,
+          sortable: true,
+          render: function (r) {
+            return '<a href="' + esc(r.source_url) + '" target="_blank" rel="noopener">' + esc(r.event_name) + "</a>";
+          },
+        },
+        { key: "event_date", label: "Date", main: true, sortable: true },
+        { key: "registered_player_count", label: "Players", type: "int", hideOnPhone: true },
+        { key: "team_count", label: "Teams", type: "int", main: true },
+        {
+          key: "winner_player_name",
+          label: "Winner",
+          sortable: true,
+          render: function (r) {
+            if (r.winner_count > 1) return "Shared by " + r.winner_count;
+            return r.winner_player_name
+              ? '<span class="winner-cell">' + App.teamCompositionHtml(r.winner_pokemon_keys, 24) +
+                "<span>" + esc(r.winner_player_name) + "</span></span>"
+              : "—";
+          },
+        },
+      ],
+    }).setRows(rows);
   }
 
   // ---------- Event page ----------
@@ -273,7 +344,7 @@
   }
 
   renderOverviewCards();
-  App.registerTab("events", setupEvents);
+  App.registerTab("events", setupEvents, { extraMarts: ["online_event_summary"] });
   App.registerTab("event", setupEvent, {
     extraMarts: ["tournament_team_sheets", "pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count"],
     onRoute: renderEvent,

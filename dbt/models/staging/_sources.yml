@@ -117,6 +117,26 @@ sources:
           - row_count_anomaly:
               config:
                 meta: {category: row_count_anomaly, source_name: limitless}
+      - name: limitless_play
+        description: "Raw Limitless online-tournament team sheets, one row per slot (docs/upgrade-plan-2027q2.md, S1). See data/staging/limitless_play.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: limitless_play}
+      - name: limitless_play_pairings
+        description: "Raw Limitless online-tournament pairings and winners. See data/staging/limitless_play_pairings.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: limitless_play_pairings}
       - name: pokebase
         description: "Raw PokéBase per-regulation Champions legal-pool membership. See data/staging/pokebase.schema.json."
         loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"

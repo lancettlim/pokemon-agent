@@ -825,6 +825,46 @@ models:
         description: "The placement-1 team's Pokémon, pipe-delimited in slot order."
       - name: recency_rank
         description: "1 for the regulation's newest event, counting back."
+  - name: online_event_summary
+    description: >
+      One row per Limitless online tournament (docs/upgrade-plan-2027q2.md,
+      S1): name, date, regulation, the platform's entrant count, how many
+      published team sheets it contributes, decided pairings and the
+      winning team. Online events are their own population and never
+      appear in tournament_event_summary. Feeds the Events tab's online
+      list, which links out to play.limitlesstcg.com. Written to
+      data/marts/online_event_summary.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['event_id']
+          config:
+            meta: {category: mart_quality, table_name: online_event_summary}
+    columns:
+      - name: event_id
+        description: "The event's tournament_event.event_id (\"LP-<tournament id>\")."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: online_event_summary}
+      - name: regulation_code
+        description: "The Champions regulation the tournament was played under."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: online_event_summary}
+      - name: registered_player_count
+        description: "Entrants as the platform reports them, published list or not."
+      - name: team_count
+        description: "Players whose team sheet was published; online usage rests on these."
+      - name: match_count
+        description: "Decided pairings, Swiss and top cut."
+      - name: winner_count
+        description: "Teams holding placing 1. Above 1 the platform shared first place, and the winner_* columns are null rather than a guess."
+      - name: source_url
+        description: "The tournament's standings page on play.limitlesstcg.com."
+      - name: recency_rank
+        description: "1 for the regulation's newest online tournament, counting back."
   - name: tournament_team_results
     description: >
       One row per Champions team: event, player (as the source spells the

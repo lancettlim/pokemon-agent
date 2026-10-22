@@ -101,3 +101,17 @@ def test_square_badge_draws_our_glyph_on_the_type_colour():
     assert TYPE_COLORS["fire"] in html and 'aria-label="Fire type"' in html
     assert "<svg" in html and 'fill="#fff"' in html
     assert str(type_glyphs.square_badge_html("unknown")) == ""
+
+
+def test_the_og_card_falls_back_to_the_newest_earlier_regulation():
+    # docs/upgrade-plan-2027q2.md, S1: a rollover can open on M-D's online
+    # events before M-D has a card; the OG image stays M-C's.
+    from pipelines.render.share_cards import og_card
+
+    regulations = [{"regulation_code": code} for code in ("m-b", "m-c", "m-d")]
+    cards = {"m-b": "b.png", "m-c": "c.png"}
+    payload = {"default_scope": "m-d:online", "regulations": regulations}
+    assert og_card(cards, payload) == "c.png"
+    assert og_card(cards, {**payload, "default_scope": "m-c:online"}) == "c.png"
+    assert og_card(cards, {**payload, "default_scope": "m-b"}) == "b.png"
+    assert og_card({}, payload) is None

@@ -229,3 +229,57 @@ grounds that MunchStats reports only team-level records.
 Note the grain honestly: an outcome is **team vs team**. RK9 publishes no
 per-battle log naming which four of a team's six Pokémon were brought, or
 which knocked out which. That remains genuinely unsourced.
+
+## 9. Limitless online tournaments (play.limitlesstcg.com)
+**Best for:** A large, fast sample: hundreds of grassroots online events per
+regulation, with full sheets, records and pairings
+
+Limitless runs an online tournament platform alongside limitlessvgc.com's
+coverage of official events. Every Champions regulation sees hundreds of
+events there, many with published team sheets: in the first six weeks of
+M-C, 236 qualifying events and 13,457 published sheets, about 3.6 times
+the official sample (3,770 teams), and the first results of a new regulation arrive
+within days rather than weeks. Added 2026-10-21 (`docs/upgrade-plan-
+2027q2.md`, S1, decision D1) as its own population, never blended into the
+official figures by default.
+
+**Key coverage:**
+- Tournament name, date, format label (`M-C`), entrant count, organiser
+- Per player: handle, display name, country, placing, W-L-T, drop round,
+  and (when the organiser publishes lists) the six-Pokémon sheet with item,
+  ability, nature and moves
+- Every round's pairings and winner, Swiss and top cut (`phase`)
+
+**How to extract:** a public JSON API
+([docs](https://docs.limitlesstcg.com/developer.html)), no scraping:
+1. `GET /api/tournaments?game=VGC&limit=500&page=N` — newest first; page
+   until the listing passes the lookback date.
+2. `GET /api/tournaments/{id}/standings` — players, placings, records and
+   `decklist` (the sheet; absent when unpublished).
+3. `GET /api/tournaments/{id}/pairings` — `round`, `phase`, `table`,
+   `player1`, `player2` (absent for a bye) and `winner` (a handle, `0` for
+   a tie, `-1` for no result).
+4. Keep a tournament when its `format` is a registered
+   `limitless_play_format` (`dbt/seeds/champions_regulations.csv`), it has
+   at least 16 players, and its name isn't a Monotype event (house rules on
+   top of the format would skew usage).
+5. Resolve the regulation from the label, unless the tournament is dated
+   after that regulation ended and fewer than 95% of its slots are legal
+   under it: organisers keep the old label for weeks after a rollover (31
+   "M-B" tournaments ran in September 2026, after M-C began; 29 had
+   Rillaboom, legal only in M-C, on half their teams), so such a
+   tournament takes the regulation in force on its date. The two that
+   really were M-B (98–99% legal in it) keep their label.
+   `assert_online_regulation_legality` fails the build if fewer than 95% of
+   a regulation's online slots are legal in it.
+6. Resolve species slugs with limitlessvgc.com's seeds
+   (`limitless_slug_to_pokeapi_form`, then
+   `limitless_mega_item_to_pokeapi_form` for a Mega Stone holder), falling
+   back to the PokéAPI form of the same name.
+
+**Limits and identity:** 50 requests per 5 minutes without a key
+(`pipelines/extract/limitless_play.py` paces every call through one
+sliding-window limiter and waits out a 429); a key for public-facing
+projects raises it (`LIMITLESS_API_KEY`). Players are handles, not legal
+names, so online teams never join RK9 or MunchStats identities and get no
+player pages.

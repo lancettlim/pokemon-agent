@@ -976,7 +976,16 @@ sprint progress.
 - [x] Mega usage panel on event and regulation views (E3)
   `mega_stone_usage` and `team_mega_count`, each with a regulation and an
   event grain, behind `#/usage/megas` and every event page.
-- [ ] `limitless_play` extractor, `event_tier = 'online'`, Official/Online/All scope, rollover fallback to Online (S1, after D1)
+- [x] `limitless_play` extractor, `event_tier = 'online'`, Official/Online/All scope, rollover fallback to Online (S1, after D1)
+  The tier value is `Online`, capitalised like the official tiers. 13,418
+  online M-C teams from 234 tournaments (two genuine M-B events keep their
+  label), gated by `assert_limitless_play_slug_mapping_coverage` (99.8%)
+  and `assert_online_regulation_legality` (98.7%); official figures are
+  unchanged (Rillaboom 1,958 of 3,770). An old format label after a
+  rollover, dropped players' blank placings and hand-typed Mega Stones
+  are resolved in `int_limitless_play_mapped`. Apply for a Limitless API
+  key as a public-facing project (`LIMITLESS_API_KEY`) to lift the rate
+  limit.
 - [ ] `pokemon_event_phase_usage` mart and the Day 2 conversion board (E1)
 - [ ] Top-cut bracket and player path on event pages (E2)
 - [ ] Top 12 share cards, 16:9, 4:5 and 9:16, per regulation and event; becomes the OG image (V8)

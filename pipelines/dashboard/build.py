@@ -94,6 +94,7 @@ _CRITICAL_PAYLOAD_KEYS = (
     "regulations",
     "kpis_by_scope",
     "default_scope",
+    "scope_regulations",
     "min_default_scope_teams",
     "mart_files",
     "share_cards",
@@ -138,6 +139,8 @@ ON_DEMAND_MARTS = (
     # view; one file holds every scope's and event's rows.
     "mega_stone_usage",
     "team_mega_count",
+    # The Events tab's online list (docs/upgrade-plan-2027q2.md, S1).
+    "online_event_summary",
 )
 
 # Marts the build summarises into the inline KPIs and no view reads raw:
@@ -198,14 +201,29 @@ def _write_mart_shards(
         "build_only": [name for name in BUILD_ONLY_MARTS if name in marts],
         "name_fields": [list(pair) for pair in data.NAME_JOINS],
     }
+    # A population scope ("m-c:online", docs/upgrade-plan-2027q2.md, S1)
+    # whose rows a mart doesn't have (player records are official-only)
+    # carries the official scope's rows instead, listed under
+    # official_fallback so the page labels them; static/app.js's
+    # applyRegulationScope reads them under the official scope.
+    # An on-demand mart loads whole, so it only needs listing.
+    index["official_fallback"] = {}
+    scoped_on_demand = [
+        n for n in ON_DEMAND_MARTS if marts.get(n) and "regulation_scope" in marts[n][0]
+    ]
     for scope in scopes:
-        index["scopes"][scope] = write(
-            f"scope-{scope}",
-            {
-                name: [r for r in marts[name] if r.get("regulation_scope") == scope]
-                for name in scoped_names
-            },
-        )
+        content = {}
+        population_scope = data.scope_population(scope) != data.OFFICIAL
+        official = data.scope_regulation(scope)
+        for name in scoped_names + scoped_on_demand:
+            rows = [r for r in marts[name] if r.get("regulation_scope") == scope]
+            if not rows and population_scope:
+                rows = [r for r in marts[name] if r.get("regulation_scope") == official]
+                if rows:
+                    index["official_fallback"].setdefault(scope, []).append(name)
+            if name in scoped_names:
+                content[name] = rows
+        index["scopes"][scope] = write(f"scope-{scope.replace(':', '-')}", content)
     for name in ON_DEMAND_MARTS:
         if name in marts:
             index["on_demand"][name] = write(name, {name: marts[name]})
@@ -282,7 +300,10 @@ def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
     Rillaboom is on 51.9% of 3,770 teams from 5 events."""
     kpis = payload.get("kpis") or {}
     scope = payload.get("default_scope") or data.ALL_SCOPE
-    label = "All regulations" if scope == data.ALL_SCOPE else f"Reg {scope.upper()}"
+    regulation = data.scope_regulation(scope)
+    label = "All regulations" if regulation == data.ALL_SCOPE else f"Reg {regulation.upper()}"
+    if data.scope_population(scope) == data.ONLINE:
+        label += " online"
     top = kpis.get("top_used_pokemon")
     description = f"{label}: usage, real sets, events and teams from Pokémon Champions tournaments."
     if top and top.get("team_share") is not None:

@@ -726,11 +726,41 @@ event page (the event's teams). Below 1024px the two halves stack.
 
 `.phase-chip` is a small black italic all-caps chip saying what a view
 covers: "ALL PLAYERS", "DAY 2", "TOP 8", "SWISS R9", "ONLINE" (blue,
-`.is-online`), "LADDER" (green, `.is-ladder`). Every event-scoped view
+`.is-online`), "OFFICIAL + ONLINE" (`.is-combined`), "LADDER" (green,
+`.is-ladder`). Every event-scoped view
 and card carries one: a team card says the phase its finish reached
 (`placementPhase`: Champion, Top 8, Top 16 or Swiss; a converged list,
 Day 2), and event sections say "All players" where they cover the whole
 field. On phones they wrap; they never truncate.
+
+### Population switch and banner (2027 Q2, S1)
+
+The header carries two selects: the regulation ("M-C", "All") and the
+events it covers, **Official / Online / All**. Official is always the
+default; a regulation without online data greys out the other two. Both
+reload the page with `?reg=<scope>` (`m-c`, `m-c:online`,
+`m-c:combined`). At phone width the bar packs tighter (8px gaps, 4px
+select padding) so both fit beside the brand from 360px.
+
+Whenever the page shows online events, `#population-banner` says so under
+the header: a blue `ONLINE` chip (or the half-black, half-blue
+`.is-combined` "OFFICIAL + ONLINE" chip), the sample ("13,418 teams from
+234 Limitless online tournaments in Reg M-C"), and a link back to official
+events when the regulation has any. It is blue, the Online chip's colour, not the warning amber: it
+describes the data rather than warning about it. During a rollover that
+opened on online events, the rollover banner says why instead, and this
+one stays hidden.
+
+A view built on official events only (event pages, players, Top Teams,
+head-to-head, archetypes, "What changed") shows `.official-only-note` on a
+population scope: an `OFFICIAL` phase chip and one sentence. Templates
+mark the spot with `<div data-official-only="…" hidden>`; scripts call
+`App.officialOnlyNoteHtml(sentence)`, which is empty on an official scope.
+A data table passes `officialOnly: true` instead: it gets the note (unless
+its panel already has one) and its "Copy with citation" names the
+official sample. The event window's choices sit under an "Official
+events" heading. On the official scope, the Top 12 board's switch reads
+"Official | Online", not "All players", once an Online board exists.
 
 ### Segmented control (2027 Q2)
 

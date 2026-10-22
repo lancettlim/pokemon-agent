@@ -18,7 +18,7 @@ with legal_members as (
     member.placement,
     member.record_wins,
     member.record_losses
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true

@@ -35,7 +35,7 @@ static with no backend. Two constraints are new:
 | Q1–Q5 Quality and shell | Q1, Q2 done (Sprint 10); Q3–Q5 proposed |
 | V1–V8 Broadcast-grade visuals | V1, V2, V7 done (Sprint 10); V3–V6 done (Sprint 11); V8 proposed |
 | E1–E5 Event weekend | E3 done (Sprint 11); E1, E2, E4, E5 proposed |
-| S1–S5 Data sources | Proposed |
+| S1–S5 Data sources | S1 done (Sprint 12); S2–S5 proposed |
 | D1–D5 Decisions | Taken as recommended, 2026-10-21 (see section 6) |
 
 ---

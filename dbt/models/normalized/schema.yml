@@ -12,13 +12,13 @@ models:
   - name: legality_snapshot
     description: "Time-sliced legal status for the Champions pool. See data/normalized/legality_snapshot.schema.json."
   - name: tournament_event
-    description: "Normalized tournament metadata from MunchStats. See data/normalized/tournament_event.schema.json."
+    description: "Normalized tournament metadata: official events from MunchStats, and Limitless online tournaments as their own population (event_tier 'Online'). See data/normalized/tournament_event.schema.json."
   - name: tournament_team
     description: "Team-level tournament metadata. See data/normalized/tournament_team.schema.json."
   - name: tournament_team_member
     description: "One row per Pokémon on a normalized tournament team. See data/normalized/tournament_team_member.schema.json."
   - name: tournament_match
-    description: "One row per played match: who faced whom, in which round, and who won, sourced from RK9 pairings. Grain is team vs team, not Pokémon vs Pokémon — no source publishes a per-battle Pokémon-level log. See data/normalized/tournament_match.schema.json."
+    description: "One row per played match: who faced whom, in which round, and who won, sourced from RK9 pairings (official events) and Limitless pairings (online tournaments, division 'Online'). Grain is team vs team, not Pokémon vs Pokémon — no source publishes a per-battle Pokémon-level log. See data/normalized/tournament_match.schema.json."
   - name: team_list
     description: "One row per canonical Limitless team-list id: a team composition identity reused across the players and events that fielded it. Covers the day-2 cut only. See data/normalized/team_list.schema.json."
   - name: team_list_member

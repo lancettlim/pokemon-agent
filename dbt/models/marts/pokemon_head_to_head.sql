@@ -43,7 +43,7 @@ roster as (
   select distinct
     member.team_id,
     member.pokemon_key
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true

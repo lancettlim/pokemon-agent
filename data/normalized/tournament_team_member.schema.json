@@ -15,9 +15,9 @@
     {"name": "tera_type", "type": "string", "required": false, "description": "Tera type for the roster slot, if reported"},
     {"name": "nature", "type": "string", "required": false, "description": "Nature for the roster slot, if reported"},
     {"name": "moves", "type": "string", "required": false, "description": "Pipe-delimited (|) move list for the roster slot, if reported"},
-    {"name": "source_name", "type": "string", "required": true, "description": "Constant: MunchStats"},
+    {"name": "source_name", "type": "string", "required": true, "description": "\"MunchStats\" for official events, \"Limitless Online\" for online tournaments"},
     {"name": "source_url", "type": "string", "required": true, "description": "Source URL or endpoint the record was resolved from"},
-    {"name": "source_record_id", "type": "string", "required": true, "description": "Upstream MunchStats roster row identifier"},
+    {"name": "source_record_id", "type": "string", "required": true, "description": "Upstream MunchStats roster row identifier, or \"<tournament>:<handle>:<slot>\" for an online sheet"},
     {"name": "extracted_at_utc", "type": "string", "required": true, "description": "ISO-8601 UTC extraction timestamp"},
     {"name": "dataset_version", "type": "string", "required": true, "description": "Dataset version this row was published under"}
   ]

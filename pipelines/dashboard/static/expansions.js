@@ -101,6 +101,7 @@
       ],
     });
     tripleTable = App.createDataTable(document.getElementById("core-triple-table"), {
+      officialOnly: true,
       caption: "Three-Pokémon cores",
       sort: { key: "triple_team_count", dir: "desc" },
       limit: 24,

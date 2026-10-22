@@ -65,7 +65,9 @@ source of truth for product-level goals/non-goals.
   usage), PokéBase (per-regulation legal-pool membership), Bulbagarden
   Archives (Champions-menu sprite images, added in Phase 4 — see below),
   RK9.gg (round-by-round pairings and match outcomes) and Limitless VGC
-  (canonical shared team-list identity), both added 2026-08-03
+  (canonical shared team-list identity), both added 2026-08-03, and
+  Limitless online tournaments (`play.limitlesstcg.com`'s JSON API: a
+  separate online population, added 2026-10-21 — see "Populations" below)
 - **Deferred sources**: none. Limitless VGC was brought into scope and
   Victory Road was closed as unbuildable — the EV data it was wanted for is
   published by no source at all (see `docs/dataset-spec.md`'s "Formerly
@@ -100,7 +102,8 @@ docs/
 `data/staging/*.csv`, `data/normalized/*.csv`, and `data/marts/*.csv` are
 all gitignored build output — regenerate staging with `python -m
 pipelines.cli extract <source>` (`pokeapi` | `opgg` | `munchstats` |
-`pokebase` | `bulbagarden` | `all`) and normalized/marts with `make
+`rk9` | `limitless` | `limitless_play` | `pokebase` | `bulbagarden` |
+`all`) and normalized/marts with `make
 dbt-build`. `make extract-all` / `make refresh` (extract-all → dbt-build →
 validate) / `make release VERSION=X.Y.Z` (refresh → release) chain these,
 mirroring `make dashboard`'s `dbt-build` → `build-dashboard` chain. Each
@@ -170,6 +173,22 @@ When a new regulation is announced, add its row to the seed.
 Regulation-sensitive marts read `int_champions_roster_scoped` and carry a
 `regulation_scope` column (each regulation plus `'all'`). A new mart of
 that kind should do the same, and any consumer must filter on it.
+The Limitless online extractor reads the seed's `limitless_play_format`.
+
+**Populations.** Limitless online tournaments are a different population
+from official events (grassroots players, identified by handle), so they
+are never blended into official figures by default
+(`docs/upgrade-plan-2027q2.md`, S1). `tournament_event.event_tier =
+'Online'` marks them and `int_champions_roster.population` says which is
+which. An unscoped roster-derived mart reads
+`int_champions_roster_official`, so its figures stay the official ones. In
+`int_champions_roster_scoped`, official rows keep their scopes (`m-c`,
+`all`), online rows get `m-c:online`/`all:online`, and `:combined` scopes
+hold both. A consumer filtering on `regulation_scope` gets the split for
+free, and must label any online or combined figure as such (the
+dashboard's population banner). Online handles are not legal names: never
+join them to RK9/MunchStats player identities, and keep player-level
+output official-only (`scope_population = 'official'`).
 
 **Team-vs-team grain.** `tournament_match` and the head-to-head marts
 report which *team* beat which, not which Pokémon beat which — no source
@@ -198,7 +217,7 @@ all`), `make refresh` (extract-all → dbt-build → validate), `make release
 VERSION=X.Y.Z` (refresh → release).
 
 - `pipelines/extract/` — one module per source (PokéAPI, OP.GG,
-  MunchStats, PokéBase, Bulbagarden, RK9, Limitless) that writes
+  MunchStats, PokéBase, Bulbagarden, RK9, Limitless, Limitless online) that writes
   provenance-tagged rows into `data/staging/`. PokéAPI fetches every entry in its `/pokemon` list (base
   species plus Mega/regional/alternate forms); OP.GG and PokéBase each do a
   plain GET against their respective Champions pages (both server-rendered,

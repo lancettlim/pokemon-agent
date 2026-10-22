@@ -26,7 +26,7 @@ with teams as (
     any_value(roster.record_wins) as record_wins,
     any_value(roster.record_losses) as record_losses,
     string_agg(roster.pokemon_key, '|' order by roster.slot_number) as pokemon_keys
-  from {{ ref('int_champions_roster') }} roster
+  from {{ ref('int_champions_roster_official') }} roster
   group by roster.event_id, roster.team_id
 ),
 team_counts as (

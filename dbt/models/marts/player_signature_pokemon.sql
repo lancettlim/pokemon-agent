@@ -22,7 +22,7 @@ with player_totals as (
     team.player_country,
     count(distinct team.team_id) as player_team_count,
     count(*) as player_total_appearances
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
@@ -36,7 +36,7 @@ player_pokemon as (
     team.player_id,
     member.pokemon_key,
     count(*) as usage_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true

@@ -606,9 +606,13 @@
   .set-share { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 720px) { .profile-layout { grid-template-columns: 1fr; } }
-  /* Phones: the bar keeps the brand, the regulation select and the ⋯ menu. */
+  /* Phones: the bar keeps the brand, the regulation and Events selects and
+     the ⋯ menu, packed tighter so the pair fits from 360px. */
   @media (max-width: 480px) {
     .brand-sub { display: none; }
+    .topbar { gap: var(--space-2); }
+    .topbar-actions { gap: 4px; }
+    .regulation-picker select { padding: 4px 2px 4px 4px; }
     .kpi-card .kpi-sprite { display: none; }
     .kpi-card .sub { display: none; }
     .kpi-card .value { font-size: 0.95rem; }
@@ -1288,6 +1292,27 @@
     white-space: nowrap;
   }
   .phase-chip.is-online { background: var(--series-blue); }
+  .phase-chip.is-combined { background: linear-gradient(90deg, var(--phase-chip) 50%, var(--series-blue) 50%); }
+  /* Population banner (S1): online figures are never mistaken for
+     official ones. Blue, the Online chip's colour, not the warning amber:
+     it describes the data, it doesn't warn about it. */
+  .population-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    padding: var(--space-3) var(--space-5);
+    background: color-mix(in srgb, var(--series-blue) 10%, var(--surface));
+    border-bottom: 2px solid var(--series-blue);
+    color: var(--text);
+    font-size: var(--font-sm);
+    text-align: center;
+  }
+  .population-banner[hidden] { display: none; }
+  .population-banner a { font-weight: 700; }
+  .official-only-note { color: var(--muted); font-size: var(--font-sm); }
+  .official-only-note .phase-chip { margin-right: 6px; }
   .phase-chip.is-ladder { background: var(--series-green); }
   .phase-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
   /* Segmented control: a small set of mutually exclusive choices, used in
@@ -1567,16 +1592,34 @@
          sets the selected option from ?reg= and reloads on change. #}
       {# Options read "M-C" so the select stays compact on tablets and phones
          (docs/upgrade-plan-2027q2.md, M3); "Reg" shows beside it on desktop. #}
+      {# Population scopes ("m-c:online", docs/upgrade-plan-2027q2.md, S1)
+         are picked with the Events select beside it, not listed here. #}
+      {% set default_regulation = payload.default_scope.split(":")[0] %}
       <label class="regulation-picker"><span class="reg-prefix" aria-hidden="true">Reg</span>
         <select id="regulation-scope" aria-label="Regulation shown on this page">
-          {% for scope in payload.kpis_by_scope %}
+          {% for scope in payload.scope_regulations or (payload.kpis_by_scope | list) %}
             {% set reg = payload.regulations | selectattr("regulation_code", "equalto", scope) | first %}
-            <option value="{{ scope }}"{% if scope == payload.default_scope %} selected{% endif %}>
+            <option value="{{ scope }}"{% if scope == default_regulation %} selected{% endif %}>
               {%- if reg %}{{ scope | upper }}{% else %}All{% endif -%}
             </option>
           {% endfor %}
         </select>
       </label>
+      {% set populations = namespace(any=false) %}
+      {% for scope in payload.kpis_by_scope if ":" in scope %}{% set populations.any = true %}{% endfor %}
+      {% if populations.any %}
+        {% set default_population = (payload.default_scope.split(":") + ["official"])[1] %}
+        {# Official / Online / All (S1). Official stays the default; static/
+           app.js disables a choice the selected regulation has no data
+           for. #}
+        <label class="regulation-picker population-picker">
+          <select id="population-scope" aria-label="Events shown: official, online, or both">
+            <option value="official"{% if default_population == "official" %} selected{% endif %}>Official</option>
+            <option value="online"{% if default_population == "online" %} selected{% endif %}>Online</option>
+            <option value="combined"{% if default_population == "combined" %} selected{% endif %}>All</option>
+          </select>
+        </label>
+      {% endif %}
     {% endif %}
     <div class="more-menu">
       <button type="button" class="more-menu-btn" id="more-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-panel" aria-label="More options">&#8943;</button>
@@ -1596,6 +1639,10 @@
    of a new regulation, when the page opens on the previous one
    (docs/upgrade-plan-2027q1.md, U3). #}
 <div id="rollover-banner" class="staleness-banner rollover-banner" role="status" hidden></div>
+{# Filled in by static/app.js (renderPopulationBanner) when the page shows
+   online events, alone or with official ones (docs/upgrade-plan-2027q2.md,
+   S1): a different population, so every view says so. #}
+<div id="population-banner" class="population-banner" role="status" hidden></div>
 <nav class="tabs" role="tablist" aria-label="Views in this section">
   <button class="tab-btn" role="tab" data-section="meta" data-tab="overview" aria-selected="true">Overview</button>
   <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
@@ -1637,9 +1684,12 @@
   <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
       <div class="kpi-body">
-        <div class="label">Sample</div>
+        {% set population = scope_kpis.population or "official" %}
+        <div class="label">Sample{% if population == "online" %} · online{% elif population == "combined" %} · official + online{% endif %}</div>
         <div class="value">{{ scope_kpis.event_count or 0 }} event{% if scope_kpis.event_count != 1 %}s{% endif %} · {{ "{:,}".format(scope_kpis.team_count or 0) }} teams</div>
-        {% if scope_kpis.latest_event %}
+        {% if population != "official" %}
+          <div class="sub">Official events alone: {{ "{:,}".format(scope_kpis.official_team_count or 0) }} teams</div>
+        {% elif scope_kpis.latest_event %}
           <div class="sub">Latest: <a href="#/event/{{ scope_kpis.latest_event.event_id }}" title="{{ scope_kpis.latest_event.event_name }}">{{ scope_kpis.latest_event.short_name }}</a>, {{ scope_kpis.latest_event.event_date }}</div>
         {% endif %}
       </div>
@@ -1877,6 +1927,7 @@
 
   <section class="tab-panel" data-panel="archetypes" data-section="teams" hidden>
     <h2 class="panel-title">Detected Archetypes</h2>
+    <div data-official-only="Archetypes are detected from official events' teams only." hidden></div>
     <p class="lead">Experimental team identities, each anchored by a three-Pokémon core that recurs across events.</p>
     <details class="method"><summary>How this is computed</summary>
       <p>Qualifying cores appear on at least five teams and have above-chance three-way and average pair lift. Cores sharing two members consolidate under their strongest neighbour; each team gets one primary assignment and may keep one near-tied secondary one.</p>
@@ -1922,6 +1973,9 @@
   <section class="tab-panel" data-panel="matchup" data-section="pokemon" hidden>
     <h2 class="panel-title">Matchup</h2>
     <p class="lead">A damage estimate, type effectiveness and real head-to-head records for two Pokémon.</p>
+    {# Official-only views say so on an Online or All scope
+       (docs/upgrade-plan-2027q2.md, S1); static/app.js fills these. #}
+    <div data-official-only="Head-to-head records cover official events only." hidden></div>
     <details class="method"><summary>How this is computed</summary>
       <p>The calculator assumes level 50 with full investment, 32 Stat Points, in the attacking and defending stat (tournament team sheets publish no Stat Points). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
       <p>Head-to-head is measured <strong>team vs team</strong>: no source publishes which Pokémon were brought to a given match.</p>
@@ -2107,6 +2161,7 @@
 
   <section class="tab-panel" data-panel="top-teams" data-section="teams" hidden>
     <h2 class="panel-title">Top Teams</h2>
+    <div data-official-only="Top Teams ranks official events' top-cut teams only." hidden></div>
     <div class="subtabs" role="tablist">
       <button class="subtab-btn" role="tab" data-subtab="tt-leaderboard" data-route="top" aria-selected="true">Top cut</button>
       <button class="subtab-btn" role="tab" data-subtab="tt-converged" data-route="converged" aria-selected="false">Converged lists</button>
@@ -2147,6 +2202,11 @@
     <h2 class="panel-title">Events</h2>
     <p class="lead" id="events-note">Every Champions event on record.</p>
     <div id="events-table"></div>
+    {# Limitless online tournaments (docs/upgrade-plan-2027q2.md, S1): their
+       own list, linking out; static/events.js shows it when there are any. #}
+    <div class="section-head" id="online-events-head" hidden><h3>Online tournaments</h3><span class="phase-chip is-online">Online</span></div>
+    <p class="sub" id="online-events-note" hidden></p>
+    <div id="online-events-table"></div>
   </section>
 
   {# One event (docs/upgrade-plan-2027q1.md, C1): #/event/<event_id>. #}
@@ -2172,6 +2232,7 @@
 
   <section class="tab-panel" data-panel="players" data-section="teams" hidden>
     <h2 class="panel-title">Players &amp; Regions</h2>
+    <div data-official-only="Players and regions cover official events only: online handles are not legal names." hidden></div>
     <p class="lead">Who plays what, across each player's or country's whole Champions history.</p>
     <details class="method"><summary>How this is computed</summary>
       <p>Country codes are the two-letter codes the source publishes, and a team only counts toward a country if its player reported one.</p>

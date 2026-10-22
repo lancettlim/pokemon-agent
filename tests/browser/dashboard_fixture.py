@@ -113,6 +113,11 @@ EVENTS = {
 }
 TEAMS_PER_EVENT = 12
 SCOPES = ("m-b", "m-c", "all")
+# Limitless online events (docs/upgrade-plan-2027q2.md, S1): their own
+# scopes, with the usage order reversed so a test can tell them from the
+# official figures, and two tournaments of ONLINE_EVENT_TEAMS teams each.
+ONLINE_SCOPES = ("m-c:online", "all:online")
+ONLINE_EVENT_TEAMS = 200
 
 
 def _write(path: Path, rows: list[dict]) -> None:
@@ -147,7 +152,9 @@ def _rosters() -> list[dict]:
     return teams
 
 
-def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
+def write_fixture_marts(
+    marts_dir: Path, normalized_dir: Path, online_scopes: tuple[str, ...] = ONLINE_SCOPES
+) -> None:
     teams = _rosters()
     _write(
         normalized_dir / "pokemon.csv",
@@ -155,7 +162,10 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
     )
 
     def scoped(fn):
-        return [row for scope in SCOPES for row in fn(scope)]
+        return [row for scope in SCOPES + tuple(online_scopes) for row in fn(scope)]
+
+    def keys_for(scope):
+        return KEYS[::-1] if scope.endswith(":online") else KEYS
 
     def share(i):
         return round(0.1 - i * 0.008, 4)
@@ -180,7 +190,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                     "usage_rank": i + 1,
                 }
                 for tier in ("", "Regional")
-                for i, key in enumerate(KEYS)
+                for i, key in enumerate(keys_for(scope))
             ]
         ),
     )
@@ -741,6 +751,30 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
             for event_id, (name, date, tier, regulation, team_count) in EVENTS.items()
         ],
     )
+    online_regulations = sorted({scope.split(":")[0] for scope in online_scopes} - {"all"})
+    online_events = [
+        {
+            "event_id": f"LP-{regulation}-{n}",
+            "event_name": f"Online Cup {regulation.upper()} #{n}",
+            "event_date": f"2026-10-1{n}" if regulation == "m-c" else f"2026-12-0{n + 3}",
+            "regulation_code": regulation,
+            "registered_player_count": ONLINE_EVENT_TEAMS + 20,
+            "team_count": ONLINE_EVENT_TEAMS,
+            "match_count": ONLINE_EVENT_TEAMS * 3,
+            "winner_player_name": f"handle_{n}",
+            "winner_player_country": "US",
+            "winner_record_wins": 7,
+            "winner_record_losses": 1,
+            "winner_pokemon_keys": "|".join(KEYS[::-1][:6]),
+            "source_name": "Limitless Online",
+            "source_url": f"https://play.limitlesstcg.com/tournament/{regulation}-{n}/standings",
+            "recency_rank": 3 - n,
+        }
+        for regulation in online_regulations
+        for n in (1, 2)
+    ]
+    if online_events:
+        _write(marts_dir / "online_event_summary.csv", online_events)
     _write(
         marts_dir / "tournament_team_results.csv",
         [

@@ -31,6 +31,9 @@ seeds:
       - name: limitless_format
         description: Limitless VGC's data-format slug for this set (staged as limitless.regulation_set).
         tests: [unique, not_null]
+      - name: limitless_play_format
+        description: The `format` label Limitless' online tournament platform (play.limitlesstcg.com) gives this set, "M-C" (docs/upgrade-plan-2027q2.md, S1). pipelines/extract/limitless_play.py and tournament_event.regulation_code match it case-insensitively.
+        tests: [unique, not_null]
       - name: start_date
         description: First day the set is in force (inclusive, ISO-8601).
       - name: end_date

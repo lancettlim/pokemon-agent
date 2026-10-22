@@ -16,7 +16,7 @@
 -- below a minimum event_team_count, as the dashboard does.
 with legal_slots as (
   select roster.*
-  from {{ ref('int_champions_roster') }} roster
+  from {{ ref('int_champions_roster_official') }} roster
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = roster.pokemon_key
     and champions.is_legal = true
@@ -45,7 +45,7 @@ regulation_usage as (
   select regulation_scope as regulation_code, pokemon_key, usage_count, usage_share, team_share
   from {{ ref('pokemon_usage_summary') }}
   where event_tier is null
-    and regulation_scope != 'all'
+    and regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 grid as (
   select

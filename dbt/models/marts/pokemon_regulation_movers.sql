@@ -23,18 +23,18 @@ with regulation_order as (
 ),
 team_counts as (
   select regulation_code, count(distinct team_id) as team_count
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
   group by regulation_code
 ),
 usage as (
   select regulation_scope as regulation_code, pokemon_key, usage_count, usage_share, team_share, usage_rank
   from {{ ref('pokemon_usage_summary') }}
-  where event_tier is null and regulation_scope != 'all'
+  where event_tier is null and regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 win as (
   select regulation_scope as regulation_code, pokemon_key, win_rate, wilson_lower_bound, record_count
   from {{ ref('pokemon_win_rate_summary') }}
-  where regulation_scope != 'all'
+  where regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 latest_legality as (
   select regulation_code, pokemon_key

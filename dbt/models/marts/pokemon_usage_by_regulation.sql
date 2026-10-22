@@ -19,11 +19,11 @@ with regulation_usage as (
   select regulation_scope as regulation_code, pokemon_key, usage_count
   from {{ ref('pokemon_usage_summary') }}
   where event_tier is null
-    and regulation_scope != 'all'
+    and regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 regulation_teams as (
   select regulation_code, count(distinct team_id) as team_count
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
   group by regulation_code
 ),
 latest_snapshot as (
@@ -55,7 +55,7 @@ joined as (
 win as (
   select regulation_scope as regulation_code, pokemon_key, win_rate, record_count
   from {{ ref('pokemon_win_rate_summary') }}
-  where regulation_scope != 'all'
+  where regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 )
 select
   joined.regulation_code,

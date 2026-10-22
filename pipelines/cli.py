@@ -33,6 +33,7 @@ from pipelines.dashboard import build as dashboard_build
 from pipelines.extract import (
     bulbagarden,
     limitless,
+    limitless_play,
     munchstats,
     opgg,
     pokeapi,
@@ -57,6 +58,9 @@ _EXTRACTORS = {
     "munchstats": (munchstats, "munchstats"),
     "rk9": (rk9, "rk9_pairings"),
     "limitless": (limitless, "limitless"),
+    # Online tournaments (docs/upgrade-plan-2027q2.md, S1): writes its
+    # pairings to limitless_play_pairings too, see _run_limitless_play.
+    "limitless_play": (limitless_play, "limitless_play"),
     "opgg": (opgg, "opgg_champions"),
     "pokebase": (pokebase, "pokebase"),
     "bulbagarden": (bulbagarden, "bulbagarden"),
@@ -81,6 +85,8 @@ _RETENTION_COUNTS = {
     "munchstats": 7,
     "rk9_pairings": 7,
     "limitless": 14,
+    "limitless_play": 14,
+    "limitless_play_pairings": 14,
     "pokebase": 14,
     "bulbagarden": 10,
 }
@@ -105,6 +111,9 @@ _ENDPOINTS = {
     "stats/tournaments/",
     "rk9_pairings": "https://rk9.gg/pairings/{event_id}?pod={pod}&rnd={round}",
     "limitless": "https://limitlessvgc.com/tournaments, /tournaments/{id}, /teams/{id}",
+    "limitless_play": "https://play.limitlesstcg.com/api/tournaments?game=VGC, "
+    "/api/tournaments/{id}/standings",
+    "limitless_play_pairings": "https://play.limitlesstcg.com/api/tournaments/{id}/pairings",
     "pokebase": "https://pokebase.app/pokemon-champions/pokemon",
     "bulbagarden": "https://archives.bulbagarden.net/w/api.php (Category:Champions_menu_sprites)",
 }
@@ -114,6 +123,7 @@ _SOURCE_NAME_SUFFIXES = {
     "pokeapi_ability": " (ability detail)",
     "pokeapi_item": " (item detail)",
     "pokeapi_artwork": " (artwork)",
+    "limitless_play_pairings": " (pairings)",
 }
 
 
@@ -255,6 +265,60 @@ def _run_tracked_extract(
     return True
 
 
+def _run_limitless_play(dataset_version: str) -> int:
+    """Online tournaments in two tracked passes sharing one rate limiter:
+    team sheets (limitless_play), then the pairings of the same tournaments
+    (limitless_play_pairings), each reusing its previous snapshot for
+    settled tournaments. Both passes carry one extraction time, so a run
+    that crosses midnight UTC still lands both under the same snapshot
+    date (staging reads snapshot_date from extracted_at_utc)."""
+    extracted_at = datetime.now(UTC)
+    extracted_at_utc = extracted_at.isoformat()
+    date_str = extracted_at.strftime("%Y-%m-%d")
+    output_path = _dated_snapshot_path("limitless_play", date_str)
+    pairings_path = _dated_snapshot_path("limitless_play_pairings", date_str)
+    covered: list[dict] = []
+
+    def roster() -> None:
+        covered.extend(
+            limitless_play.extract(
+                output_path,
+                dataset_version=dataset_version,
+                previous_snapshot_path=_latest_snapshot_path("limitless_play"),
+                extracted_at_utc=extracted_at_utc,
+            )
+        )
+
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(limitless_play, "limitless_play"),
+        staging_subdir="limitless_play",
+        output_path=output_path,
+        dataset_version=dataset_version,
+        call=roster,
+    )
+    if not ok:
+        return 1
+    _prune_old_snapshots("limitless_play")
+    previous_pairings = _latest_snapshot_path("limitless_play_pairings")
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(limitless_play, "limitless_play_pairings"),
+        staging_subdir="limitless_play_pairings",
+        output_path=pairings_path,
+        dataset_version=dataset_version,
+        call=lambda: limitless_play.extract_pairings(
+            pairings_path,
+            covered,
+            dataset_version=dataset_version,
+            previous_snapshot_path=previous_pairings,
+            extracted_at_utc=extracted_at_utc,
+        ),
+    )
+    if not ok:
+        return 1
+    _prune_old_snapshots("limitless_play_pairings")
+    return 0
+
+
 def _run_extract(source: str, dataset_version: str) -> int:
     if source == "all":
         for one_source in _EXTRACTORS:
@@ -262,6 +326,9 @@ def _run_extract(source: str, dataset_version: str) -> int:
             if exit_code != 0:
                 return exit_code
         return 0
+
+    if source == "limitless_play":
+        return _run_limitless_play(dataset_version)
 
     module, staging_subdir = _EXTRACTORS[source]
     date_str = _snapshot_date()

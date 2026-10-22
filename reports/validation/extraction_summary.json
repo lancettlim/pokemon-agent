@@ -1,6 +1,6 @@
 {
   "description": "Phase 1 ingestion check: source availability and row-level parsing success for each staging extractor. Distinct from validation_report.json, which gates normalized-table release readiness.",
-  "generated_at_utc": "2026-10-21T06:50:00Z",
+  "generated_at_utc": "2026-10-21T15:07:01Z",
   "dataset_version": "0.3.0",
   "sources": [
     {
@@ -13,6 +13,28 @@
       "rows_written": 393,
       "required_field_null_rate": 0.0,
       "checked_at_utc": "2026-10-19T15:30:16Z"
+    },
+    {
+      "source_name": "Limitless Online",
+      "endpoint": "https://play.limitlesstcg.com/api/tournaments?game=VGC, /api/tournaments/{id}/standings",
+      "availability": "reachable, HTTP 200 for all requests",
+      "requests_attempted": 8,
+      "requests_succeeded": 8,
+      "request_success_rate": 1.0,
+      "rows_written": 80742,
+      "required_field_null_rate": 0.0,
+      "checked_at_utc": "2026-10-21T14:46:57Z"
+    },
+    {
+      "source_name": "Limitless Online (pairings)",
+      "endpoint": "https://play.limitlesstcg.com/api/tournaments/{id}/pairings",
+      "availability": "reachable, HTTP 200 for all requests",
+      "requests_attempted": 236,
+      "requests_succeeded": 236,
+      "request_success_rate": 1.0,
+      "rows_written": 33542,
+      "required_field_null_rate": 0.0,
+      "checked_at_utc": "2026-10-21T15:07:01Z"
     },
     {
       "source_name": "Limitless VGC",

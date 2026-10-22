@@ -8,8 +8,11 @@
  *                        record against detected archetypes
  *
  * Only what the source events published: names as the sources spell them,
- * nothing inferred or joined across sources. Loaded after app.js and
- * reuses window.DashboardApp. */
+ * nothing inferred or joined across sources. Official events only: online
+ * handles are not legal names and get no player pages
+ * (docs/upgrade-plan-2027q2.md, S1), so on an Online or All scope these
+ * views show the regulation's official records and say so. Loaded after
+ * app.js and reuses window.DashboardApp. */
 (function () {
   "use strict";
 
@@ -32,12 +35,12 @@
   // A player's team count and best finish in the selected regulation, from
   // player_index's "m-b:1|m-c:3" fields; the combined figures for "all".
   function scopedStats(r) {
-    if (App.regulationScope === App.ALL_SCOPE) {
+    if (App.regulationCode === App.ALL_SCOPE) {
       return { team_count: r.team_count, best_placement: r.best_placement };
     }
     function lookup(field) {
       var hit = String(field || "").split("|").filter(function (pair) {
-        return pair.split(":")[0] === App.regulationScope;
+        return pair.split(":")[0] === App.regulationCode;
       })[0];
       return hit ? Number(hit.split(":")[1]) : null;
     }
@@ -57,6 +60,7 @@
     var note = document.getElementById("player-search-note");
     var index = marts.player_index || [];
     var table = App.createDataTable(document.getElementById("player-search-table"), {
+      officialOnly: true,
       caption: "Players",
       sort: null,
       limit: MAX_RESULTS,
@@ -92,7 +96,12 @@
 
     // Teams and best finish are the selected regulation's (scopedStats), so
     // a player who won M-B but placed 100th in M-C isn't an M-C winner.
-    var scopeName = App.shortRegulation(App.regulationScope);
+    var scopeName = App.officialScopeName;
+    if (note && !App.isOfficialScope) {
+      note.insertAdjacentHTML("beforebegin", App.officialOnlyNoteHtml(
+        "Player records cover official events only: online handles get no player pages."
+      ));
+    }
     var rowsWithScope = index.map(function (r) {
       var stats = scopedStats(r);
       var row = {};
@@ -142,6 +151,7 @@
 
   function setupPlayer() {
     pokemonTable = App.createDataTable(document.getElementById("player-pokemon-table"), {
+      officialOnly: true,
       caption: "Most-brought Pokémon",
       sort: { key: "team_count", dir: "desc" },
       limit: 12,
@@ -160,6 +170,7 @@
       ],
     });
     archetypeTable = App.createDataTable(document.getElementById("player-archetype-table"), {
+      officialOnly: true,
       caption: "Record against archetypes",
       sort: { key: "matches_played", dir: "desc" },
       empty: "No archetype faced at least twice in this regulation.",
@@ -222,7 +233,7 @@
       return team;
     }).sort(function (a, b) { return String(b.event_date).localeCompare(String(a.event_date)); });
     var inScope = allTeams.filter(function (t) {
-      return App.regulationScope === App.ALL_SCOPE || t.regulation_code === App.regulationScope;
+      return App.regulationCode === App.ALL_SCOPE || t.regulation_code === App.regulationCode;
     });
     var best = allTeams.filter(function (t) { return t.placement; })
       .sort(function (a, b) { return a.placement - b.placement; })[0];
@@ -248,7 +259,7 @@
       return '<a href="?' + esc(params.toString()) + esc(playerHref(playerId)) + '">' +
         esc(App.shortRegulation(code)) + " (" + otherRegs[code] + ")</a>";
     });
-    var scopeName = esc(App.shortRegulation(App.regulationScope));
+    var scopeName = esc(App.officialScopeName);
     eventsNote.innerHTML = (inScope.length
       ? inScope.length + " event" + (inScope.length === 1 ? "" : "s") + " in " + scopeName + "."
       : "No events in " + scopeName + ".") +
@@ -280,7 +291,7 @@
     // One row per archetype in each scope: "all" is its own partition, with
     // the 2-match floor applied across regulations (player_archetype_record).
     archetypeTable.setRows((marts.player_archetype_record || []).filter(function (r) {
-      return r.player_id === playerId && r.regulation_scope === App.regulationScope;
+      return r.player_id === playerId && r.regulation_scope === App.regulationCode;
     }));
   }
 

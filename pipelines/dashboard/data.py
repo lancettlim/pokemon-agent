@@ -34,6 +34,8 @@ DEFAULT_MANIFESTS_DIR = REPO_ROOT / "releases" / "manifests"
 _STAGING_LABELS = {
     "bulbagarden": "Bulbagarden Archives",
     "limitless": "Limitless VGC",
+    "limitless_play": "Limitless Online",
+    "limitless_play_pairings": "Limitless Online (pairings)",
     "munchstats": "MunchStats",
     "opgg_champions": "OP.GG Pokémon Champions",
     "pokeapi": "PokéAPI",
@@ -222,6 +224,19 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
             "player_count",
             "recorded_team_count",
             "match_count",
+            "winner_record_wins",
+            "winner_record_losses",
+            "recency_rank",
+        ),
+        (),
+    ),
+    # docs/upgrade-plan-2027q2.md, S1: the Events tab's online list.
+    "online_event_summary": (
+        (
+            "registered_player_count",
+            "team_count",
+            "match_count",
+            "winner_count",
             "winner_record_wins",
             "winner_record_losses",
             "recency_rank",
@@ -731,6 +746,34 @@ def _join_pokemon_names(
 
 ALL_SCOPE = "all"
 
+# Populations (docs/upgrade-plan-2027q2.md, S1). A scope is a regulation
+# ("m-c", or "all") with an optional population suffix: "m-c" is official
+# events only, "m-c:online" Limitless online events only, "m-c:combined"
+# both. Official stays the default everywhere; the marts carry all three
+# (int_champions_roster_scoped).
+OFFICIAL = "official"
+ONLINE = "online"
+COMBINED = "combined"
+POPULATIONS = (OFFICIAL, ONLINE, COMBINED)
+
+
+def scope_regulation(scope: str) -> str:
+    """The regulation part of a scope: "m-c:online" -> "m-c"."""
+    return scope.split(":", 1)[0]
+
+
+def scope_population(scope: str) -> str:
+    """The population part of a scope: "m-c" -> "official"."""
+    _, _, population = scope.partition(":")
+    return population or OFFICIAL
+
+
+def population_scope(regulation: str, population: str) -> str:
+    """The scope for a regulation and a population: ("m-c", "online") ->
+    "m-c:online"; official scopes carry no suffix."""
+    return regulation if population == OFFICIAL else f"{regulation}:{population}"
+
+
 # Below this many teams on either side, a regulation-to-regulation delta is
 # mostly noise, so the "What changed" panel shows counts but no deltas.
 MIN_MOVER_TEAMS = 100
@@ -769,10 +812,19 @@ def _tier_rank(tier: str | None) -> int:
 
 
 def _events_in_scope(marts: dict[str, list[dict[str, Any]]], scope: str) -> list[dict[str, Any]]:
-    events = marts.get("tournament_event_summary", [])
-    if scope == ALL_SCOPE:
+    """The events behind a scope's figures: official events
+    (tournament_event_summary), online ones (online_event_summary) or
+    both, in the scope's regulation (every regulation for "all")."""
+    population = scope_population(scope)
+    events: list[dict[str, Any]] = []
+    if population in (OFFICIAL, COMBINED):
+        events += marts.get("tournament_event_summary", [])
+    if population in (ONLINE, COMBINED):
+        events += marts.get("online_event_summary", [])
+    regulation = scope_regulation(scope)
+    if regulation == ALL_SCOPE:
         return list(events)
-    return [e for e in events if e.get("regulation_code") == scope]
+    return [e for e in events if e.get("regulation_code") == regulation]
 
 
 def _truthy(value: Any) -> bool:
@@ -1098,6 +1150,12 @@ def _current_regulation_kpi(
 
 # The Overview's Top 12 board (docs/upgrade-plan-2027q2.md, V2).
 TOP_BOARD_SIZE = 12
+BOARD_LABELS = {OFFICIAL: "All players", ONLINE: "Online", COMBINED: "Official + online"}
+# What a population scope takes from its regulation's official scope
+# rather than computing over online events: "What changed" and the event
+# window compare official events, and online events have no team sheets
+# or event pages of ours for the starter teams and the latest-event card.
+OFFICIAL_ONLY_KPIS = ("movers", "window_movers", "starter_teams", "latest_event")
 
 
 def species_group_key(pokemon_key: str) -> str:
@@ -1182,6 +1240,27 @@ def top_board(
     return tiles[:size]
 
 
+def _latest_event_date(
+    marts: dict[str, list[dict[str, Any]]], events: list[dict[str, Any]], official: bool
+) -> str | None:
+    """The newest tournament behind a scope's figures. An official scope
+    reads the official usage-by-date mart; a population scope (S1) also
+    counts its own online events, so the staleness banner describes the
+    population on screen rather than the official one."""
+    official_latest = max(
+        (
+            r["event_date"]
+            for r in marts.get("pokemon_usage_by_event_date", [])
+            if r.get("event_date")
+        ),
+        default=None,
+    )
+    if official:
+        return official_latest
+    dates = [str(e["event_date"]) for e in events if e.get("event_date")]
+    return max(dates, default=None)
+
+
 def compute_kpis(
     marts: dict[str, list[dict[str, Any]]],
     today: date | None = None,
@@ -1226,22 +1305,27 @@ def compute_kpis(
     # distinct-Pokémon count as the first KPI.
     events = _events_in_scope(marts, scope)
     # The Overview's Top 12 board (docs/upgrade-plan-2027q2.md, V2), one
-    # per player scope: "all" here; Day 2 and Online join it as their data
-    # arrives. Each holds the Forms and Species groupings, so the toggle
-    # needs no fetch.
+    # per player scope: "all" here, the scope's own population;
+    # compute_kpis_by_scope adds Online beside an official scope's, and Day
+    # 2 joins as its data arrives. Each holds the Forms and Species
+    # groupings, so the toggle needs no fetch.
     team_count = sum(e.get("team_count") or 0 for e in events)
     boards = {
         "all": {
-            "label": "All players",
+            "label": BOARD_LABELS[scope_population(scope)],
             "team_count": team_count,
             "event_count": len(events),
             "forms": top_board(usage_rows, profile_by_key, "forms"),
             "species": top_board(usage_rows, profile_by_key, "species"),
         }
     }
+    # "What changed" compares official events only: a population scope
+    # borrows its regulation's official summary (compute_kpis_by_scope).
+    regulation = scope_regulation(scope)
+    official = scope_population(scope) == OFFICIAL
     movers = (
         None
-        if scope == ALL_SCOPE
+        if regulation == ALL_SCOPE or not official
         else summarize_movers(marts.get("pokemon_regulation_movers", []), scope)
     )
     if movers is not None:
@@ -1259,6 +1343,7 @@ def compute_kpis(
         "latest_snapshot_date": latest_snapshot_date,
         "legal_pool_by_regulation": legal_pool_by_regulation,
         "scope": scope,
+        "population": scope_population(scope),
         "event_count": len(events),
         "team_count": team_count,
         "latest_event": _latest_event(events, marts.get("tournament_team_sheets")),
@@ -1266,13 +1351,13 @@ def compute_kpis(
         "current_regulation": _current_regulation_kpi(
             legal_pool_by_regulation,
             today,
-            None if scope == ALL_SCOPE else scope,
+            None if regulation == ALL_SCOPE else regulation,
             regulations,
         ),
         "movers": movers,
         "window_movers": (
             None
-            if scope == ALL_SCOPE
+            if regulation == ALL_SCOPE or not official
             else summarize_event_window_movers(
                 marts.get("pokemon_event_usage_vs_regulation", []), events
             )
@@ -1280,14 +1365,7 @@ def compute_kpis(
         # Newest tournament the marts cover. The staleness banner compares
         # this against the viewer's own clock (static/app.js), so a site
         # nobody has rebuilt still says it's out of date.
-        "latest_event_date": max(
-            (
-                r["event_date"]
-                for r in marts.get("pokemon_usage_by_event_date", [])
-                if r.get("event_date")
-            ),
-            default=None,
-        ),
+        "latest_event_date": _latest_event_date(marts, events, official),
         "distinct_pokemon_used": len(usage_rows),
         "top_used_pokemon": top_used,
         "top_win_rate_pokemon": top_win_rate,
@@ -1302,16 +1380,23 @@ def default_scope_for(
 ) -> str:
     """The scope the page opens on (docs/upgrade-plan-2027q1.md, U3): the
     regulation in force today when it has at least MIN_DEFAULT_SCOPE_TEAMS
-    teams on record; otherwise the newest earlier regulation with data (the
-    first weeks of a new set); otherwise the newest regulation with data;
-    otherwise "all". static/app.js re-applies this against the viewer's
-    date, so a page built before a rollover still opens correctly after it."""
+    official teams on record; otherwise its online events when they have
+    that many (docs/upgrade-plan-2027q2.md, S1: online data arrives within
+    days of a new set, official results weeks later); otherwise the newest
+    earlier regulation with data (the first weeks of a new set); otherwise
+    the newest regulation with data; otherwise "all". static/app.js
+    re-applies this against the viewer's date, so a page built before a
+    rollover still opens correctly after it."""
     with_data = [r for r in regulations if r.regulation_code in by_scope]
     in_force = regulation_in_force(regulations, today)
     if in_force is not None:
         kpis = by_scope.get(in_force.regulation_code)
         if kpis and (kpis.get("team_count") or 0) >= MIN_DEFAULT_SCOPE_TEAMS:
             return in_force.regulation_code
+        online_scope = population_scope(in_force.regulation_code, ONLINE)
+        online = by_scope.get(online_scope)
+        if online and (online.get("team_count") or 0) >= MIN_DEFAULT_SCOPE_TEAMS:
+            return online_scope
         earlier = [r for r in with_data if r.start_date < in_force.start_date]
         if earlier:
             return earlier[-1].regulation_code
@@ -1327,16 +1412,38 @@ def compute_kpis_by_scope(
     today: date | None = None,
     regulations: list[Regulation] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], str]:
-    """KPIs for every regulation with usage data plus "all", and the scope
-    the page should open on (see default_scope_for)."""
+    """KPIs for every regulation with usage data plus "all", in each
+    population with data (official first, then ":online" and
+    ":combined"), and the scope the page should open on (see
+    default_scope_for)."""
     regulations = load_regulations() if regulations is None else regulations
     usage_scopes = {r.get("regulation_scope") for r in marts.get("pokemon_usage_summary", [])}
-    with_data = [r for r in regulations if r.regulation_code in usage_scopes]
-    scopes = [r.regulation_code for r in with_data] + [ALL_SCOPE]
+    codes = [r.regulation_code for r in regulations] + [ALL_SCOPE]
+    scopes = [
+        scope
+        for population in POPULATIONS
+        for scope in (population_scope(code, population) for code in codes)
+        if scope in usage_scopes or scope == ALL_SCOPE
+    ]
     by_scope = {
         scope: compute_kpis(marts_for_scope(marts, scope), today, scope, regulations)
         for scope in scopes
     }
+    for scope, kpis in by_scope.items():
+        official = by_scope.get(scope_regulation(scope))
+        if scope_population(scope) == OFFICIAL:
+            # The board's Online switch (V2) on the official scope.
+            online = by_scope.get(population_scope(scope, ONLINE))
+            if online:
+                kpis["top_12_boards"]["online"] = online["top_12_boards"]["all"]
+        else:
+            # A new regulation's online events can arrive before its first
+            # official result (S1's rollover): then these panels are empty,
+            # never computed from online events, which have no event pages.
+            empty = {"starter_teams": []}
+            for key in OFFICIAL_ONLY_KPIS:
+                kpis[key] = official[key] if official else empty.get(key)
+            kpis["official_team_count"] = official["team_count"] if official else 0
     return by_scope, default_scope_for(by_scope, regulations, today or date.today())
 
 
@@ -1463,6 +1570,14 @@ def build_payload(
         "kpis": kpis_by_scope[default_scope],
         "kpis_by_scope": kpis_by_scope,
         "default_scope": default_scope,
+        # The header's regulation select: every regulation with data in any
+        # population, in registry order, "all" last. A new set's online
+        # events can arrive before its first official result (S1).
+        "scope_regulations": [
+            code
+            for code in [r.regulation_code for r in regulations] + [ALL_SCOPE]
+            if any(scope_regulation(scope) == code for scope in kpis_by_scope)
+        ],
         "provenance": load_provenance(reports_dir, staging_dir, manifests_dir),
         "marts": marts,
         # Full pokemon_key -> display name map, needed client-side wherever

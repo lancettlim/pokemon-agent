@@ -412,7 +412,7 @@
       var normalized = normalizeEntry(slot);
       if (!normalized) {
         showNotice((App.pokemonNames[slot.key] || slot.key) + " isn't legal in " +
-          App.shortRegulation(App.regulationScope) + ".", false);
+          App.shortRegulation(App.regulationCode) + ".", false);
         return;
       }
       var existing = team.map(function (s) { return s.key; }).indexOf(normalized.key);
@@ -464,7 +464,7 @@
       renderAll();
       showNotice(
         message + (skipped ? " " + skipped + " Pokémon not legal in " +
-          App.shortRegulation(App.regulationScope) + " were skipped." : ""),
+          App.shortRegulation(App.regulationCode) + " were skipped." : ""),
         previousTeam.length > 0
       );
     }
@@ -1124,7 +1124,7 @@
       if (note) {
         note.textContent = list.length + " top-16 teams from " +
           Object.keys(list.reduce(function (acc, t) { acc[t.event_id] = 1; return acc; }, {})).length +
-          " events in " + App.shortRegulation(App.regulationScope) + ".";
+          " events in " + App.officialScopeName + ".";
       }
     }
 

@@ -150,6 +150,30 @@ competitive graphics and work on every screen. What changed, by sprint:
   every event page. In M-C, 81.6% of teams carry two Mega Stones.
 - Event and player pages open on a broadcast band.
 
+**Sprint 12 — online events.**
+
+- **Limitless online tournaments** (S1, `pipelines/extract/limitless_play.py`)
+  are their own population: 13,418 published M-C sheets from 234
+  tournaments in the first six weeks of M-C, against 3,770 official teams. They never blend
+  into official figures by default.
+- **Official / Online / All**: an Events select beside the regulation one.
+  The scope is `regulation[:population]` (`?reg=m-c`, `?reg=m-c:online`,
+  `?reg=m-c:combined`), the marts carry each scope as `regulation_scope`,
+  and each ships as its own shard (`data/scope-m-c-online.json`). Official
+  stays the default for every headline number and for "What changed".
+- **Labels**: on an Online or All scope a blue population banner gives the
+  sample and the way back; official-only views (event pages, players, Top
+  Teams, head-to-head, archetypes, the event window, trends, triple cores)
+  carry an "OFFICIAL" note and cite the official sample. The Top 12 board
+  gains an Online switch on the official scope, beside "Official".
+- **Rollover to Online**: when the regulation in force has under 300
+  official teams but 300+ online ones, the page opens on its online events
+  with the rollover banner saying so, instead of on the previous
+  regulation. M-D will have data within days of 2026-12-03.
+- **Events tab**: the online tournaments get their own list
+  (`online_event_summary`), each linking to its page on Limitless; online
+  events get no event pages and online handles no player pages.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -568,7 +592,12 @@ opens on is described under "Regulation rollover playbook" below. The open
 view and its state live in the URL hash (`#/usage/win-rate`,
 `#/pokemon/garchomp`; see "Routes"). `static/app.js` narrows each scoped mart to the selected scope
 once, as its shard loads (`applyRegulationScope`), so the tab code reads
-`marts.<name>` exactly as before. KPIs are precomputed per scope
+`marts.<name>` exactly as before. Since Sprint 12 the scope can carry a
+population (`m-c:online`, `m-c:combined`), picked with the Events select;
+a mart with no rows for it (player records are official-only) ships the
+official scope's rows instead, listed in `mart_files.official_fallback`,
+and `App.regulationCode` is the regulation part for views that only read
+official events. KPIs are precomputed per scope
 (`kpis_by_scope`) and the template renders one KPI row per scope. Marts
 without the column (head-to-head, triple cores, country, players) still
 cover all Champions regulations.
@@ -715,7 +744,8 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 Moving to another view pushes a history entry; refining the current one (a
 filter, a sub-tab) replaces it. Links from before routing (`#usage`,
 `?tab=compare&a=..&b=..`) are rewritten to their routes on load.
-`?reg=` in the query string stays the regulation.
+`?reg=` in the query string stays the scope: a regulation, or a regulation
+and population (`?reg=m-c:online`).
 
 ## Data section: table cards and dictionary
 

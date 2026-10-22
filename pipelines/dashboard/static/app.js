@@ -42,16 +42,34 @@
   //   2. The viewer's last choice, but only if it was made while the same
   //      regulation was in force as today. A choice of M-C made in October
   //      must not keep someone on M-C after M-D starts.
-  //   3. The regulation in force, once it has MIN_DEFAULT_SCOPE_TEAMS teams.
-  //      Before that (the first week of a new set), the previous regulation,
-  //      with a banner saying so (renderRolloverBanner).
+  //   3. The regulation in force, once it has MIN_DEFAULT_SCOPE_TEAMS
+  //      official teams. Before that (the first weeks of a new set), its
+  //      online events when they have that many (docs/upgrade-plan-2027q2.md,
+  //      S1), else the previous regulation, with a banner saying which
+  //      (renderRolloverBanner).
   //   4. The newest regulation with data, then the build's default.
+  //
+  // A scope is a regulation ("m-c", or "all") plus an optional population
+  // (S1): "m-c" is official events, "m-c:online" Limitless online events,
+  // "m-c:combined" both. Official is always the default.
   var SCOPE_PARAM = "reg";
   var SCOPE_STORAGE_KEY = "dashboard-regulation";
   var ALL_SCOPE = "all";
+  var OFFICIAL = "official";
+  var POPULATION_LABELS = { official: "Official", online: "Online", combined: "Official + online" };
   var MIN_DEFAULT_SCOPE_TEAMS = DATA.min_default_scope_teams || 300;
   var TODAY_ISO = new Date().toISOString().slice(0, 10);
   var rolloverNotice = null;
+
+  function scopeRegulation(scope) {
+    return String(scope || "").split(":")[0];
+  }
+  function scopePopulation(scope) {
+    return String(scope || "").split(":")[1] || OFFICIAL;
+  }
+  function populationScope(code, population) {
+    return population === OFFICIAL ? code : code + ":" + population;
+  }
 
   function regulationsWithData() {
     var byScope = DATA.kpis_by_scope || {};
@@ -59,6 +77,32 @@
       return byScope[r.regulation_code];
     });
   }
+
+  // Remembered with the regulation in force when it was made, so the next
+  // set's arrival overrides it (resolveRegulationScope, step 2).
+  function rememberScope(code) {
+    var inForce = regulationInForce(DATA.regulations, TODAY_ISO);
+    try {
+      localStorage.setItem(
+        SCOPE_STORAGE_KEY,
+        JSON.stringify({
+          code: code,
+          in_force: inForce ? inForce.regulation_code : null,
+          chosen_on: TODAY_ISO,
+        })
+      );
+    } catch (e) {
+      // Storage blocked: the ?reg= link still carries the choice.
+    }
+  }
+
+  // A banner link that changes scope ("Official events only →") records
+  // the choice the way the selects do, so a host that drops the query
+  // string (an artifact frame) still follows it.
+  document.addEventListener("click", function (e) {
+    var link = e.target.closest && e.target.closest("a[data-set-scope]");
+    if (link) rememberScope(link.getAttribute("data-set-scope"));
+  });
 
   function readRememberedScope() {
     try {
@@ -94,6 +138,18 @@
     if (inForce) {
       var kpis = byScope[inForce.regulation_code];
       if (kpis && (kpis.team_count || 0) >= MIN_DEFAULT_SCOPE_TEAMS) return inForce.regulation_code;
+      var onlineScope = populationScope(inForce.regulation_code, "online");
+      var online = byScope[onlineScope];
+      if (online && (online.team_count || 0) >= MIN_DEFAULT_SCOPE_TEAMS) {
+        rolloverNotice = {
+          in_force: inForce,
+          shown: inForce,
+          online: online,
+          team_count: kpis ? kpis.team_count || 0 : 0,
+          has_data: !!kpis,
+        };
+        return onlineScope;
+      }
       var earlier = withData.filter(function (r) {
         return r.start_date < inForce.start_date;
       });
@@ -117,22 +173,52 @@
   if (DATA.kpis_by_scope && DATA.kpis_by_scope[regulationScope]) {
     DATA.kpis = DATA.kpis_by_scope[regulationScope];
   }
+  // The regulation and population parts of the page's scope. Views built
+  // on official-only data (events, players, head-to-head, Top Teams) read
+  // regulationCode; isOfficialScope says whether they need to say so.
+  var regulationCode = scopeRegulation(regulationScope);
+  var regulationPopulation = scopePopulation(regulationScope);
+  var isOfficialScope = regulationPopulation === OFFICIAL;
+  // "Reg M-C", or "Reg M-C official events" on a population scope: how an
+  // official-only view names what it covers.
+  var officialScopeName = (regulationCode === ALL_SCOPE ? "All regulations" : "Reg " + regulationCode.toUpperCase()) +
+    (isOfficialScope ? "" : " official events");
+
+  // Marts a population scope has no rows of (player records are official-
+  // only) arrive with the official scope's rows instead (build.py's
+  // official_fallback); officialFallback records which, for their notes.
+  var officialFallback = {};
+  var fallbackNames = ((DATA.mart_files || {}).official_fallback || {})[regulationScope] || [];
 
   // Rows of a scoped mart narrowed to the page's scope; unscoped marts
   // (no regulation_scope column) pass through untouched.
-  function applyRegulationScope(rows) {
+  function applyRegulationScope(rows, name) {
     if (!rows || !rows.length || !("regulation_scope" in rows[0])) return rows;
+    var scope = regulationScope;
+    if (!isOfficialScope && name && fallbackNames.indexOf(name) !== -1) {
+      scope = regulationCode;
+      officialFallback[name] = true;
+    }
     return rows.filter(function (r) {
-      return r.regulation_scope === regulationScope;
+      return r.regulation_scope === scope;
     });
   }
 
   function scopeLabel(scope) {
-    if (scope === ALL_SCOPE) return "All Champions regulations";
-    var match = (DATA.regulations || []).filter(function (r) {
-      return r.regulation_code === scope;
-    })[0];
-    return match ? match.regulation_name : scope;
+    var code = scopeRegulation(scope);
+    var population = scopePopulation(scope);
+    var name;
+    if (code === ALL_SCOPE) {
+      name = "All Champions regulations";
+    } else {
+      var match = (DATA.regulations || []).filter(function (r) {
+        return r.regulation_code === code;
+      })[0];
+      name = match ? match.regulation_name : code;
+    }
+    if (population === "online") return name + ", online events";
+    if (population === "combined") return name + ", official and online events";
+    return name;
   }
 
   var marts = DATA.marts || {};
@@ -1026,7 +1112,7 @@
   // Events in the page's regulation (every event for "all").
   function eventsInScope() {
     return (marts.tournament_event_summary || []).filter(function (e) {
-      return regulationScope === ALL_SCOPE || e.regulation_code === regulationScope;
+      return regulationCode === ALL_SCOPE || e.regulation_code === regulationCode;
     });
   }
 
@@ -1285,7 +1371,13 @@
   // }]
   // opts.sort: {key, dir}; opts.rowHref(row): where a row click goes;
   // opts.limit: rows shown before "Show all"; opts.empty: empty-state text;
-  // opts.caption: accessible table caption.
+  // opts.caption: accessible table caption; opts.citation(): the "Copy with
+  // citation" sample ("n = ..."), or {scope, sample} to name its own scope;
+  // opts.officialOnly: the table reads official events only
+  // (docs/upgrade-plan-2027q2.md, S1), so on an Online or All scope it
+  // cites the official sample and, unless its panel already says so,
+  // carries an official-only note ("cite": the citation only, for a table
+  // whose control already says so).
   var NUMERIC_TYPES = { rank: 1, share: 1, percent: 1, int: 1 };
   // Table rows use a 32px sprite: dense enough for ~20 rows a screen.
   var TABLE_SPRITE_PX = 32;
@@ -1338,6 +1430,14 @@
     }
 
     container.classList.add("data-table-host");
+    if (opts.officialOnly === true && !isOfficialScope && !container.dataset.officialNote) {
+      var panel = container.closest(".tab-panel");
+      if (!panel || !panel.querySelector("[data-official-only]")) {
+        container.insertAdjacentHTML("beforebegin",
+          officialOnlyNoteHtml((opts.caption || "This table") + ": official events only."));
+      }
+      container.dataset.officialNote = "1";
+    }
     container.innerHTML =
       '<div class="data-table-tools">' +
       '<label class="data-table-sort">Sort <select aria-controls="' + tableId + '"></select></label>' +
@@ -1472,7 +1572,14 @@
         lines.push(cols.map(function (c) { return text(cellHtml(c, row, maxByKey)); }).join("\t"));
       });
       lines.push("");
-      lines.push(citationLine(opts.citation ? opts.citation() : null));
+      var cited = opts.citation ? opts.citation() : null;
+      if (cited && typeof cited === "object") {
+        lines.push(citationLine(cited.sample, cited.scope));
+      } else if (opts.officialOnly && !isOfficialScope) {
+        lines.push(citationLine(cited || officialSample(), officialScopeName));
+      } else {
+        lines.push(citationLine(cited));
+      }
       copyWithFallback(citeBtn, lines.join("\n"));
     });
     // A row click anywhere but a link or button opens what the row is about.
@@ -1502,11 +1609,17 @@
   // "Source: Pokémon Champions Data Platform, dataset 0.3.0, Reg M-C,
   // n = 3,770 teams, <url>". sample overrides the n clause (an event
   // page's own team count).
-  function citationLine(sample) {
+  // The official sample on a population scope, for official-only tables.
+  function officialSample() {
+    var teams = DATA.kpis && DATA.kpis.official_team_count;
+    return teams ? "n = " + Number(teams).toLocaleString() + " teams" : null;
+  }
+
+  function citationLine(sample, scopeName) {
     var parts = ["Source: Pokémon Champions Data Platform"];
     var version = DATA.provenance && DATA.provenance.dataset_version;
     if (version) parts.push("dataset " + version);
-    parts.push(shortRegulation(regulationScope));
+    parts.push(scopeName || shortRegulation(regulationScope));
     var teams = DATA.kpis && DATA.kpis.team_count;
     parts.push(sample || (teams ? "n = " + Number(teams).toLocaleString() + " teams" : null));
     parts.push(window.location.href);
@@ -1583,7 +1696,7 @@
           // Mutated in place, never reassigned: matchup.js and teams.js hold
           // a reference to this same object via window.DashboardApp.marts.
           Object.keys(loaded || {}).forEach(function (name) {
-            marts[name] = restoreNames(applyRegulationScope(loaded[name]));
+            marts[name] = restoreNames(applyRegulationScope(loaded[name], name));
           });
           return marts;
         })
@@ -2055,7 +2168,7 @@
     var title;
     var sample;
     if (moversMode === "window") {
-      title = "What changed within " + shortRegulation(regulationScope);
+      title = "What changed within " + shortRegulation(regulationCode);
       sample = windowed.recent_events.join(", ") + " (" + plural(windowed.team_count, "team") + ") against " +
         windowed.early_events.join(", ") + " (" + plural(windowed.previous_team_count, "team") + ").";
     } else {
@@ -2075,8 +2188,11 @@
     if (moversMode === "previous") {
       columns.push('<div><h4>New this regulation</h4>' + moverListHtml(movers.new_arrivals, false) + "</div>");
     }
-    var shareCard = ((DATA.share_cards || {}).whats_changed || {})[regulationScope];
+    // Official events only (S1): a population scope shows its regulation's
+    // official comparison, and says so.
+    var shareCard = ((DATA.share_cards || {}).whats_changed || {})[regulationCode];
     panel.innerHTML = '<div class="movers-head"><h3>' + escapeHtml(title) + "</h3>" + toggle + "</div>" +
+      officialOnlyNoteHtml("What changed compares official events only, the headline figures.") +
       '<p class="sub">' + escapeHtml(sample) + " Shares are of " + termHtml("usage", "teams") +
       "; changes are in " + termHtml("pts", "percentage points (pts)") + '.</p><div class="mover-columns">' +
       columns.join("") + "</div>" +
@@ -2161,11 +2277,17 @@
     var el = document.getElementById("top-board");
     if (!el) return;
     var boards = (DATA.kpis && DATA.kpis.top_12_boards) || {};
-    var scopes = BOARD_SCOPES.filter(function (s) { return boards[s.id]; });
+    // Beside an Online board, the official one is "Official", not "All
+    // players": it covers official events only (S1).
+    var officialLabel = boards.online && isOfficialScope ? "Official" : null;
+    var scopes = BOARD_SCOPES.filter(function (s) { return boards[s.id]; }).map(function (s) {
+      return s.id === "all" && officialLabel ? { id: s.id, label: officialLabel } : s;
+    });
     el.hidden = !scopes.length;
     if (!scopes.length) return;
     if (!boards[boardState.scope]) boardState.scope = scopes[0].id;
     var board = boards[boardState.scope];
+    var boardLabel = boardState.scope === "all" && officialLabel ? officialLabel : board.label;
     var tiles = board[boardState.grouping] || board.forms || [];
     var controls = "";
     if (scopes.length > 1) controls += segmentedHtml("Players", "data-board-scope", scopes, boardState.scope);
@@ -2178,8 +2300,9 @@
       "<p>By " + termHtml("usage", "share of teams") + "</p></div>" +
       '<div class="board-band-block board-band-mark"><strong>' + escapeHtml(shortRegulation(regulationScope)) + "</strong>" +
       "<span>" + escapeHtml(plural(board.team_count, "team") + " · " + plural(board.event_count, "event")) + "</span></div>" +
-      '<div class="board-band-block board-band-scope"><span class="phase-chip' + (boardState.scope === "online" ? " is-online" : "") +
-      '">' + escapeHtml(board.label) + '</span><div class="board-controls">' + controls + "</div></div></div>";
+      '<div class="board-band-block board-band-scope"><span class="phase-chip' +
+      (boardState.scope === "online" ? " is-online" : boardState.scope === "all" && !isOfficialScope ? " is-" + regulationPopulation : "") +
+      '">' + escapeHtml(boardLabel) + '</span><div class="board-controls">' + controls + "</div></div></div>";
     el.innerHTML = '<div class="board-inner"><div class="board-grid">' + band +
       (tiles.length
         ? tiles.map(boardTileHtml).join("")
@@ -2419,19 +2542,27 @@
       return String(b.event_date).localeCompare(String(a.event_date)) || String(a.event_id).localeCompare(String(b.event_id));
     });
     if (windowSelect) {
+      // The window runs over official events (S1): on an Online or All
+      // scope its choices sit under an "Official events" heading.
+      var windowParent = windowSelect;
+      if (!isOfficialScope) {
+        windowParent = document.createElement("optgroup");
+        windowParent.label = "Official events";
+        windowSelect.appendChild(windowParent);
+      }
       [1, 2, 3].forEach(function (n) {
         if (windowEvents.length > n) {
           var opt = document.createElement("option");
           opt.value = "last-" + n;
           opt.textContent = n === 1 ? "Latest event" : "Last " + n + " events";
-          windowSelect.appendChild(opt);
+          windowParent.appendChild(opt);
         }
       });
       windowEvents.slice(1).forEach(function (e) {
         var opt = document.createElement("option");
         opt.value = "since-" + e.event_id;
         opt.textContent = "Since " + shortEventName(e.event_name);
-        windowSelect.appendChild(opt);
+        windowParent.appendChild(opt);
       });
       windowSelect.disabled = windowEvents.length < 2;
     }
@@ -2450,6 +2581,7 @@
     }
 
     var windowTable = createDataTable(document.getElementById("usage-window-table"), {
+      officialOnly: "cite",
       caption: "Usage in the selected events",
       sort: { key: "team_share", dir: "desc" },
       limit: 50,
@@ -2557,7 +2689,8 @@
             .map(function (e) { return shortEventName(e.event_name); });
           var teams = windowEvents.filter(function (e) { return ids.indexOf(e.event_id) !== -1; })
             .reduce(function (sum, e) { return sum + (e.team_count || 0); }, 0);
-          noteEl.textContent = "Usage at " + names.join(", ") + " (" + teams.toLocaleString() +
+          noteEl.textContent = (isOfficialScope ? "Usage at " : "Official events: usage at ") +
+            names.join(", ") + " (" + teams.toLocaleString() +
             " teams), against the regulation's earlier events" +
             (ids.length === windowEvents.length ? " (none: this is every event)" : "") + ".";
         }
@@ -2857,6 +2990,7 @@
     var dates = distinctSorted(trendRows, "event_date").slice().reverse(); // most recent first
 
     var table = createDataTable(document.getElementById("usage-trend-table"), {
+      officialOnly: true,
       caption: "Usage by tournament date",
       sort: { key: "usage_rank", dir: "asc" },
       limit: 50,
@@ -3087,6 +3221,7 @@
       ],
     });
     var tripleTable = createDataTable(document.getElementById("profile-triple-table"), {
+      officialOnly: true,
       caption: "Three-Pokémon cores",
       sort: { key: "triple_lift", dir: "desc" },
       limit: 12,
@@ -3177,7 +3312,7 @@
         coords.map(function (c) { return shortRegulation(c.p.code) + " " + formatPercent(c.value); }).join(", ") + '">' +
         '<polyline points="' + line + '" fill="none" stroke="var(--blue)" stroke-width="2"/>' +
         coords.map(function (c) {
-          var current = c.p.code === regulationScope;
+          var current = c.p.code === regulationCode;
           return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="' + (current ? 5 : 3.5) +
             '" fill="' + (current ? "var(--accent-red)" : "var(--blue)") + '"/>' +
             '<text x="' + c.x.toFixed(1) + '" y="' + (c.y - 8).toFixed(1) + '" text-anchor="middle" class="trend-label">' +
@@ -3186,7 +3321,7 @@
       var legend = '<div class="trend-legend" style="grid-template-columns: repeat(' + points.length + ', 1fr)">' +
         points.map(function (p) {
           var r = p.row;
-          return '<div' + (p.code === regulationScope ? ' class="is-current"' : "") + "><strong>" +
+          return '<div' + (p.code === regulationCode ? ' class="is-current"' : "") + "><strong>" +
             escapeHtml(shortRegulation(p.code).replace("Reg ", "")) + "</strong>" +
             (r && r.win_rate != null
               ? '<span title="' + escapeHtml(recordTitle(r)) + '">' + formatPercent(r.win_rate) + " WR</span>" +
@@ -3194,7 +3329,9 @@
               : "<span>" + (r && r.usage_count ? r.usage_count.toLocaleString() + " teams" : "not used") + "</span>") +
             "</div>";
         }).join("") + "</div>";
-      return '<div class="trend"><p class="trend-title">Usage across regulations</p>' + svg + legend + "</div>";
+      return '<div class="trend"><p class="trend-title">' +
+        (isOfficialScope ? "Usage across regulations" : "Official usage across regulations") + "</p>" +
+        svg + legend + "</div>";
     }
 
     // Recently viewed (P2): the last few profiles opened in this browser,
@@ -3258,13 +3395,13 @@
       });
       teamsEl.innerHTML = teams.length
         ? teams.slice(0, MAX_FEATURING).map(function (t) { return teamCardHtml(t); }).join("")
-        : '<p class="empty-state">No top-16 team in ' + escapeHtml(shortRegulation(regulationScope)) +
+        : '<p class="empty-state">No top-16 team in ' + escapeHtml(officialScopeName) +
           " brought " + escapeHtml(profile.pokemon_name) + ".</p>";
       var note = document.getElementById("profile-teams-note");
       if (note) {
         note.textContent = teams.length
           ? teams.length + " top-16 team" + (teams.length === 1 ? "" : "s") + " in " +
-            shortRegulation(regulationScope) + " brought " + profile.pokemon_name + "; the best-placed are below."
+            officialScopeName + " brought " + profile.pokemon_name + "; the best-placed are below."
           : "";
       }
     }
@@ -3868,6 +4005,7 @@
     });
 
     var table = createDataTable(document.getElementById("players-country-table"), {
+      officialOnly: true,
       caption: "Usage by country",
       sort: { key: "country_usage_rank", dir: "asc" },
       limit: 30,
@@ -3970,6 +4108,7 @@
       .slice(0, 30);
 
     createDataTable(document.getElementById("players-specialists-table"), {
+      officialOnly: true,
       caption: "Most committed specialists",
       sort: { key: "team_share", dir: "desc" },
       limit: 30,
@@ -3998,6 +4137,7 @@
     }).setRows(specialists);
 
     var signatureTable = createDataTable(document.getElementById("players-signature-table"), {
+      officialOnly: true,
       caption: "A player's most-fielded Pokémon",
       sort: { key: "player_pokemon_rank", dir: "asc" },
       rowHref: pokemonRowHref,
@@ -4445,8 +4585,15 @@
     return inForce || started;
   }
 
-  function shortRegulation(code) {
-    return code === ALL_SCOPE ? "All regulations" : "Reg " + String(code || "").toUpperCase();
+  // "Reg M-C", or for a population scope "Reg M-C online" / "Reg M-C
+  // official + online".
+  function shortRegulation(scope) {
+    var code = scopeRegulation(scope);
+    var name = code === ALL_SCOPE ? "All regulations" : "Reg " + code.toUpperCase();
+    var population = scopePopulation(scope);
+    if (population === "online") return name + " online";
+    if (population === "combined") return name + " official + online";
+    return name;
   }
 
   // "Reg M-D started 2026-12-02. Not enough results yet; showing M-C.
@@ -4455,14 +4602,33 @@
     var banner = document.getElementById("rollover-banner");
     if (!banner || !rolloverNotice) return;
     var inForce = rolloverNotice.in_force;
+    var params;
+    if (rolloverNotice.online) {
+      // "Reg M-D started 2026-12-03. Official results are thin so far (120
+      // teams); showing online events (640 teams). Switch to official →"
+      var html2 = escapeHtml(shortRegulation(inForce.regulation_code)) + " started " +
+        escapeHtml(inForce.start_date) + ". Official results are thin so far" +
+        (rolloverNotice.has_data ? " (" + rolloverNotice.team_count.toLocaleString() + " teams)" : "") +
+        "; showing online events (" + (rolloverNotice.online.team_count || 0).toLocaleString() + " teams).";
+      if (rolloverNotice.has_data) {
+        params = new URLSearchParams(window.location.search);
+        params.set(SCOPE_PARAM, inForce.regulation_code);
+        html2 += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) +
+          '" data-set-scope="' + escapeHtml(inForce.regulation_code) + '">Switch to official &rarr;</a>';
+      }
+      banner.innerHTML = html2;
+      banner.hidden = false;
+      return;
+    }
     var html = escapeHtml(shortRegulation(inForce.regulation_code)) + " started " +
       escapeHtml(inForce.start_date) + ". Not enough results yet" +
       (rolloverNotice.has_data ? " (" + rolloverNotice.team_count.toLocaleString() + " teams)" : "") +
       "; showing " + escapeHtml(shortRegulation(rolloverNotice.shown.regulation_code)) + ".";
     if (rolloverNotice.has_data) {
-      var params = new URLSearchParams(window.location.search);
+      params = new URLSearchParams(window.location.search);
       params.set(SCOPE_PARAM, inForce.regulation_code);
-      html += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) + '">Switch to ' +
+      html += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) +
+        '" data-set-scope="' + escapeHtml(inForce.regulation_code) + '">Switch to ' +
         escapeHtml(shortRegulation(inForce.regulation_code)) + " &rarr;</a>";
     }
     banner.innerHTML = html;
@@ -4497,8 +4663,48 @@
     banner.textContent = messages.join(" ");
     banner.hidden = false;
   }
+  // Online events are a different population (S1): whenever the page
+  // shows them, a banner says so, with the sample and the way back.
+  function renderPopulationBanner() {
+    var banner = document.getElementById("population-banner");
+    // The rollover banner already says why online events are showing.
+    if (!banner || isOfficialScope || (rolloverNotice && rolloverNotice.online)) return;
+    var kpis = DATA.kpis || {};
+    var params = new URLSearchParams(window.location.search);
+    params.set(SCOPE_PARAM, regulationCode);
+    var where = regulationCode === ALL_SCOPE ? "across every regulation" : "in " + shortRegulation(regulationCode);
+    var text = regulationPopulation === "online"
+      ? plural(kpis.team_count, "team") + " from " + plural(kpis.event_count, "Limitless online tournament") + " " + where +
+        ". Grassroots players, identified by handle: a different population from official events."
+      : plural(kpis.team_count, "team") + " " + where + ": " + (kpis.official_team_count || 0).toLocaleString() +
+        " from official events and " + Math.max(0, (kpis.team_count || 0) - (kpis.official_team_count || 0)).toLocaleString() +
+        " from Limitless online tournaments.";
+    // The way back exists only when the regulation has official results.
+    var back = (DATA.kpis_by_scope || {})[regulationCode]
+      ? '<a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) +
+        '" data-set-scope="' + escapeHtml(regulationCode) + '">Official events only &rarr;</a>'
+      : "";
+    banner.innerHTML = phaseChipHtml(POPULATION_LABELS[regulationPopulation], "is-" + regulationPopulation) +
+      "<span>" + escapeHtml(text) + "</span>" + back;
+    banner.hidden = false;
+  }
+
+  // A view built on official events only says so on a population scope,
+  // with an Official chip and one sentence: officialOnlyNoteHtml("Player
+  // records cover official events only.").
+  function officialOnlyNoteHtml(sentence) {
+    if (isOfficialScope) return "";
+    return '<p class="official-only-note">' + phaseChipHtml("Official") + escapeHtml(sentence) + "</p>";
+  }
+
   renderStalenessBanner();
   renderRolloverBanner();
+  renderPopulationBanner();
+  document.querySelectorAll("[data-official-only]").forEach(function (el) {
+    if (isOfficialScope) return;
+    el.innerHTML = officialOnlyNoteHtml(el.getAttribute("data-official-only"));
+    el.hidden = false;
+  });
 
   // Header Regulation selector and the per-scope KPI rows the template
   // renders (one .kpi-row[data-scope] per scope; only the selected shows).
@@ -4508,27 +4714,39 @@
     });
     var select = document.getElementById("regulation-scope");
     if (!select) return;
-    select.value = regulationScope;
-    select.addEventListener("change", function () {
-      var inForce = regulationInForce(DATA.regulations, TODAY_ISO);
-      try {
-        // Remembered with the regulation in force when it was made, so the
-        // next set's arrival overrides it (resolveRegulationScope, step 2).
-        localStorage.setItem(
-          SCOPE_STORAGE_KEY,
-          JSON.stringify({
-            code: select.value,
-            in_force: inForce ? inForce.regulation_code : null,
-            chosen_on: TODAY_ISO,
-          })
-        );
-      } catch (e) {
-        // Storage blocked: the ?reg= link below still carries the choice.
+    // The Events select (S1) picks the population; a regulation without
+    // online data greys out Online and All rather than offering an empty
+    // page.
+    var population = document.getElementById("population-scope");
+    var byScope = DATA.kpis_by_scope || {};
+    function syncPopulationOptions() {
+      if (!population) return;
+      Array.prototype.forEach.call(population.options, function (option) {
+        option.disabled = !byScope[populationScope(select.value, option.value)];
+      });
+    }
+    select.value = regulationCode;
+    if (population) population.value = regulationPopulation;
+    syncPopulationOptions();
+    function navigate() {
+      var chosen = population ? populationScope(select.value, population.value) : select.value;
+      if (!byScope[chosen]) {
+        // This regulation lacks the chosen population: its first one with
+        // data, official first.
+        chosen = ["official", "online", "combined"].map(function (p) {
+          return populationScope(select.value, p);
+        }).filter(function (scope) { return byScope[scope]; })[0] || select.value;
       }
+      rememberScope(chosen);
       var params = new URLSearchParams(window.location.search);
-      params.set(SCOPE_PARAM, select.value);
+      params.set(SCOPE_PARAM, chosen);
       window.location.assign("?" + params.toString() + window.location.hash);
+    }
+    select.addEventListener("change", function () {
+      syncPopulationOptions();
+      navigate();
     });
+    if (population) population.addEventListener("change", navigate);
   }
   setupRegulationSelector();
 
@@ -4718,6 +4936,14 @@
     renderMegaPanel: renderMegaPanel,
     ensureData: ensureData,
     regulationScope: regulationScope,
+    regulationCode: regulationCode,
+    regulationPopulation: regulationPopulation,
+    isOfficialScope: isOfficialScope,
+    officialFallback: officialFallback,
+    officialOnlyNoteHtml: officialOnlyNoteHtml,
+    officialScopeName: officialScopeName,
+    scopeRegulation: scopeRegulation,
+    scopePopulation: scopePopulation,
     scopeLabel: scopeLabel,
     attachPokemonCombobox: attachPokemonCombobox,
     openProfile: openProfile,

@@ -14,7 +14,7 @@
 -- nature and moves and nothing more.
 with selected_teams as (
   select distinct team_id
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
   where placement <= 16
   union
   select distinct team_id
@@ -28,7 +28,7 @@ select
   roster.ability,
   roster.nature,
   roster.moves
-from {{ ref('int_champions_roster') }} roster
+from {{ ref('int_champions_roster_official') }} roster
 inner join selected_teams
   on selected_teams.team_id = roster.team_id
 order by roster.team_id, roster.slot_number

@@ -32,7 +32,8 @@ by_event as (
     mega_count,
     count(*) as team_count
   from team_megas
-  where regulation_scope != 'all'
+  -- Official events only: one row per event, from its own base scope.
+  where regulation_scope = regulation_code
   group by regulation_code, event_id, mega_count
 )
 select

@@ -411,3 +411,27 @@ def test_an_on_demand_mart_with_a_scope_column_ships_whole_not_per_scope(tmp_pat
         (tmp_path / index["on_demand"]["player_archetype_record"]).read_text(encoding="utf-8")
     )
     assert len(whole["player_archetype_record"]) == 2
+
+
+def test_a_population_scope_falls_back_to_official_rows_it_lacks(tmp_path):
+    # docs/upgrade-plan-2027q2.md, S1: online handles have no player
+    # records, so the online scope reads the official ones, and says so.
+    marts = {
+        "player_archetype_record": [{"player_id": "P1", "regulation_scope": "m-c"}],
+        "pokemon_usage_summary": [
+            {"pokemon_key": "a", "regulation_scope": "m-c"},
+            {"pokemon_key": "b", "regulation_scope": "m-c:online"},
+        ],
+        "pokemon_set_variants": [{"pokemon_key": "a", "regulation_scope": "m-c"}],
+    }
+    index = build._write_mart_shards(marts, {"m-c": {}, "m-c:online": {}}, tmp_path)
+    # No colon in a published file name.
+    assert index["scopes"]["m-c:online"] == "data/scope-m-c-online.json"
+    online = json.loads((tmp_path / index["scopes"]["m-c:online"]).read_text(encoding="utf-8"))
+    assert [r["pokemon_key"] for r in online["pokemon_usage_summary"]] == ["b"]
+    assert [r["regulation_scope"] for r in online["pokemon_set_variants"]] == ["m-c"]
+    assert sorted(index["official_fallback"]["m-c:online"]) == [
+        "player_archetype_record",
+        "pokemon_set_variants",
+    ]
+    assert "m-c" not in index["official_fallback"]

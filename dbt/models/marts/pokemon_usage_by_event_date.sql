@@ -16,7 +16,7 @@
 -- teams that brought the Pokémon.
 with date_teams as (
   select event.event_date, count(distinct member.team_id) as team_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('tournament_event') }} event
     on event.event_id = member.event_id
   where event.event_date is not null
@@ -27,7 +27,7 @@ counted as (
     member.pokemon_key,
     event.event_date,
     count(*) as usage_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true

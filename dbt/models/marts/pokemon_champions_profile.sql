@@ -27,10 +27,20 @@
 -- regulation_scope (docs/upgrade-plan-2026q4.md, A3): every legal Pokémon
 -- gets one row per regulation plus 'all', carrying that scope's usage and
 -- win rate (null where it wasn't used). Stats are the same in every scope.
-with scopes as (
+--
+-- Every population scope too (docs/upgrade-plan-2027q2.md, S1): "m-c",
+-- "m-c:online" and "m-c:combined", and the same three for 'all'.
+with base_scopes as (
   select regulation_code as regulation_scope from {{ ref('champions_regulations') }}
   union all
   select 'all'
+),
+scopes as (
+  select regulation_scope from base_scopes
+  union all
+  select regulation_scope || ':online' from base_scopes
+  union all
+  select regulation_scope || ':combined' from base_scopes
 )
 select
   scopes.regulation_scope,

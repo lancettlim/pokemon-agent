@@ -29,6 +29,9 @@ class Regulation:
     limitless_format: str
     start_date: date
     end_date: date
+    # Limitless' online platform labels the same set differently ("M-C");
+    # pipelines/extract/limitless_play.py matches it case-insensitively.
+    limitless_play_format: str = ""
 
 
 def load_regulations(path: Path = REGISTRY_PATH) -> list[Regulation]:
@@ -42,6 +45,7 @@ def load_regulations(path: Path = REGISTRY_PATH) -> list[Regulation]:
                 limitless_format=row["limitless_format"],
                 start_date=date.fromisoformat(row["start_date"]),
                 end_date=date.fromisoformat(row["end_date"]),
+                limitless_play_format=row.get("limitless_play_format") or "",
             )
             for row in csv.DictReader(fh)
         ]
@@ -54,6 +58,12 @@ def munchstats_formats(path: Path = REGISTRY_PATH) -> frozenset[str]:
 
 def limitless_formats(path: Path = REGISTRY_PATH) -> frozenset[str]:
     return frozenset(r.limitless_format for r in load_regulations(path))
+
+
+def limitless_play_formats(path: Path = REGISTRY_PATH) -> frozenset[str]:
+    return frozenset(
+        r.limitless_play_format.upper() for r in load_regulations(path) if r.limitless_play_format
+    )
 
 
 def current_regulation(today: date | None = None, path: Path = REGISTRY_PATH) -> Regulation | None:

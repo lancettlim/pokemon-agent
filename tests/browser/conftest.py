@@ -17,7 +17,12 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from dashboard_fixture import write_fixture_manifest, write_fixture_marts, write_fixture_mega_marts
+from dashboard_fixture import (
+    ONLINE_SCOPES,
+    write_fixture_manifest,
+    write_fixture_marts,
+    write_fixture_mega_marts,
+)
 
 from pipelines.dashboard import build
 from pipelines.regulations import Regulation, load_regulations
@@ -30,10 +35,14 @@ _PREINSTALLED_CHROMIUM = "/opt/pw-browsers/chromium"
 BUILD_DAY = date(2026, 10, 19)
 
 
-def _build_site(root: Path, regulations: list[Regulation] | None = None) -> Path:
+def _build_site(
+    root: Path,
+    regulations: list[Regulation] | None = None,
+    online_scopes: tuple[str, ...] = ONLINE_SCOPES,
+) -> Path:
     marts_dir = root / "marts"
     normalized_dir = root / "normalized"
-    write_fixture_marts(marts_dir, normalized_dir)
+    write_fixture_marts(marts_dir, normalized_dir, online_scopes)
     write_fixture_mega_marts(marts_dir)
     write_fixture_manifest(root / "manifests")
     output_dir = root / "site"
@@ -100,6 +109,20 @@ def regulations_with_next_set() -> list[Regulation]:
 def rollover_site_url(tmp_path_factory, serve) -> str:
     return serve(
         _build_site(tmp_path_factory.mktemp("dashboard-rollover"), regulations_with_next_set())
+    )
+
+
+@pytest.fixture(scope="session")
+def online_rollover_site_url(tmp_path_factory, serve) -> str:
+    """The rollover registry, with online events already played under M-D
+    (docs/upgrade-plan-2027q2.md, S1): official M-D has nothing yet, online
+    M-D has enough to open on."""
+    return serve(
+        _build_site(
+            tmp_path_factory.mktemp("dashboard-online-rollover"),
+            regulations_with_next_set(),
+            online_scopes=("m-d:online", "all:online"),
+        )
     )
 
 

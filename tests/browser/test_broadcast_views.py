@@ -32,7 +32,10 @@ def test_overview_opens_on_the_top_12_board(site_url, open_page):
     band = page.locator("#top-board .board-band")
     assert "Top 12 Pokémon" in band.text_content()
     assert "Reg M-C" in band.text_content() and "710 teams" in band.text_content()
-    assert band.locator(".phase-chip").inner_text().lower() == "all players"
+    # Beside the fixture's Online board, the official one says "Official"
+    # (docs/upgrade-plan-2027q2.md, S1): it covers official events only.
+    assert band.locator(".phase-chip").inner_text().lower() == "official"
+    assert page.locator('[data-board-scope="all"]').inner_text().lower() == "official"
     # Desktop: tiles 1-6 above the band, the rest below it.
     band_box = _boxes(page, "#top-board .board-band")[0]
     tile_boxes = _boxes(page, "#top-board .board-tile")

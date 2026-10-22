@@ -1413,3 +1413,141 @@ def test_latest_event_carries_the_winners_sheet_for_the_team_strip():
     assert [s["pokemon_key"] for s in latest["winner_sets"]] == ["a", "b"]
     assert latest["winner_sets"][0]["item_name"] == "Choice Scarf"
     assert data._latest_event(events)["winner_sets"] == []
+
+
+# docs/upgrade-plan-2027q2.md, S1: official, online and combined scopes.
+def test_scope_helpers_split_regulation_and_population():
+    assert (data.scope_regulation("m-c"), data.scope_population("m-c")) == ("m-c", "official")
+    assert (data.scope_regulation("m-c:online"), data.scope_population("m-c:online")) == (
+        "m-c",
+        "online",
+    )
+    assert data.population_scope("all", "combined") == "all:combined"
+    assert data.population_scope("m-c", "official") == "m-c"
+
+
+def test_default_scope_rolls_over_to_online_while_official_is_thin():
+    from datetime import date
+
+    by_scope = {
+        "m-c": {"team_count": 3770},
+        "m-d": {"team_count": 120},
+        "m-d:online": {"team_count": data.MIN_DEFAULT_SCOPE_TEAMS},
+        "all": {},
+    }
+    # Official M-D is thin, its online events are not: show those rather
+    # than falling back to M-C.
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-d:online"
+    by_scope["m-d:online"]["team_count"] = data.MIN_DEFAULT_SCOPE_TEAMS - 1
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-c"
+    # Once official M-D has enough teams it leads again.
+    by_scope["m-d"]["team_count"] = data.MIN_DEFAULT_SCOPE_TEAMS
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-d"
+
+
+def test_compute_kpis_by_scope_adds_online_and_combined_scopes():
+    from datetime import date
+
+    def usage(scope, key, count, teams):
+        return {
+            "regulation_scope": scope,
+            "pokemon_key": key,
+            "event_tier": None,
+            "usage_count": count,
+            "usage_share": 0.1,
+            "usage_rank": 1,
+            "team_share": round(count / teams, 4),
+            "scope_team_count": teams,
+            "pokemon_name": key,
+        }
+
+    online_event = {
+        **_event("LP-cup", "m-c", "2026-10-18", 640, tier="Online"),
+        "source_url": "https://play.limitlesstcg.com/tournament/cup/standings",
+    }
+    marts = {
+        "pokemon_usage_summary": [
+            usage("m-c", "rillaboom", 500, 1013),
+            usage("all", "rillaboom", 500, 1013),
+            usage("m-c:online", "garchomp", 300, 640),
+            usage("all:online", "garchomp", 300, 640),
+            usage("m-c:combined", "rillaboom", 700, 1653),
+            usage("all:combined", "rillaboom", 700, 1653),
+        ],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "tournament_event_summary": [_event("louisville", "m-c", "2026-10-09", 1013)],
+        "online_event_summary": [online_event],
+    }
+    by_scope, default = data.compute_kpis_by_scope(
+        marts, today=date(2026, 10, 21), regulations=_FIXTURE_REGULATIONS
+    )
+    # Official first, so the regulation select lists it before the rest.
+    assert list(by_scope) == [
+        "m-c",
+        "all",
+        "m-c:online",
+        "all:online",
+        "m-c:combined",
+        "all:combined",
+    ]
+    assert default == "m-c"
+    online = by_scope["m-c:online"]
+    assert (online["population"], online["event_count"], online["team_count"]) == ("online", 1, 640)
+    assert online["top_used_pokemon"]["pokemon_key"] == "garchomp"
+    assert online["official_team_count"] == 1013
+    # Official-only panels come from the official scope, not online events.
+    assert online["latest_event"]["event_id"] == "louisville"
+    assert online["current_regulation"]["regulation_code"] == "m-c"
+    combined = by_scope["m-c:combined"]
+    assert (combined["event_count"], combined["team_count"]) == (2, 1653)
+    # The official board gets an Online switch; online figures never
+    # replace the official ones.
+    boards = by_scope["m-c"]["top_12_boards"]
+    assert boards["all"]["forms"][0]["pokemon_key"] == "rillaboom"
+    assert boards["online"]["label"] == "Online"
+    assert boards["online"]["forms"][0]["pokemon_key"] == "garchomp"
+    assert by_scope["m-c"]["team_count"] == 1013
+
+
+def test_an_online_scope_without_official_results_has_no_official_panels():
+    # S1's rollover: M-D is in force with online events but no official
+    # result yet. The page opens on m-d:online, and its "Latest event" card
+    # and starter teams must not be built from online events, which have
+    # no event pages.
+    from datetime import date
+
+    online_event = {**_event("LP-cup", "m-d", "2026-12-06", 640, tier="Online")}
+    marts = {
+        "pokemon_usage_summary": [
+            {
+                "regulation_scope": scope,
+                "pokemon_key": "garchomp",
+                "event_tier": None,
+                "usage_count": 300,
+                "usage_share": 0.1,
+                "usage_rank": 1,
+                "team_share": 0.47,
+                "scope_team_count": 640,
+                "pokemon_name": "Garchomp",
+            }
+            for scope in ("m-c", "all", "m-d:online", "all:online")
+        ],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "pokemon_usage_by_event_date": [{"event_date": "2026-10-09"}],
+        "tournament_event_summary": [_event("louisville", "m-c", "2026-10-09", 1013)],
+        "online_event_summary": [online_event],
+    }
+    by_scope, default = data.compute_kpis_by_scope(
+        marts, today=date(2026, 12, 8), regulations=_FIXTURE_REGULATIONS
+    )
+    assert default == "m-d:online"
+    online = by_scope["m-d:online"]
+    assert online["latest_event"] is None
+    assert online["starter_teams"] == []
+    assert online["movers"] is None
+    assert online["official_team_count"] == 0
+    # The staleness banner reads the online events' own date.
+    assert online["latest_event_date"] == "2026-12-06"
+    assert by_scope["m-c"]["latest_event_date"] == "2026-10-09"

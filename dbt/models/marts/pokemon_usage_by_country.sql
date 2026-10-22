@@ -17,7 +17,7 @@
 -- country's teams that brought the Pokémon, over country_team_count.
 with country_teams as (
   select team.player_country, count(distinct member.team_id) as country_team_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('tournament_team') }} team
     on team.team_id = member.team_id
   where team.player_country is not null and team.player_country != ''
@@ -28,7 +28,7 @@ counted as (
     member.pokemon_key,
     team.player_country,
     count(*) as usage_count
-  from {{ ref('int_champions_roster') }} member
+  from {{ ref('int_champions_roster_official') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true

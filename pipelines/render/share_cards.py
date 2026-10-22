@@ -56,6 +56,21 @@ def _plural(n: int | None, word: str) -> str:
     return f"{n:,} {word}{'' if n == 1 else 's'}"
 
 
+def og_card(cards: dict[str, str], payload: dict[str, Any]) -> str | None:
+    """The "What changed" card that doubles as the site's Open Graph image:
+    the default scope's regulation's, else the newest earlier regulation
+    with one. The fallback covers a rollover that opens on a new set's
+    online events (docs/upgrade-plan-2027q2.md, S1) before the set has a
+    reliable official comparison: the card the page would have opened on
+    before that rule existed."""
+    regulation = str(payload.get("default_scope") or "").split(":", 1)[0]
+    if regulation in cards:
+        return cards[regulation]
+    codes = [r.get("regulation_code") for r in payload.get("regulations") or []]
+    earlier = codes[: codes.index(regulation)] if regulation in codes else codes
+    return next((cards[code] for code in reversed(earlier) if code in cards), None)
+
+
 def whats_changed_context(
     kpis: dict[str, Any],
     scope: str,
@@ -203,6 +218,11 @@ def render_share_cards(
     whats_changed = env.get_template("whats_changed.html.jinja")
     version = payload.get("provenance", {}).get("dataset_version")
     for scope, kpis in payload.get("kpis_by_scope", {}).items():
+        # "What changed" compares official events, so a population scope
+        # ("m-c:online", docs/upgrade-plan-2027q2.md, S1) shares its
+        # official scope's card rather than rendering a copy.
+        if ":" in scope:
+            continue
         context = whats_changed_context(
             kpis, scope, sprite_uri, dataset_version=version, site=site_url
         )
@@ -226,7 +246,7 @@ def render_share_cards(
             finally:
                 browser.close()
 
-    default_card = manifest["whats_changed"].get(payload.get("default_scope"))
+    default_card = og_card(manifest["whats_changed"], payload)
     if default_card:
         og_path = cards_dir / "og.png"
         shutil.copyfile(output_dir / default_card, og_path)

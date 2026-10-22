@@ -28,7 +28,7 @@ scope_teams as (
 ),
 event_teams as (
   select event_id, any_value(regulation_code) as regulation_code, count(distinct team_id) as scope_team_count
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
   group by event_id
 ),
 by_scope as (
@@ -55,7 +55,8 @@ by_event as (
     event_teams.scope_team_count
   from megas
   inner join event_teams using (event_id)
-  where megas.regulation_scope != 'all'
+  -- Official events only: one row per event, from its own base scope.
+  where megas.regulation_scope = megas.regulation_code
   group by event_teams.regulation_code, megas.event_id, megas.pokemon_key, event_teams.scope_team_count
 )
 select
