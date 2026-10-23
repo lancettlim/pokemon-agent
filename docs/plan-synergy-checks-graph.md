@@ -135,6 +135,11 @@ dashboard build time and is not a dbt model.
   second. It needs no new dependency, keeps screenshots and tests
   deterministic, costs a phone no CPU, and fits the dashboard's
   no-chart-library rule (`app.js` header).
+- **Stable positions across regulations.** Lay out `'all'` first, then
+  start each regulation from those positions and run only a short
+  refinement. Kingambit then stays in roughly the same place when the
+  header switches from M-B to M-C, and the switch can animate instead of
+  reshuffling the whole graph. U1 (section 10) depends on this.
 - **Clusters.** Label propagation on the synergy layer, seeded. Clusters
   get neutral names ("Cluster 3"), the same rule `detected_archetype_*`
   follows, plus a link to the detected archetype they overlap most.
@@ -243,3 +248,161 @@ Matchup view needs extra review.
 | The graph turns into a hairball | Floors, the per-node edge cap and focus mode by default on phones |
 | Thin scopes (M-B, a new regulation) | The existing thin-regulation banner; checks hidden below the minimum number of matches, with an empty state that says why |
 | Anti-synergy is invisible. Pairs that never share a team have no row in `pokemon_team_core_usage` | Out of scope for this version. Listed here so nobody reads a missing edge as "neutral" |
+
+## 10. More UI features on top of the graph
+
+Section 4 is the base view. The features below build on it. Each one
+names the data it needs and how it works on a phone, because Track M
+gates every component.
+
+**One source that most of them share:** the on-demand
+`tournament_team_results` shard already gives the browser each team's six
+Pokémon (`pokemon_keys`), along with its event, regulation, placement,
+W–L record and `primary_archetype_key`. With that, the browser can
+compute co-occurrence and lift for any subset of teams: top cut only, one
+event, the last N events, or one country. That works for focus views of
+about 20 Pokémon. The full graph keeps the precomputed per-scope layout
+from G4, and a filtered full graph reuses those positions and redraws only
+its edges.
+
+### Ranked list
+
+| # | Feature | What it answers | Data | Size |
+|---|---|---|---|---|
+| U1 | **Regulation diff** | "What changed in how the meta fits together?" | Existing scoped synergy + `pokemon_regulation_movers` | M |
+| U2 | **Your team on the graph** (Builder overlay) | "Where does my six sit, what glues it, what presses on it?" | Synergy + G2 check edges | M |
+| U3 | **Edge drawer** | "Who actually ran this pair, and how did they do?" | Team-results shard, computed in the browser | M |
+| U4 | **Cluster cards and a cluster-vs-cluster matrix** | "Which groups of the meta beat which?" | Clusters from G4 + `tournament_match` | M |
+| U5 | **Top-cut lens** | "Which cores convert, rather than just get registered?" | Team-results shard (`placement`) | S |
+| U6 | **Game-plan badges** (sun, sand, rain, terrain, Trick Room, Tailwind) | "Why does this cluster exist?" | Ability/move usage marts + a small seed | M |
+| U7 | **Bridge finder** | "How do I fit A and B on one team?" | Synergy, in the browser | S |
+| U8 | **Mini graph on the profile** | The graph without leaving the profile | Synergy + check edges | S |
+| U9 | **Graph share card** | The image people post | `pipelines/render/share_cards.py` | M |
+| U10 | **Event meta map** | "What did this event's top cut look like?" | Team-results shard | S |
+| U11 | **Filters** (type, Megas only, new to format, hide the top N) | Seeing niche cores past the staples | Existing marts | S |
+| U12 | **Keyboard and screen-reader navigation** | The graph is usable without a mouse | — | S |
+
+### The top five in detail
+
+**U1. Regulation diff (`#/graph/diff?from=m-b&to=m-c`).**
+- One graph built from the stable positions in G4.
+- Edges are colour-coded:
+  - **New:** the pair shares fewer than 5 teams in the earlier regulation
+    and is above the floor now.
+  - **Stronger** or **weaker:** the lift moved by ×0.5 or more.
+  - **Gone:** shown dashed.
+- Each node has a ring showing its change in team share, read from
+  `pokemon_regulation_movers` (`is_new_to_format` gets a "NEW" chip).
+- The comparison is hidden when either regulation is under
+  `MIN_MOVER_TEAMS`, the same rule "What changed" already follows.
+- **Desktop:** an "Animate" toggle morphs the earlier layout into the
+  later one.
+- **Phone:** a list of the ten biggest edge changes, each opening that
+  pair's focus view, instead of the graph.
+
+**U2. Your team on the graph (`#/graph?team=<k1>,<k2>,...`).**
+- The Builder gets a "See on graph" button, which reuses the team
+  encoding Builder share links already use.
+- The six picks are pinned and highlighted, and the edges between them
+  are drawn.
+- Two derived lists:
+  - **Glue:** Pokémon outside the team with synergy edges to two or more
+    picks. This is the existing B9 suggested-partners rule, shown on the
+    graph.
+  - **Pressure:** Pokémon whose check edges point at two or more picks,
+    with the evidence tier on each one.
+- The pressure list replaces the Builder threat list's sort by usage rank
+  for any Pokémon that has a strong edge. The type-chart heuristic stays
+  as the fallback, still labelled as a heuristic.
+- **Phone:** the two lists, with the graph behind a button.
+
+**U3. Edge drawer.** Tapping a link opens a side panel on desktop, or a
+bottom sheet on a phone.
+- **Synergy edge:**
+  - Shared teams, lift, the expected count and `synergy_z`.
+  - The pair's own W–L record and best placement. The pair mart has
+    neither today; both are computed from the team-results shard.
+  - The five best-placed teams carrying the pair, linking to their event
+    and the Builder.
+  - The detected archetypes the pair falls under.
+- **Check edge:** the record, the expected win rate, `q_value`, the
+  evidence tier and the team-vs-team caveat.
+
+**U4. Cluster cards and a cluster matrix (`#/graph/clusters`).**
+- A card for each cluster: its core members, team share, win rate and the
+  detected archetype it overlaps most. Tapping a card highlights the
+  cluster on the graph.
+- Below the cards is a heatmap of how teams in each cluster do against
+  teams in each other cluster. This is laundry-list item 30, done at
+  cluster level.
+- **Why clusters:** pooling Pokémon into about 8–12 clusters gives each
+  cell many more matches than a Pokémon pair has. That should turn the
+  sparse checks layer into a readable signal.
+  - This is a hypothesis. Measure it in step 1, using the same
+    Benjamini–Hochberg test as G2.
+  - Ship the matrix only if most cells clear the minimum number of
+    matches.
+- Assigning a team to a cluster uses the same rule as
+  `primary_archetype_key`: most of its six Pokémon.
+- **Phone:** the heatmap becomes one list per cluster, showing its best
+  and worst matchups.
+
+**U5. Top-cut lens.** A switch for all teams versus Day 2 and top cut
+only. Edges are recomputed in the browser from teams at or above the
+cut, and a node keeps its place when its edges change. Comparing the two
+views shows which cores convert and which are just popular. This is the
+graph version of the Usage tab's Success view. The base view stays
+all-teams, so the headline figures don't depend on where the cut is drawn.
+
+### The rest, briefly
+
+- **U6. Game-plan badges.**
+  - Add a seed, `dbt/seeds/game_plan_markers.csv`, mapping abilities and
+    moves to a game plan. For example: Drought → sun, Sand Stream → sand,
+    Psychic Surge → terrain, Trick Room → TR, Tailwind → Tailwind.
+  - A Pokémon gets a badge when at least 30% of its sets carry a marker,
+    using the existing `pokemon_ability_usage` and `pokemon_move_usage`
+    marts.
+  - It colours or filters the graph, and explains the weather clashes
+    that dominate the strong check edges (section 2).
+  - This is the only feature here that needs a new seed.
+- **U7. Bridge finder** (`?path=<a>,<b>`). The strongest synergy path
+  between two Pokémon, found with Dijkstra on −log(lift). "Kingambit →
+  Incineroar → Torkoal" reads as a team-building hint.
+- **U8. Mini graph on the profile.** A one-hop radial SVG in the profile's
+  cores tab, linking to `#/graph?focus=<key>`. It replaces nothing,
+  because the existing tables stay.
+- **U9. Share card.** `share_cards.py` renders a focus graph or the
+  cluster map to PNG, through the same Playwright path as the existing
+  cards.
+  - It ships as the Open Graph image for `#/graph?focus=` links, in the
+    16:9, 4:5 and 9:16 sizes from M4/V8.
+  - A check-edge card carries the caveat line on the image itself, because
+    screenshots travel without the page around them.
+- **U10. Event meta map.** A "Meta map" tab on `#/event/<id>` showing the
+  synergy graph of that event's top cut. It is small, since the top cut
+  is 8–32 teams.
+- **U11. Filters.**
+  - Type, Megas only, and new to format (`is_new_to_format`).
+  - "Hide the top N by team share", so the niche cores show past
+    Incineroar and Rillaboom.
+- **U12. Keyboard and screen readers.** Arrow keys move between a node's
+  neighbours, Enter sets the focus, and Escape clears it. Every node gets
+  a `<title>`, and the table twin is linked with `aria-describedby`.
+
+### Where they fit
+
+| Step | Adds |
+|---|---|
+| 2 — Synergy graph | U11, U12 and U8 (each is small, and U12 is required for accessibility) |
+| 3 — Checks layer | U3, U2 |
+| 3b — Meta views | U1, U5, U10, U7 |
+| 3c — Clusters | U4 (only if the step 1 measurement holds), U6 |
+| 4 — Ladder | U9; U2's pressure list gains the ladder source |
+
+**Not proposed:**
+- A 3D graph or a physics simulation running in the browser. They are
+  heavy on phones and look different on every load (GD2).
+- A "best team" generator. Synergy is a description of what players
+  registered, not a recommendation, and the Builder already handles
+  suggestions with that framing.
