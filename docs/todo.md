@@ -1020,6 +1020,30 @@ sprint progress.
   Not published: the ranks are only in MunchStats' rendered pages, not its
   JSON. Parked until they are (`docs/data-sources.md` §4).
 
+The plan's "later" items (`docs/upgrade-plan-2027q2.md`, sections 3 and 4),
+added as they ship:
+
+- [x] Global search for Pokémon, players and events: `/`, Ctrl/⌘+K, a full-screen sheet on phones (Q3)
+  `static/search.js`. The header button shows from 1024px (narrower headers
+  have no room); below that it is the ⋯ menu's first item. Recent picks per
+  browser; English names match on a localised page.
+- [x] Localised Pokémon names: Japanese, Spanish, Portuguese, French, German (Q4)
+  `pokeapi.extract_names` reads PokéAPI's source CSVs (five requests) and
+  composes the form names PokéAPI lacks; `pokemon_localised_names` feeds
+  the inline `localised_names` maps. Portuguese uses the English names, as
+  the Brazilian games do. Names only. Every legal-pool Pokémon has all four
+  (`assert_localised_names_cover_the_legal_pool`).
+- [x] Offline at the venue: a service worker (Q5)
+  `sw.js`, network first for pages, scripts and shards and cache first for
+  images; whatever a visitor opened works offline, with a banner saying so.
+- [x] Rank-change column on Usage (list #19)
+  Against the regulation before its newest event, or before an event
+  window; official events only.
+- [x] Builder legality warnings: item clause, species clause, dropped Pokémon (list #22)
+  The legal pool was already enforced on add; a saved team that loses
+  Pokémon to a regulation change now says so. `form_species` gives the
+  species clause each form's species.
+
 ## Release readiness (v1 definition of done)
 
 All release gates pass as of this writing (see

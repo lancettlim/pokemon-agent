@@ -1062,6 +1062,40 @@ def write_fixture_ladder_marts(marts_dir: Path) -> None:
     _write(marts_dir / "ladder_stat_point_spreads.csv", spreads)
 
 
+# docs/upgrade-plan-2027q2.md, Q4: the fixture's Pokémon in Japanese and
+# German (Spanish and French omitted: a missing language falls back to
+# English).
+LOCALISED_NAMES = {
+    "ja": {
+        "rillaboom": "ゴリランダー",
+        "sneasler": "オオニューラ",
+        "incineroar": "ガオガエン",
+        "garchomp": "ガブリアス",
+        "kingambit": "ドドゲザン",
+        "gholdengo": "サーフゴー",
+        "whimsicott": "エルフーン",
+        "pelipper": "ペリッパー",
+    },
+    "de": {"incineroar": "Fuegro", "kingambit": "Gladimperio"},
+}
+
+
+def write_fixture_name_marts(marts_dir: Path) -> None:
+    _write(
+        marts_dir / "pokemon_localised_names.csv",
+        [
+            {
+                "pokemon_key": key,
+                "language": language,
+                "localised_name": name,
+                "name_rule": "species",
+            }
+            for language, names in LOCALISED_NAMES.items()
+            for key, name in names.items()
+        ],
+    )
+
+
 def write_fixture_manifest(manifests_dir: Path) -> None:
     """A 0.4.0-style manifest, distributed as a Release asset (its
     `package` block), for the Data section's table cards (D1/D2)."""

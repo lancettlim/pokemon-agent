@@ -597,6 +597,30 @@ Every release entry must summarize:
   - Sustained/scheduled automated access rate-limiting or ToS posture not
     independently verified beyond a one-off extract
 
+### PokéAPI localised names
+
+A third PokéAPI path (`docs/upgrade-plan-2027q2.md`, Q4), from PokéAPI's
+own source CSVs on GitHub rather than its JSON API: five files
+(`languages`, `pokemon`, `pokemon_forms`, `pokemon_species_names`,
+`pokemon_form_names`) instead of about 600 calls.
+
+- **Records to capture**
+  - Each form's name in Japanese, Spanish, French and German
+    (`data/staging/pokeapi_names.schema.json`), with the rule that
+    produced it
+- **Scope**
+  - Every form the same run's pokeapi snapshot holds; weekly, with it
+- **Composition**
+  - PokéAPI has every species' localised name but full form names only
+    unevenly (French and Japanese Megas, a few Spanish and German ones), so
+    `pipelines/extract/pokeapi.py`'s `localised_name` composes the rest
+    from the species name and each language's convention ("Méga-Dracaufeu
+    Y", "Hisui-Arkani", "ウインディ（ヒスイのすがた）"). About ten Champions-pool
+    rows fall back to an English form label in Spanish or German
+- **Feeds** `pokemon_localised_names`, a mart, not a release entity; the
+  dashboard's name-language switch. Portuguese uses the English names, as
+  the Brazilian games do
+
 ### PokéAPI high-resolution artwork
 
 A second PokéAPI extraction path, distinct from the identity/stat one above

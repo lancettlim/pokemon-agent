@@ -1,5 +1,6 @@
 import csv
 import json
+import time
 
 from pipelines.dashboard import build
 
@@ -459,3 +460,31 @@ def test_share_card_manifest_keeps_only_top12_cards_on_disk(tmp_path):
     loaded = build._load_share_cards(tmp_path)
     assert loaded["top12"]["regulation"]["m-c"]["all"] == {"landscape": "images/cards/a.png"}
     assert loaded["top12"]["event"] == {}
+
+
+def test_service_worker_precaches_the_shell_and_hashes_it(tmp_path):
+    # docs/upgrade-plan-2027q2.md, Q5: sw.js lists the page, scripts, the
+    # core shard and the default regulation's shard, and its build id only
+    # changes when one of them does.
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    output_dir = tmp_path / "out"
+    _populate_marts(marts_dir, normalized_dir)
+
+    payload = _build(marts_dir, normalized_dir, output_dir)
+    worker = (output_dir / "sw.js").read_text(encoding="utf-8")
+
+    assert "__BUILD_ID__" not in worker and "__PRECACHE__" not in worker
+    precache = json.loads(worker.split("var PRECACHE = ", 1)[1].split(";", 1)[0])
+    assert precache[:2] == ["./", "index.html"]
+    assert set(build.SCRIPT_NAMES) <= set(precache)
+    assert payload["mart_files"]["core"] in precache
+    assert payload["mart_files"]["scopes"][payload["default_scope"]] in precache
+    build_id = worker.split('var BUILD = "', 1)[1].split('"', 1)[0]
+
+    # A second build, a second later, stamps a new generated_at_utc into
+    # index.html; the id ignores it.
+    time.sleep(1.05)
+    _build(marts_dir, normalized_dir, tmp_path / "again")
+    again = (tmp_path / "again" / "sw.js").read_text(encoding="utf-8")
+    assert again.split('var BUILD = "', 1)[1].split('"', 1)[0] == build_id

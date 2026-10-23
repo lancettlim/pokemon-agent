@@ -229,6 +229,63 @@
   var itemIcons = DATA.item_icons || {};
   var pokemonNames = DATA.pokemon_names || {};
 
+  // Pokémon names in the viewer's language (docs/upgrade-plan-2027q2.md,
+  // Q4): Japanese, Spanish, French or German from DATA.localised_names,
+  // English otherwise, Portuguese included (the Brazilian games use the
+  // English names). Names only: numbers and copy stay in English. Applied
+  // here, before any view renders, to the name map and to every name the
+  // inline KPIs carry; shard rows take their names from the map as they
+  // load. Changing the language reloads the page, like the scope.
+  var NAME_LANGUAGE_KEY = "dashboard-name-language";
+  var NAME_LANGUAGES = [
+    { id: "en", label: "English" },
+    { id: "ja", label: "日本語" },
+    { id: "es", label: "Español" },
+    { id: "pt", label: "Português" },
+    { id: "fr", label: "Français" },
+    { id: "de", label: "Deutsch" },
+  ];
+  var englishNames = {};
+  Object.keys(pokemonNames).forEach(function (key) {
+    englishNames[key] = pokemonNames[key];
+  });
+  function readNameLanguage() {
+    try {
+      var saved = localStorage.getItem(NAME_LANGUAGE_KEY);
+      if (NAME_LANGUAGES.some(function (l) { return l.id === saved; })) return saved;
+    } catch (e) {
+      // Storage blocked: English.
+    }
+    return "en";
+  }
+  var nameLanguage = readNameLanguage();
+  (function applyNameLanguage() {
+    var names = (DATA.localised_names || {})[nameLanguage];
+    if (!names) return;
+    Object.keys(names).forEach(function (key) {
+      pokemonNames[key] = names[key];
+    });
+    var pairs = (DATA.mart_files && DATA.mart_files.name_fields) || [["pokemon_key", "pokemon_name"]];
+    function relabel(node) {
+      if (Array.isArray(node)) {
+        node.forEach(relabel);
+        return;
+      }
+      if (!node || typeof node !== "object") return;
+      pairs.forEach(function (pair) {
+        var key = node[pair[0]];
+        if (key && typeof node[pair[1]] === "string" && names[key]) node[pair[1]] = names[key];
+      });
+      Object.keys(node).forEach(function (field) {
+        if (node[field] && typeof node[field] === "object") relabel(node[field]);
+      });
+    }
+    relabel(DATA.kpis_by_scope);
+    relabel(DATA.kpis);
+    relabel(DATA.reference_teams);
+    document.documentElement.setAttribute("data-name-language", nameLanguage);
+  })();
+
   // Icon-size tokens (docs/design-system.md's "Icon size scale") — mirrors
   // the --icon-sm/md/lg/xl CSS custom properties in index.html.jinja.
   var ICON_SIZES = { sm: 40, md: 64, lg: 96, xl: 128 };
@@ -2618,6 +2675,7 @@
           main: true,
           title: function (r) { return teamsTitle(r.usage_count, teamTotals[r.event_tier || ""], r.usage_share); },
         },
+        rankChangeColumn(),
         {
           key: "win_rate",
           label: "Win rate",
@@ -2627,6 +2685,52 @@
         { key: "usage_count", label: "Teams", type: "int" },
       ],
     });
+
+    // Rank change (docs/upgrade-plan-2027q2.md, list #19): a Pokémon's rank
+    // now against its rank over the events before -- before the newest
+    // event in the whole-regulation table, before the window in a window.
+    // Official events only, like the window itself.
+    function rankChangeColumn() {
+      return {
+        key: "rank_movement",
+        label: "Rank",
+        numeric: true,
+        sortable: true,
+        render: function (r) {
+          if (r.previous_rank === undefined) return "—";
+          if (r.previous_rank === null) return '<span class="badge badge-new">New</span>';
+          return rankMovementBadgeHtml(r);
+        },
+        title: function (r) {
+          if (r.previous_rank === undefined) return "";
+          return (r.previous_rank === null ? "Unranked" : "#" + r.previous_rank) + " " + rankBaseline + " → #" + r.rank + " now";
+        },
+      };
+    }
+    var rankBaseline = "";
+
+    // pokemon_key -> rank by teams over the given events (most first, ties
+    // by key, as the marts break them).
+    function ranksOver(eventIds) {
+      var counts = {};
+      var wanted = {};
+      eventIds.forEach(function (id) { wanted[id] = true; });
+      (marts.pokemon_event_usage_vs_regulation || []).forEach(function (r) {
+        if (wanted[r.event_id]) counts[r.pokemon_key] = (counts[r.pokemon_key] || 0) + (r.usage_count || 0);
+      });
+      var ranks = {};
+      Object.keys(counts).filter(function (k) { return counts[k] > 0; })
+        .sort(function (a, b) { return counts[b] - counts[a] || (a < b ? -1 : a > b ? 1 : 0); })
+        .forEach(function (key, i) { ranks[key] = i + 1; });
+      return ranks;
+    }
+
+    function withRankChange(row, rank, before) {
+      row.rank = rank;
+      row.previous_rank = before[row.pokemon_key] || null;
+      row.rank_movement = row.previous_rank ? row.previous_rank - rank : null;
+      return row;
+    }
 
     // Event window (C4): usage over a run of events -- the last N, or every
     // event since a given one -- from pokemon_event_usage_vs_regulation,
@@ -2708,6 +2812,7 @@
             return r.previous_team_share != null ? "Was " + formatPercent(r.previous_team_share) + " of teams before" : "";
           },
         },
+        rankChangeColumn(),
         { key: "win_rate", label: "Win rate", type: "percent", title: recordTitle },
         { key: "usage_count", label: "Teams", type: "int" },
       ],
@@ -2739,6 +2844,9 @@
       var nowSlots = total(slots.now);
       var nowTeams = total(teams.now);
       var beforeTeams = total(teams.before);
+      var nowRanks = ranksOver(ids);
+      var beforeRanks = beforeTeams ? ranksOver(windowEvents.map(function (e) { return e.event_id; })
+        .filter(function (id) { return !inWindow[id]; })) : null;
       return Object.keys(current).filter(function (key) {
         return current[key].usage > 0;
       }).map(function (key) {
@@ -2760,6 +2868,8 @@
           total_losses: c.losses,
           record_count: null,
         };
+      }).map(function (row) {
+        return beforeRanks ? withRankChange(row, nowRanks[row.pokemon_key], beforeRanks) : row;
       });
     }
 
@@ -2779,6 +2889,7 @@
           if (!inRange(profile ? profile.speed : null, speedMin, speedMax)) return false;
           return true;
         });
+        rankBaseline = "before these events";
         windowTable.setRows(wrows);
         if (noteEl) {
           var names = windowEvents.filter(function (e) { return ids.indexOf(e.event_id) !== -1; })
@@ -2811,6 +2922,13 @@
           record_count: win.record_count,
         };
       });
+      // Against the regulation before its newest event; the official
+      // overall table only (a tier, or online rows, have no such baseline).
+      if (isOfficialScope && !tier && windowEvents.length >= 2) {
+        var before = ranksOver(windowEvents.slice(1).map(function (e) { return e.event_id; }));
+        rankBaseline = "before " + shortEventName(windowEvents[0].event_name);
+        rows.forEach(function (row) { withRankChange(row, row.usage_rank, before); });
+      }
       usageTable.setRows(rows);
       if (noteEl) {
         noteEl.textContent = rows.length.toLocaleString() + " Pokémon · shares are of " +
@@ -4485,9 +4603,11 @@
   var MAX_COMBO_RESULTS = 12;
   var comboCount = 0;
 
+  // Letters and digits of any script, so a name in Japanese (Q4) is as
+  // searchable as one in English; accents fold away.
   function normalizeSearch(text) {
     return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]/g, "");
+      .replace(/[^\p{L}\p{N}]/gu, "");
   }
 
   function attachPokemonCombobox(select) {
@@ -4563,12 +4683,18 @@
       var inner = [];
       // A match at the start of any word counts as a prefix match, so
       // "salam" ranks Mega Salamence (by usage) alongside Salamence.
+      // With names in another language (Q4), the English name matches too.
       all.forEach(function (opt) {
-        var words = String(opt.textContent).split(/[\s-]+/).map(normalizeSearch);
-        var text = normalizeSearch(opt.textContent);
+        var labels = [opt.textContent];
+        if (englishNames[opt.value] && englishNames[opt.value] !== opt.textContent) labels.push(englishNames[opt.value]);
+        var words = [];
+        labels.forEach(function (label) {
+          words = words.concat(String(label).split(/[\s-]+/).map(normalizeSearch));
+        });
+        var texts = labels.map(normalizeSearch);
         var wordStart = words.some(function (w) { return w.indexOf(query) === 0; });
-        if (!query || wordStart || text.indexOf(query) === 0) prefix.push(opt);
-        else if (text.indexOf(query) > 0) inner.push(opt);
+        if (!query || wordStart || texts.some(function (t) { return t.indexOf(query) === 0; })) prefix.push(opt);
+        else if (texts.some(function (t) { return t.indexOf(query) > 0; })) inner.push(opt);
       });
       results = prefix.concat(inner).slice(0, MAX_COMBO_RESULTS);
       list.innerHTML = results.length
@@ -4651,18 +4777,7 @@
     attachPokemonCombobox(document.getElementById(id));
   });
 
-  // "/" jumps to the Pokémon search from anywhere on the page.
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
-    var tag = (document.activeElement && document.activeElement.tagName) || "";
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    e.preventDefault();
-    if (currentRoute.tab !== "pokemon-profile") openTab("pokemon-profile");
-    setTimeout(function () {
-      var input = document.querySelector('[data-panel="pokemon-profile"] .combo-input');
-      if (input) input.focus();
-    }, 50);
-  });
+  // "/" and Ctrl/⌘+K open the global search: static/search.js (Q3).
 
   // ---------- staleness banner ----------
   // Evaluated against the viewer's clock, not the build time: a site that
@@ -4796,6 +4911,32 @@
   }
 
   renderStalenessBanner();
+
+  // ---------- offline at the venue (docs/upgrade-plan-2027q2.md, Q5) ----------
+  // sw.js keeps the page, its scripts and every data shard this browser
+  // has opened; offline, the banner says the figures are the saved ones
+  // and when they were built. Registered only where a service worker can
+  // run (https, or localhost while developing).
+  function renderOfflineBanner() {
+    var banner = document.getElementById("offline-banner");
+    if (!banner) return;
+    var offline = navigator.onLine === false;
+    banner.hidden = !offline;
+    if (offline) {
+      banner.textContent = "You're offline. Showing the data this browser saved, built " +
+        String(DATA.generated_at_utc || "").slice(0, 10) + ". Views you haven't opened before may be empty.";
+    }
+  }
+  window.addEventListener("online", renderOfflineBanner);
+  window.addEventListener("offline", renderOfflineBanner);
+  renderOfflineBanner();
+  var secureHost = window.location.protocol === "https:" ||
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if ("serviceWorker" in navigator && secureHost) {
+    navigator.serviceWorker.register("sw.js").catch(function () {
+      // No worker (a private window, a blocked scope): the page works online.
+    });
+  }
   renderRolloverBanner();
   renderPopulationBanner();
   document.querySelectorAll("[data-official-only]").forEach(function (el) {
@@ -4851,6 +4992,25 @@
   // Theme toggle: Auto (follow the OS) -> Light -> Dark. The choice is a
   // per-browser convenience in localStorage; the inline script in <head>
   // applies it before first paint.
+  // The more menu's name-language select (Q4).
+  function setupNameLanguage() {
+    var select = document.getElementById("name-language");
+    if (!select) return;
+    select.innerHTML = NAME_LANGUAGES.map(function (l) {
+      return '<option value="' + l.id + '"' + (l.id === nameLanguage ? " selected" : "") + ">" + escapeHtml(l.label) + "</option>";
+    }).join("");
+    select.addEventListener("change", function () {
+      try {
+        localStorage.setItem(NAME_LANGUAGE_KEY, select.value);
+      } catch (e) {
+        // Storage blocked: nothing to remember the choice in.
+        return;
+      }
+      window.location.reload();
+    });
+  }
+  setupNameLanguage();
+
   function setupThemeToggle() {
     var button = document.getElementById("theme-toggle");
     if (!button) return;
@@ -4991,6 +5151,8 @@
     typeIcons: typeIcons,
     itemIcons: itemIcons,
     pokemonNames: pokemonNames,
+    englishNames: englishNames,
+    nameLanguage: nameLanguage,
     ICON_SIZES: ICON_SIZES,
     ALL_TYPES: ALL_TYPES,
     escapeHtml: escapeHtml,
@@ -5054,6 +5216,7 @@
     scopePopulation: scopePopulation,
     scopeLabel: scopeLabel,
     attachPokemonCombobox: attachPokemonCombobox,
+    normalizeSearch: normalizeSearch,
     openProfile: openProfile,
     fillSelectPairs: fillSelectPairs,
     showdownName: showdownName,

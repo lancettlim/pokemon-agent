@@ -215,6 +215,39 @@ def test_run_extract_smogon_ladder_writes_three_tables_from_one_pass(tmp_path, m
         assert kept == ["2026-07-28.csv", "2026-07-29.csv", "2026-07-30.csv"]
 
 
+def test_run_extract_pokeapi_extracts_names_for_the_forms_it_wrote(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, Q4: localised names come with the weekly
+    # pokeapi run, for every form its own snapshot holds.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+    monkeypatch.setattr(cli, "_champions_form_resource_ids", lambda: [])
+    monkeypatch.setattr(cli, "_referenced_move_ability_item_names", lambda: (set(), set(), set()))
+
+    def fake_extract(output_path, *, dataset_version):
+        _write_csv(
+            output_path,
+            [{"form_name": "charizard"}, {"form_name": "charizard-mega-y"}],
+            ["form_name"],
+        )
+
+    named = []
+
+    def fake_extract_names(output_path, form_names, *, dataset_version):
+        named.append((output_path, list(form_names), dataset_version))
+        _write_csv(output_path, [], ["form_name"])
+
+    monkeypatch.setattr(cli.pokeapi, "extract", fake_extract)
+    monkeypatch.setattr(cli.pokeapi, "extract_names", fake_extract_names)
+
+    exit_code = cli._run_extract("pokeapi", "1.2.3")
+
+    assert exit_code == 0
+    assert named == [
+        (tmp_path / "pokeapi_names" / "2026-07-30.csv", ["charizard", "charizard-mega-y"], "1.2.3")
+    ]
+
+
 def test_run_extract_other_sources_do_not_receive_previous_snapshot_path(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
     _stub_extraction_summary(monkeypatch)

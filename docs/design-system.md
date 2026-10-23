@@ -822,6 +822,27 @@ with and is never added to it.
   Stat Points ("32 HP / 32 Atk / 2 SpD"), the share, and a thin bar of the
   share under the row.
 
+### Global search, name language, offline banner (2027 Q2, Q3–Q5)
+
+- **Search sheet** (`.search-sheet`): an input over grouped results
+  (Pokémon, Players, Events, six each), each row a sprite, flag or trophy,
+  the name and a muted detail line; the active row is light blue. Arrow
+  keys move, Enter opens, Escape closes and returns focus. Full screen on
+  phones with the keyboard up; from 768px a 640px panel 64px from the top
+  over a dimmed page. The empty state lists recent picks under "Recent".
+- **Name language** is a labelled select in the ⋯ menu, never a flag.
+  Localised names are names only: labels, numbers and copy stay English.
+- **Offline banner** (`.offline-banner`) reuses the staleness banner and
+  names the build date of the saved data.
+
+### Builder warnings and rank change (2027 Q2, list #19 and #22)
+
+`.builder-warnings` is an amber list above the Builder's slots, one ⚠ line
+per broken rule (item clause, species clause), each naming the Pokémon.
+Usage's Rank column reuses the rank-movement badge (▲ green, ▼ red, ±0)
+with a "New" badge for a Pokémon absent before; its tooltip names the
+baseline ("#5 before Louisville → #2 now").
+
 ### Segmented control (2027 Q2)
 
 `.segmented` holds two to four mutually exclusive `<button

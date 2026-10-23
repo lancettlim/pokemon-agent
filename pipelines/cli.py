@@ -86,6 +86,8 @@ _RETENTION_COUNTS = {
     # render never changes), so it keeps the same history as the sprite
     # manifest it sits beside rather than the weekly sources' 12.
     "pokeapi_artwork": 10,
+    # Localised names (Q4) refresh with the weekly pokeapi run.
+    "pokeapi_names": 12,
     "opgg_champions": 14,
     "munchstats": 7,
     "rk9_pairings": 7,
@@ -114,6 +116,8 @@ _ENDPOINTS = {
     "pokeapi_move": "https://pokeapi.co/api/v2/move/{move_name}",
     "pokeapi_ability": "https://pokeapi.co/api/v2/ability/{ability_name}",
     "pokeapi_item": "https://pokeapi.co/api/v2/item/{item_name}",
+    "pokeapi_names": "https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/"
+    "{languages,pokemon,pokemon_forms,pokemon_species_names,pokemon_form_names}.csv",
     "pokeapi_artwork": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/"
     "pokemon/other/home/{pokeapi_resource_id}.png",
     "opgg_champions": "https://op.gg/pokemon-champions/pokedex",
@@ -134,6 +138,7 @@ _SOURCE_NAME_SUFFIXES = {
     "pokeapi_ability": " (ability detail)",
     "pokeapi_item": " (item detail)",
     "pokeapi_artwork": " (artwork)",
+    "pokeapi_names": " (localised names)",
     "limitless_play_pairings": " (pairings)",
 }
 
@@ -437,6 +442,24 @@ def _run_extract(source: str, dataset_version: str) -> int:
             if not ok:
                 return 1
             _prune_old_snapshots("pokeapi_artwork")
+
+        # Localised names (docs/upgrade-plan-2027q2.md, Q4) for every form
+        # this run just wrote, from PokéAPI's source CSVs: five requests.
+        names_output_path = _dated_snapshot_path("pokeapi_names", date_str)
+        with output_path.open(newline="", encoding="utf-8") as fh:
+            form_names = [row["form_name"] for row in csv.DictReader(fh) if row.get("form_name")]
+        ok = _run_tracked_extract(
+            source_name=_source_display_name(pokeapi, "pokeapi_names"),
+            staging_subdir="pokeapi_names",
+            output_path=names_output_path,
+            dataset_version=dataset_version,
+            call=lambda: pokeapi.extract_names(
+                names_output_path, form_names, dataset_version=dataset_version
+            ),
+        )
+        if not ok:
+            return 1
+        _prune_old_snapshots("pokeapi_names")
 
         moves, abilities, items = _referenced_move_ability_item_names()
         if not moves and not abilities and not items:

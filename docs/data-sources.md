@@ -20,6 +20,13 @@ PokéAPI maintains a complete, community-curated database of all official Pokém
 2. Copy raw file URLs and import directly into Python (pd.read_csv), Google Sheets, or Excel
 3. Link updates automatically if you reference the raw URL
 
+**Localised names (in use, `docs/upgrade-plan-2027q2.md` Q4):**
+`pokemon_species_names.csv` and `pokemon_form_names.csv`, joined through
+`pokemon.csv`, `pokemon_forms.csv` and `languages.csv`, give each form's
+name in Japanese, Spanish, French and German; `pipelines/extract/
+pokeapi.py`'s `extract_names` reads them weekly. There is no Portuguese
+entry: the Brazilian games use the English names.
+
 ## 2. OP.GG Pokémon Champions
 **Best for:** Competitive legal pool, rebalanced base stats, and custom mechanics
 

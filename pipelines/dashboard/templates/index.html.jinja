@@ -272,6 +272,36 @@
   }
   .brand-sub { color: var(--accent-gold); }
   .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+  /* Global search (Q3): the header button from 1024px (narrower headers
+     have no 52px to spare; it overflowed 481-807px), the ⋯ menu's item
+     below; a full-screen sheet on phones, a panel under the header from
+     768px. */
+  .search-btn { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: var(--radius-md); background: transparent; color: #fff; cursor: pointer; }
+  .search-btn:hover, .search-btn:focus-visible { border-color: #fff; }
+  @media (min-width: 1024px) {
+    .search-btn { display: inline-flex; }
+    .more-menu-panel .menu-search { display: none; }
+  }
+  .search-sheet { position: fixed; inset: 0; z-index: 60; background: rgba(10, 12, 20, 0.45); }
+  .search-sheet[hidden] { display: none; }
+  html.search-open { overflow: hidden; }
+  .search-panel { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--surface); color: var(--navy); }
+  .search-bar { display: flex; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid color-mix(in srgb, var(--muted) 25%, transparent); }
+  .search-input { flex: 1 1 auto; min-width: 0; min-height: 44px; font-size: 16px; padding: 0 var(--space-3); border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--navy); }
+  .search-close { min-height: 44px; padding: 0 var(--space-3); border: 0; background: none; color: var(--blue); font: inherit; font-weight: 700; cursor: pointer; }
+  .search-status { margin: 0; padding: var(--space-2) var(--space-4) 0; font-size: var(--font-xs); color: var(--muted); }
+  .search-status:empty { display: none; }
+  .search-results { list-style: none; margin: 0; padding: var(--space-1) var(--space-2) var(--space-4); overflow-y: auto; flex: 1 1 auto; }
+  .search-group { padding: var(--space-3) var(--space-2) var(--space-1); font-size: var(--font-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .search-results [role="option"] a { display: flex; align-items: center; gap: var(--space-3); min-height: 48px; padding: 2px var(--space-2); border-radius: var(--radius-sm); color: inherit; text-decoration: none; }
+  .search-results [role="option"][aria-selected="true"] a { background: var(--light-blue); }
+  .search-text { display: flex; flex-direction: column; min-width: 0; }
+  .search-label { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-meta { font-size: var(--font-xs); color: var(--muted); }
+  .search-glyph { display: inline-flex; align-items: center; justify-content: center; width: var(--icon-sm); height: var(--icon-sm); font-size: 22px; flex: 0 0 auto; }
+  @media (min-width: 768px) {
+    .search-panel { inset: 64px auto auto 50%; transform: translateX(-50%); width: min(640px, calc(100vw - 48px)); max-height: min(70vh, 640px); border: 2px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3); }
+  }
   .more-menu { position: relative; }
   .more-menu-btn {
     min-width: 44px;
@@ -297,6 +327,8 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
   }
   .more-menu-panel[hidden] { display: none; }
+  .more-menu-panel .name-language { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) var(--space-3); font-size: var(--font-xs); font-weight: 700; color: var(--muted); }
+  .more-menu-panel .name-language select { min-height: 44px; font-size: 16px; }
   .more-menu-panel a, .more-menu-panel button {
     display: block;
     width: 100%;
@@ -1469,6 +1501,9 @@
   .page-band .sb-rec { background: var(--board-gold); color: #12131a; }
   .event-winner { margin: 0 0 var(--space-1); }
   .builder-strip { margin-bottom: var(--space-3); }
+  .builder-warnings { list-style: none; margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--warning-bg); color: var(--warning); font-size: var(--font-sm); font-weight: 700; }
+  .builder-warnings li + li { margin-top: 4px; }
+  .builder-warnings li::before { content: "⚠ "; }
   .builder-strip:empty { display: none; }
   @media (max-width: 480px) { .page-band { margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-4); padding: var(--space-3) var(--space-4); } }
   /* Mega usage panel (E3): the count split as a stacked bar, then a table. */
@@ -1621,16 +1656,18 @@
     .board-controls, .board-controls .segmented { width: 100%; }
     .board-controls .segmented button { flex: 1 1 0; min-height: 44px; }
     .board-grid { gap: 36px 8px; }
+    /* One idea per line: the number on its own line, the types in the
+       tile's top-right corner, where U9 puts them on every card. Up to
+       720px: the large-phone tier's four tiles are about 106px wide at
+       481px, too narrow for the number and two badges side by side. */
+    .board-value-row { flex-direction: column; gap: 0; }
+    .board-types { position: absolute; top: 5px; right: 5px; }
+    .board-value { font-size: 1.75rem; }
   }
   @media (max-width: 480px) {
     .board-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .board-tile { min-height: 156px; }
     .board-art { width: 88px; height: 88px; margin-top: -26px; }
-    /* One idea per line: the number on its own line, the types in the
-       tile's top-right corner, where U9 puts them on every card. */
-    .board-value-row { flex-direction: column; gap: 0; }
-    .board-types { position: absolute; top: 5px; right: 5px; }
-    .board-value { font-size: 1.75rem; }
     .board-name { font-size: var(--font-xs); }
     .board-form { display: block; }
   }
@@ -1729,10 +1766,21 @@
         </label>
       {% endif %}
     {% endif %}
+    {# Global search (docs/upgrade-plan-2027q2.md, Q3): static/search.js.
+       From 1024px; below that it is the ⋯ menu's first item. #}
+    <button type="button" class="search-btn" data-search-open aria-label="Search Pokémon, players and events" aria-keyshortcuts="/ Control+K Meta+K">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
     <div class="more-menu">
       <button type="button" class="more-menu-btn" id="more-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-panel" aria-label="More options">&#8943;</button>
       <div class="more-menu-panel" id="more-menu-panel" hidden>
+        <button type="button" class="menu-search" data-search-open>Search</button>
         <button type="button" class="theme-toggle" id="theme-toggle">Theme: Auto</button>
+        {# Pokémon names in another language (docs/upgrade-plan-2027q2.md,
+           Q4); app.js fills the options. Names only. #}
+        <label class="name-language">Pokémon names
+          <select id="name-language"><option value="en">English</option></select>
+        </label>
         <a href="#/data/how-to-read">How to read this page</a>
         <a href="#/data">Data &amp; sources</a>
       </div>
@@ -1743,6 +1791,20 @@
    tournament is over three weeks old, or when no tournament in the data
    was played under the regulation in force today. #}
 <div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
+{# Shown by static/app.js (renderOfflineBanner) while the browser is
+   offline and sw.js serves saved copies (docs/upgrade-plan-2027q2.md, Q5). #}
+<div id="offline-banner" class="staleness-banner offline-banner" role="status" hidden></div>
+<div class="search-sheet" id="search-sheet" hidden>
+  <div class="search-panel" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="search-bar">
+      <input type="search" id="search-input" class="search-input" placeholder="Pokémon, player or event" autocomplete="off" spellcheck="false"
+        role="combobox" aria-expanded="true" aria-controls="search-results" aria-autocomplete="list">
+      <button type="button" class="search-close" data-search-close>Close</button>
+    </div>
+    <p class="search-status" id="search-status" role="status"></p>
+    <ul class="search-results" id="search-results" role="listbox" aria-label="Results"></ul>
+  </div>
+</div>
 {# Filled in by static/app.js (renderRolloverBanner) during the first weeks
    of a new regulation, when the page opens on the previous one
    (docs/upgrade-plan-2027q1.md, U3). #}
@@ -2240,6 +2302,9 @@
         {# The team as the strip every team on the site uses (V3), held items
            and Mega badges included; it follows the slots' edits. #}
         <div class="builder-strip" id="team-builder-strip"></div>
+        {# Item and species clause warnings (docs/upgrade-plan-2027q2.md,
+           list #22), from static/teams.js. #}
+        <ul class="builder-warnings" id="team-builder-warnings" role="status" hidden></ul>
         <div class="team-slots" id="team-builder-slots"></div>
         <div class="pokepaste-actions">
           <button class="btn btn-sm" id="team-builder-clear" type="button">Clear team</button>
@@ -2688,5 +2753,6 @@
 <script src="events.js"></script>
 <script src="players.js"></script>
 <script src="ladder.js"></script>
+<script src="search.js"></script>
 </body>
 </html>

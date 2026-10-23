@@ -24,6 +24,7 @@ from dashboard_fixture import (
     write_fixture_manifest,
     write_fixture_marts,
     write_fixture_mega_marts,
+    write_fixture_name_marts,
     write_fixture_share_cards,
 )
 
@@ -49,6 +50,7 @@ def _build_site(
     write_fixture_mega_marts(marts_dir)
     write_fixture_event_phase_marts(marts_dir)
     write_fixture_ladder_marts(marts_dir)
+    write_fixture_name_marts(marts_dir)
     write_fixture_manifest(root / "manifests")
     output_dir = root / "site"
     write_fixture_share_cards(output_dir)
@@ -164,11 +166,15 @@ def open_page(browser):
         storage=None,
         permissions=None,
         touch: bool = False,
+        service_workers: str = "block",
     ):
+        # sw.js (Q5) would answer requests page.route() means to intercept,
+        # so workers are blocked unless a test is about them.
         context = browser.new_context(
             viewport={"width": width, "height": height},
             permissions=permissions or [],
             has_touch=touch,
+            service_workers=service_workers,
         )
         contexts.append(context)
         if storage:

@@ -47,6 +47,16 @@ sources:
           - row_count_anomaly:
               config:
                 meta: {category: row_count_anomaly, source_name: pokeapi}
+      - name: pokeapi_names
+        description: "Raw PokéAPI localised Pokémon names (Japanese, Spanish, French, German), refreshed with the weekly pokeapi run (docs/upgrade-plan-2027q2.md, Q4). See data/staging/pokeapi_names.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 14, period: day}
+          error_after: {count: 21, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: pokeapi_names}
       - name: pokeapi_move
         description: "Raw PokéAPI move detail rows, scoped to moves seen in tournament rosters. See data/staging/pokeapi_move.schema.json."
         loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"

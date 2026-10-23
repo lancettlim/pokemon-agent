@@ -79,6 +79,11 @@
     Object.keys(App.pokemonNames).forEach(function (key) {
       lookup[normalizeSpeciesName(key)] = key;
     });
+    // A page showing names in another language (Q4) still reads English
+    // pastes, Showdown's own spelling.
+    Object.keys(App.englishNames || {}).forEach(function (key) {
+      lookup[normalizeSpeciesName(App.englishNames[key])] = key;
+    });
     return lookup;
   }
 
@@ -247,9 +252,13 @@
     }
 
     var team = [];
+    // Saved Pokémon this regulation's pool lacks (a team built under the
+    // last set): dropped, and said so once the notice exists (#22).
+    var droppedAtLoad = 0;
     try {
       var saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
       team = saved.map(normalizeEntry).filter(Boolean).slice(0, MAX_TEAM_SIZE);
+      droppedAtLoad = Math.max(0, Math.min(saved.length, MAX_TEAM_SIZE) - team.length);
     } catch (e) {
       team = [];
     }
@@ -698,6 +707,50 @@
       return el;
     }
 
+    // Team legality (docs/upgrade-plan-2027q2.md, list #22): VGC's item
+    // clause (no two Pokémon hold the same item) and species clause (no
+    // two of one species, a Pokémon and its Mega or regional form
+    // included). The legal pool is enforced as Pokémon are added.
+    var warningsEl = document.getElementById("team-builder-warnings");
+    function speciesOf(key) {
+      return (App.DATA.form_species || {})[key] || key;
+    }
+    function nameList(keys) {
+      var names = keys.map(function (k) { return App.pokemonNames[k] || k; });
+      return names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0];
+    }
+    function teamWarnings() {
+      var byItem = {};
+      var bySpecies = {};
+      team.forEach(function (slot) {
+        if (slot.item) (byItem[slot.item] = byItem[slot.item] || []).push(slot.key);
+        var species = speciesOf(slot.key);
+        (bySpecies[species] = bySpecies[species] || []).push(slot.key);
+      });
+      var warnings = [];
+      Object.keys(byItem).forEach(function (item) {
+        if (byItem[item].length > 1) {
+          warnings.push("Item clause: " + nameList(byItem[item]) +
+            (byItem[item].length === 2 ? " both hold " : " all hold ") + item + ". A team can carry each item once.");
+        }
+      });
+      Object.keys(bySpecies).forEach(function (species) {
+        if (bySpecies[species].length > 1) {
+          warnings.push("Species clause: " + nameList(bySpecies[species]) +
+            " are the same species. A team can have each species once.");
+        }
+      });
+      return warnings;
+    }
+    function renderWarnings() {
+      if (!warningsEl) return;
+      var warnings = teamWarnings();
+      warningsEl.hidden = !warnings.length;
+      warningsEl.innerHTML = warnings.map(function (w) {
+        return "<li>" + App.escapeHtml(w) + "</li>";
+      }).join("");
+    }
+
     var stripEl = document.getElementById("team-builder-strip");
     function renderStrip() {
       if (stripEl) stripEl.innerHTML = team.length ? App.teamStripHtml(team.map(slotToSet), { label: "Your team" }) : "";
@@ -839,6 +892,7 @@
       if (typeof renderSaved === "function") renderSaved();
       renderAvailable();
       renderSlots();
+      renderWarnings();
       renderSpeedOrder();
       renderSummary();
       renderSuggestions();
@@ -865,6 +919,11 @@
     }
 
     renderAll();
+    if (droppedAtLoad) {
+      var one = droppedAtLoad === 1;
+      showNotice(droppedAtLoad + " Pokémon from your saved team " + (one ? "isn't" : "aren't") + " legal in " +
+        App.shortRegulation(App.regulationCode) + " and " + (one ? "was" : "were") + " removed.", false);
+    }
 
     // ---------- share links and saved teams (P4) ----------
     // A share link is #/builder/<key>.<set>,<key>.<set>,... with each set an

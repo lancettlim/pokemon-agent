@@ -43,6 +43,7 @@ _STAGING_LABELS = {
     "pokeapi_artwork": "PokéAPI (artwork)",
     "pokeapi_item": "PokéAPI (item detail)",
     "pokeapi_move": "PokéAPI (move detail)",
+    "pokeapi_names": "PokéAPI (localised names)",
     "pokebase": "PokéBase",
     "rk9_pairings": "RK9.gg",
     "smogon_ladder": "Smogon usage statistics",
@@ -252,6 +253,9 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         (),
     ),
     "tournament_top_cut_paths": (("round_number", "table_number", "opponent_placement"), ()),
+    # docs/upgrade-plan-2027q2.md, Q4: names in four more languages, folded
+    # into the inline payload (localised_names) rather than shipped raw.
+    "pokemon_localised_names": ((), ()),
     # docs/upgrade-plan-2027q2.md, S2: the Showdown ladder lens, its own
     # population. Sliced (MART_SLICERS) to the rows the views read.
     "ladder_pokemon_usage": (
@@ -828,6 +832,53 @@ NAME_JOINS = (
     ("top_extension_pokemon_key", "top_extension_pokemon_name"),
     ("counter_pokemon_key", "counter_pokemon_name"),
 )
+
+
+def _used_pokemon_keys(marts: dict[str, list[dict[str, Any]]]) -> set[str]:
+    """Every Pokémon the marts mention: each key column NAME_JOINS knows
+    and the pipe-delimited rosters."""
+    used: set[str] = set()
+    key_fields = [key for key, _name in NAME_JOINS]
+    for mart_name, mart_rows in marts.items():
+        if mart_name == "pokemon_localised_names":
+            continue
+        for row in mart_rows:
+            for field in key_fields:
+                if row.get(field):
+                    used.add(row[field])
+            if row.get("pokemon_keys"):
+                used.update(k for k in str(row["pokemon_keys"]).split("|") if k)
+    return used
+
+
+def localised_names(
+    rows: list[dict[str, Any]], marts: dict[str, list[dict[str, Any]]]
+) -> dict[str, dict[str, str]]:
+    """language -> {pokemon_key: name} (docs/upgrade-plan-2027q2.md, Q4),
+    for the Pokémon the marts mention. The inline payload carries these
+    four maps, so a page in Japanese paints its first view with no fetch."""
+    used = _used_pokemon_keys(marts)
+    names: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if row.get("pokemon_key") in used and row.get("localised_name"):
+            names.setdefault(row["language"], {})[row["pokemon_key"]] = row["localised_name"]
+    return names
+
+
+def form_species(normalized_dir: Path, marts: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
+    """pokemon_key -> species pokemon_key for every form the marts mention
+    whose key isn't its species' own ("charizard-mega-y" -> "charizard",
+    "rotom-wash" -> "rotom"). The Team Builder's species clause reads it
+    (docs/upgrade-plan-2027q2.md, list #22): a species and its Mega or
+    regional form can't share a team."""
+    used = _used_pokemon_keys(marts)
+    return {
+        row["pokemon_key"]: row["pokemon_name"]
+        for row in _read_csv_rows(normalized_dir / "pokemon.csv")
+        if row["pokemon_key"] in used
+        and row.get("pokemon_name")
+        and row["pokemon_name"] != row["pokemon_key"]
+    }
 
 
 def _join_pokemon_names(
@@ -1743,6 +1794,11 @@ def build_payload(
         # and the pokepaste import/export + Matchup tab's ad-hoc species
         # lookups (docs/design-system.md's Top Teams / Matchup tabs).
         "pokemon_names": pokemon_names,
+        # The same names in Japanese, Spanish, French and German (Q4), for
+        # the header's name-language switch.
+        "localised_names": localised_names(marts.get("pokemon_localised_names", []), marts),
+        # Form -> species, for the Team Builder's species clause (#22).
+        "form_species": form_species(normalized_dir, marts),
         # The regulation registry, so the page can work out which set is in
         # force on the day it's viewed, not the day it was built.
         "regulations": [

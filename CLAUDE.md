@@ -297,7 +297,9 @@ VERSION=X.Y.Z` (refresh → release).
   `events.js`, `players.js` and `ladder.js` add the calculator, Top
   Teams/Builder, Compare/Core Explorer, event pages, player pages and the
   Showdown ladder views (hooked into the Usage tab and profile through
-  `App.extendTab`). Marts ship as JSON
+  `App.extendTab`); `search.js` is the global search (`/`, Ctrl/⌘+K), and
+  `sw.js` the offline service worker, written by `build.py` with its
+  precache list. Marts ship as JSON
   shards under `docs/dashboard/data/` (core, one per regulation, and
   on-demand files), with the core payload held under 500KB compressed by
   `tests/browser/`. `dictionary.py` generates the Data section's table

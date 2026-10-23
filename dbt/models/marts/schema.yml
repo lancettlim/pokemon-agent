@@ -904,6 +904,32 @@ models:
         description: "'Day 1', 'Day 2' or 'Top cut'."
       - name: result
         description: "W, L, T or Bye, for this team."
+  - name: pokemon_localised_names
+    description: >
+      Each Pokémon's name in Japanese, Spanish, French and German
+      (docs/upgrade-plan-2027q2.md, Q4): one row per pokemon_key and
+      language, for the dashboard's name-language switch. Names only;
+      Portuguese uses the English names. Written to
+      data/marts/pokemon_localised_names.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['pokemon_key', 'language']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_localised_names}
+    columns:
+      - name: language
+        description: "ja, es, fr or de."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['ja', 'es', 'fr', 'de']
+              config:
+                meta: {category: mart_quality, table_name: pokemon_localised_names}
+      - name: localised_name
+        description: "The Pokémon's name in the language."
+      - name: name_rule
+        description: "species, pokeapi_form, mega, form_label, regional, gender or fallback: whether PokéAPI published the name or it was composed (data/staging/pokeapi_names.schema.json)."
   - name: ladder_pokemon_usage
     description: >
       Showdown ladder usage per Pokémon (docs/upgrade-plan-2027q2.md, S2,

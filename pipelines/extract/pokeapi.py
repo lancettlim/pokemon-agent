@@ -4,7 +4,8 @@ Contract: data/staging/pokeapi.schema.json,
 data/staging/pokeapi_move.schema.json,
 data/staging/pokeapi_ability.schema.json,
 data/staging/pokeapi_item.schema.json,
-data/staging/pokeapi_artwork.schema.json
+data/staging/pokeapi_artwork.schema.json,
+data/staging/pokeapi_names.schema.json
 Spec reference: docs/dataset-spec.md, "Source-specific extraction contracts > PokéAPI"
 
 Captures Pokémon/form identity rows and base stat rows, weekly refresh
@@ -44,12 +45,24 @@ slots. Like the detail fetches it is scoped to an explicit iterable
 (the forms that already have a Champions menu sprite) rather than
 PokéAPI's full ~1,350-form list, and like `bulbagarden.py` it writes
 binary image bytes alongside its CSV.
+
+`extract_names` is the sixth (docs/upgrade-plan-2027q2.md, Q4): each
+form's name in Japanese, Spanish, French and German, for the dashboard's
+name-language switch. It reads PokéAPI's own source CSVs off GitHub (five
+files) rather than ~600 species and form calls. PokéAPI gives every
+species' localised name but full form names only unevenly (French and
+Japanese Megas, a few German and Spanish ones), so `localised_name`
+composes the rest from the species name and the official conventions:
+"Méga-Dracaufeu Y", "メガリザードンＹ", "Arcanine de Hisui", "Hisui-Arkani",
+"ウインディ（ヒスイのすがた）". Portuguese isn't extracted: the Brazilian games
+use the English names.
 """
 
 from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import struct
 import sys
 from collections.abc import Iterable
@@ -158,6 +171,30 @@ ARTWORK_FIELDNAMES = [
     "extracted_at_utc",
     "dataset_version",
 ]
+
+NAMES_FIELDNAMES = [
+    "form_name",
+    "language",
+    "localised_name",
+    "name_rule",
+    "source_name",
+    "source_url",
+    "source_record_id",
+    "extracted_at_utc",
+    "dataset_version",
+]
+NAMES_CSV_BASE_URL = "https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv"
+# The name languages (Q4) and PokéAPI's identifiers for them. PokéAPI files
+# Japanese under both "ja" (kanji where the games use it) and "ja-hrkt"
+# (kana); Pokémon names are kana either way, and "ja" is the games' own.
+NAME_LANGUAGES = {"ja": ("ja", "ja-hrkt"), "es": ("es",), "fr": ("fr",), "de": ("de",)}
+_REGIONS = {
+    "alola": ("Alola", "アローラ"),
+    "galar": ("Galar", "ガラル"),
+    "hisui": ("Hisui", "ヒスイ"),
+    "paldea": ("Paldea", "パルデア"),
+}
+_MEGA_PREFIX = {"ja": "メガ", "es": "Mega-", "fr": "Méga-", "de": "Mega-"}
 
 _STAT_NAME_TO_FIELD = {
     "hp": "hp",
@@ -558,5 +595,157 @@ def extract_artwork(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=ARTWORK_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _gender_sign(form_identifier: str) -> str:
+    parts = form_identifier.split("-")
+    return " ♂" if "male" in parts else " ♀" if "female" in parts else ""
+
+
+def localised_name(
+    language: str,
+    species: str,
+    *,
+    form_identifier: str,
+    is_mega: bool,
+    form_name: str = "",
+    full_name: str = "",
+    is_default_variety: bool = False,
+) -> tuple[str, str]:
+    """(name, rule) for one form in one language. `species` is the species'
+    name in the language, `form_name`/`full_name` PokéAPI's form label and
+    full form name in it (either may be empty), `is_default_variety` whether
+    the form is its species' default Pokémon. The rule says which convention
+    produced the name, so the composed ones can be audited."""
+    if full_name:
+        return full_name, "pokeapi_form"
+    if not form_identifier:
+        return species, "species"
+    if form_name and species in form_name:
+        # "ウォッシュロトム", "Rotom Lavado": the label is the full name.
+        return form_name, "pokeapi_form"
+    if is_mega:
+        if language == "ja" and form_name.startswith("メガ"):
+            return form_name, "pokeapi_form"
+        letter = form_identifier.rsplit("-", 1)[-1]
+        suffix = letter.upper() if letter in ("x", "y", "z") else ""
+        if language == "ja":
+            return (
+                f"{_MEGA_PREFIX[language]}{species}{suffix}{_gender_sign(form_identifier)}",
+                "mega",
+            )
+        tail = f" {suffix}" if suffix else ""
+        return f"{_MEGA_PREFIX[language]}{species}{tail}{_gender_sign(form_identifier)}", "mega"
+    if form_name:
+        if language == "ja":
+            return f"{species}（{form_name}）", "form_label"
+        return f"{species} ({form_name})", "form_label"
+    region = _REGIONS.get(form_identifier.split("-")[0])
+    if region:
+        latin, kana = region
+        if language == "ja":
+            return f"{species}（{kana}のすがた）", "regional"
+        if language == "de":
+            return f"{latin}-{species}", "regional"
+        return f"{species} de {latin}", "regional"
+    sign = _gender_sign(form_identifier)
+    if sign:
+        return f"{species}{sign}", "gender"
+    if is_default_variety:
+        # PokéAPI labels some single-form species' default form ("plant"
+        # Mothim): the game calls it by the species name.
+        return species, "species"
+    label = " ".join(part.capitalize() for part in form_identifier.split("-"))
+    return f"{species} ({label})", "fallback"
+
+
+def _read_names_csv(session: requests.Session, name: str) -> list[dict]:
+    response = get_with_retry(session, f"{NAMES_CSV_BASE_URL}/{name}.csv", timeout=60)
+    return list(csv.DictReader(io.StringIO(response.text)))
+
+
+def extract_names(
+    output_path: Path,
+    form_names: Iterable[str],
+    *,
+    dataset_version: str = DEFAULT_DATASET_VERSION,
+    session: requests.Session | None = None,
+) -> None:
+    """Write each form's name in NAME_LANGUAGES to output_path as CSV
+    matching data/staging/pokeapi_names.schema.json. `form_names` are
+    PokéAPI /pokemon slugs (this dataset's pokemon_key); one that PokéAPI's
+    CSVs don't know is skipped."""
+    http = session if session is not None else requests.Session()
+    extracted_at_utc = datetime.now(UTC).isoformat()
+    languages = {row["id"]: row["identifier"] for row in _read_names_csv(http, "languages")}
+    pokemon = {row["identifier"]: row for row in _read_names_csv(http, "pokemon")}
+    forms = {
+        row["pokemon_id"]: row
+        for row in _read_names_csv(http, "pokemon_forms")
+        if row["is_default"] == "1"
+    }
+    species_names: dict[tuple[str, str], str] = {}
+    for row in _read_names_csv(http, "pokemon_species_names"):
+        species_names[(row["pokemon_species_id"], languages.get(row["local_language_id"], ""))] = (
+            row["name"]
+        )
+    form_labels: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in _read_names_csv(http, "pokemon_form_names"):
+        key = (row["pokemon_form_id"], languages.get(row["local_language_id"], ""))
+        form_labels[key] = (row["form_name"], row["pokemon_name"])
+
+    rows = []
+    for form_name in form_names:
+        entry = pokemon.get(form_name)
+        form = forms.get(entry["id"]) if entry else None
+        if entry is None or form is None:
+            continue
+        for language, identifiers in NAME_LANGUAGES.items():
+            species = next(
+                (
+                    species_names[(entry["species_id"], i)]
+                    for i in identifiers
+                    if (entry["species_id"], i) in species_names
+                ),
+                None,
+            )
+            if not species:
+                continue
+            label, full = next(
+                (
+                    form_labels[(form["id"], i)]
+                    for i in identifiers
+                    if (form["id"], i) in form_labels
+                ),
+                ("", ""),
+            )
+            name, rule = localised_name(
+                language,
+                species,
+                form_identifier=form["form_identifier"],
+                is_mega=form["is_mega"] == "1",
+                form_name=label,
+                full_name=full,
+                is_default_variety=entry["is_default"] == "1",
+            )
+            rows.append(
+                {
+                    "form_name": form_name,
+                    "language": language,
+                    "localised_name": name,
+                    "name_rule": rule,
+                    "source_name": SOURCE_NAME,
+                    "source_url": f"{NAMES_CSV_BASE_URL}/pokemon_form_names.csv",
+                    "source_record_id": f"{form_name}:{language}",
+                    "extracted_at_utc": extracted_at_utc,
+                    "dataset_version": dataset_version,
+                }
+            )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=NAMES_FIELDNAMES)
         writer.writeheader()
         writer.writerows(rows)

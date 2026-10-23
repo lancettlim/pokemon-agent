@@ -35,6 +35,7 @@ for how those card PNGs are produced ahead of time.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from datetime import date
@@ -90,6 +91,8 @@ _CRITICAL_PAYLOAD_KEYS = (
     "type_colors",
     "item_icons",
     "pokemon_names",
+    "localised_names",
+    "form_species",
     "reference_teams",
     "regulations",
     "kpis_by_scope",
@@ -121,6 +124,7 @@ SCRIPT_NAMES = (
     "events.js",
     "players.js",
     "ladder.js",
+    "search.js",
 )
 
 SHARD_DIR = "data"
@@ -161,10 +165,37 @@ ON_DEMAND_MARTS = (
     "ladder_stat_point_spreads",
 )
 
-# Marts the build summarises into the inline KPIs and no view reads raw:
+# Marts the build summarises into the inline payload and no view reads raw:
 # kept out of every shard file. pokemon_regulation_movers feeds "What
-# changed" through compute_kpis' summarize_movers.
-BUILD_ONLY_MARTS = ("pokemon_regulation_movers",)
+# changed" through compute_kpis' summarize_movers; pokemon_localised_names
+# becomes the inline localised_names maps (data.localised_names).
+BUILD_ONLY_MARTS = ("pokemon_regulation_movers", "pokemon_localised_names")
+
+
+def _write_service_worker(output_dir: Path, payload: dict[str, Any]) -> None:
+    """Offline at the venue (docs/upgrade-plan-2027q2.md, Q5): static/sw.js
+    with its precache list (the page, scripts, font, the core shard and the
+    default regulation's shard) and a build id hashed from those files, so a
+    rebuild that changes none of them keeps visitors' caches."""
+    files = payload.get("mart_files") or {}
+    default_shard = (files.get("scopes") or {}).get(payload.get("default_scope"))
+    precache = ["./", "index.html", *SCRIPT_NAMES]
+    precache += sorted(f"fonts/{path.name}" for path in (output_dir / "fonts").glob("*.woff2"))
+    precache += [path for path in (files.get("core"), default_shard) if path]
+    # index.html embeds the build time, so it is hashed as its inline
+    # payload without that, beside the other files' bytes.
+    critical = {k: v for k, v in _critical_payload(payload).items() if k != "generated_at_utc"}
+    digest = hashlib.sha1(json.dumps(critical, sort_keys=True, default=str).encode("utf-8"))
+    digest.update((TEMPLATES_DIR / "index.html.jinja").read_bytes())
+    for path in precache[2:]:
+        file = output_dir / path
+        if file.exists():
+            digest.update(file.read_bytes())
+    source = (STATIC_DIR / "sw.js").read_text(encoding="utf-8")
+    source = source.replace("__BUILD_ID__", digest.hexdigest()[:12]).replace(
+        "__PRECACHE__", json.dumps(precache)
+    )
+    (output_dir / "sw.js").write_text(source, encoding="utf-8")
 
 
 def _write_mart_shards(
@@ -579,6 +610,7 @@ def build(
     # 2027q2.md, D4), served from fonts/ beside the page.
     if STATIC_FONTS_DIR.exists():
         shutil.copytree(STATIC_FONTS_DIR, output_dir / "fonts", dirs_exist_ok=True)
+    _write_service_worker(output_dir, payload)
     # backlog.md #32's JSON feed: data.json carries every non-mart key plus
     # `mart_files`, the index of the shard files holding the marts (see
     # _write_mart_shards). Together they are the complete payload, still

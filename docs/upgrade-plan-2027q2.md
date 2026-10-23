@@ -32,7 +32,7 @@ static with no backend. Two constraints are new:
 | Item | State |
 |---|---|
 | M1–M4 Mobile and responsive | M1, M2 done (Sprint 10); M3 applied to each component as it ships; M4 done (Sprint 13) |
-| Q1–Q5 Quality and shell | Q1, Q2 done (Sprint 10); Q3–Q5 proposed |
+| Q1–Q5 Quality and shell | Q1, Q2 done (Sprint 10); Q3–Q5 done (Sprint 15) |
 | V1–V8 Broadcast-grade visuals | V1, V2, V7 done (Sprint 10); V3–V6 done (Sprint 11); V8 done (Sprint 13) |
 | E1–E5 Event weekend | E3 done (Sprint 11); E1, E2, E4 done (Sprint 13); E5 proposed |
 | S1–S5 Data sources | S1 done (Sprint 12); S2 done, S4 checked and parked: the ranks aren't in MunchStats' published data (Sprint 14); S3, S5 proposed |

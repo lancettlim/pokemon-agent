@@ -240,6 +240,47 @@ statistics (S2, decisions D2 and D3), a population of their own:
   Data only in its rendered pages, not its published JSON (see
   `docs/data-sources.md` §4).
 
+**Sprint 15 — quality and shell.**
+
+- **Global search** (Q3, `static/search.js`): one box for Pokémon, players
+  and events, opened by `/`, Ctrl/⌘+K, the header's search button from
+  1024px or the ⋯ menu's Search below that (the narrower headers have no
+  52px to spare). A full-screen sheet on phones, a 640px panel under the
+  header from 768px. Pokémon search at once from the inline names; players
+  (`player_index`) and events (`tournament_event_summary`) arrive with the
+  first open. With an empty box it lists the last six picks.
+- **Pokémon names in five more languages** (Q4): the ⋯ menu's "Pokémon
+  names" select (English, 日本語, Español, Português, Français, Deutsch),
+  remembered per browser; changing it reloads the page. The build inlines
+  `localised_names` (four maps, the 350 Pokémon the marts mention, 11 KB
+  compressed), and app.js swaps them into the name map and the inline KPIs
+  before anything renders; shard rows take theirs from the map as they
+  load. Numbers and copy stay in English, Portuguese uses the English names
+  (the Brazilian games do), the PNG share cards stay English, and search
+  matches the English name too. Search now keeps letters of any script, so
+  a Japanese query works.
+- **Offline at the venue** (Q5, `sw.js`): pages, scripts and data shards
+  network first, images cache first, other origins untouched. `build.py`
+  writes the worker with its precache list (the page, scripts, font, core
+  shard and default regulation's shard) and an id hashed from them, the
+  inline payload counted without its timestamp, so an unchanged rebuild
+  keeps visitors' caches. Offline, a banner says the figures are the saved
+  ones and when they were built. Browser tests block service workers unless
+  a test is about them, since a worker answers requests `page.route()`
+  means to intercept.
+- **Rank change on Usage** (list #19): a Rank column with ▲/▼ against the
+  regulation before its newest event, or, in an event window, before the
+  window. Official events only; online and combined scopes show "—".
+- **Builder legality** (list #22): item clause and species clause warnings
+  above the slots (`form_species` gives each form's species, so Charizard
+  and Mega Charizard Y clash), and a notice when a saved team loses Pokémon
+  to a regulation change.
+- **Board tiles at 481–720px**: the large-phone tier's four tiles are about
+  106px wide, too narrow for the number and two type badges side by side,
+  which spilled into the next tile; the phone layout (number on its own
+  line, badges in the corner) now applies up to 720px. The responsive
+  matrix gains a 481px spot check.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -252,7 +293,8 @@ phones it becomes a bottom navigation bar. The KPI strip shows on Meta
 only. View buttons keep the `.tab-btn[data-tab]` contract, so scripts that
 click a tab still work. Every Pokémon picker (Profile, Compare, Core
 Explorer, Matchup) carries a type-ahead search with sprites
-(`attachPokemonCombobox`), and `/` jumps to the Profile search.
+(`attachPokemonCombobox`), and `/` or Ctrl/⌘+K opens the global search
+(Pokémon, players and events; `static/search.js`, 2027 Q2 Q3).
 
 - **Tier List** bands Pokémon by team share in the selected regulation
   (S ≥ 24%, A 12–24%, B 6–12%, C 3–6% of teams), each with a win-rate chip coloured
@@ -595,9 +637,9 @@ tabs naming this command. The published GitHub Pages site is unaffected.
 
 `index.html` carries only the **critical payload** inline
 (`_CRITICAL_PAYLOAD_KEYS` in `build.py`): KPIs per regulation, provenance,
-the sprite/hero-art/type-icon/item-icon maps, type colors, display names,
-reference teams, the regulation registry and `mart_files`, about 45 KB
-compressed. Overview renders from it with no fetch.
+the sprite/hero-art/type-icon/item-icon maps, type colors, display names
+(and their four localised maps, Q4), each form's species, reference teams,
+the regulation registry and `mart_files`, about 60 KB compressed. Overview renders from it with no fetch.
 
 The marts are split into **shard files under `docs/dashboard/data/`**
 (`_write_mart_shards`, docs/upgrade-plan-2026q4.md B7). Once the marts

@@ -1650,3 +1650,26 @@ def test_ladder_spreads_ship_top_rated_bo1_only(tmp_path):
     assert len(sliced) == data.LADDER_SPREADS
     assert sliced[0]["sp_hp"] == 32 and sliced[0]["share"] == 0.1577
     assert "cutoff" not in sliced[0] and "source_name" not in sliced[0]
+
+
+def test_localised_names_cover_only_the_pokemon_the_marts_mention():
+    # docs/upgrade-plan-2027q2.md, Q4: the inline maps carry the Pokémon
+    # the site shows, not every PokéAPI form.
+    rows = [
+        {"pokemon_key": "incineroar", "language": "ja", "localised_name": "ガオガエン"},
+        {"pokemon_key": "incineroar", "language": "de", "localised_name": "Fuegro"},
+        {"pokemon_key": "garchomp", "language": "ja", "localised_name": "ガブリアス"},
+        {"pokemon_key": "bulbasaur", "language": "ja", "localised_name": "フシギダネ"},
+    ]
+    marts = {
+        "pokemon_usage_summary": [{"pokemon_key": "incineroar"}],
+        "top_tournament_teams": [{"pokemon_keys": "garchomp|incineroar"}],
+        "pokemon_localised_names": rows,
+    }
+
+    names = data.localised_names(rows, marts)
+
+    assert names == {
+        "ja": {"incineroar": "ガオガエン", "garchomp": "ガブリアス"},
+        "de": {"incineroar": "Fuegro"},
+    }

@@ -68,6 +68,8 @@ FULL_WIDTHS = [
 ]
 SPOT_WIDTHS = [
     ("phone-430", 430, 932),
+    # The first large-phone width: the board's four tiles are narrowest.
+    ("large-phone-481", 481, 900),
     ("tablet-721", 721, 1024),
     ("landscape-844", 844, 390),
 ]
