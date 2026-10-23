@@ -52,6 +52,9 @@ def test_an_empty_box_lists_recent_picks(site_url, open_page):
     _open_search(page, site_url)
     page.keyboard.type("kingam")
     page.keyboard.press("Enter")
+    # Closing hands focus back; the hidden box must not keep it, or the next
+    # "/" counts as typing in a field and the search doesn't reopen.
+    assert page.evaluate("document.activeElement.id") != "search-input"
     page.keyboard.press("/")
     page.wait_for_selector("#search-sheet:not([hidden])")
     assert page.locator("#search-results .search-group").first.text_content() == "Recent"

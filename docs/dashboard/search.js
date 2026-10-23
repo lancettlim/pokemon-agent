@@ -223,7 +223,11 @@
     if (sheet.hidden) return;
     sheet.hidden = true;
     document.documentElement.classList.remove("search-open");
-    if (opener && opener.focus) opener.focus();
+    // Hiding the box doesn't take focus from it at once in every browser,
+    // and focusing the body (the usual opener) does nothing; until the box
+    // lets go, the next "/" would count as typing in a field.
+    if (sheet.contains(document.activeElement)) document.activeElement.blur();
+    if (opener && opener !== document.body && opener.isConnected && opener.focus) opener.focus();
   }
 
   input.addEventListener("input", render);
@@ -264,8 +268,10 @@
     var shortcut = (e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey) && !e.altKey;
     var slash = e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey;
     if (!shortcut && !slash) return;
-    var tag = (document.activeElement && document.activeElement.tagName) || "";
-    if (slash && (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT")) return;
+    var focused = document.activeElement;
+    var tag = (focused && focused.tagName) || "";
+    var inField = (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") && !(sheet.hidden && sheet.contains(focused));
+    if (slash && inField) return;
     e.preventDefault();
     if (sheet.hidden) open();
     else input.focus();
