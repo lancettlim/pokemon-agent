@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -627,6 +628,8 @@ def build(
     regulations: list[Regulation] | None = None,
     today: date | None = None,
     manifests_dir: Path = dictionary.DEFAULT_MANIFESTS_DIR,
+    item_icons: bool = True,
+    hero_art_keys: Callable[[dict[str, Any]], set[str]] | None = None,
 ) -> dict[str, Any]:
     """Renders templates/index.html.jinja with the marts payload baked in,
     copies static/app.js alongside it, and populates output_dir/images/
@@ -637,7 +640,11 @@ def build(
     (see _resolve_item_icons); pass False for offline/test builds.
     regulations/today override the regulation registry and build date, for
     tests that exercise a regulation rollover; manifests_dir, where the
-    Data section's release table cards are read from.
+    Data section's release table cards are read from. item_icons=False
+    leaves item icons out (items show as their names) and hero_art_keys,
+    given the payload, narrows which Pokémon get hero art (the rest fall
+    back to their sprite): pipelines/dashboard/artifact.py uses both to fit
+    the claude.ai artifact's file limit.
     """
     payload = data.build_payload(marts_dir, normalized_dir, regulations=regulations, today=today)
 
@@ -648,8 +655,11 @@ def build(
         normalized_dir=normalized_dir,
         asset_cache_dir=asset_cache_dir,
     )
+    hero_keys = (
+        referenced_keys if hero_art_keys is None else referenced_keys & hero_art_keys(payload)
+    )
     payload["hero_art"] = sprites.copy_hero_art(
-        referenced_keys,
+        hero_keys,
         output_dir=output_dir,
         normalized_dir=normalized_dir,
         artwork_cache_dir=artwork_cache_dir,
@@ -659,11 +669,15 @@ def build(
     # Our own white glyphs for the square type badge (V6), shared with the
     # share-card templates.
     payload["type_glyphs"] = type_glyphs.GLYPHS
-    payload["item_icons"] = _resolve_item_icons(
-        payload["marts"],
-        output_dir=output_dir,
-        icon_cache_dir=item_icon_cache_dir,
-        fetch_icons=fetch_icons,
+    payload["item_icons"] = (
+        _resolve_item_icons(
+            payload["marts"],
+            output_dir=output_dir,
+            icon_cache_dir=item_icon_cache_dir,
+            fetch_icons=fetch_icons,
+        )
+        if item_icons
+        else {}
     )
     payload["reference_teams"] = _load_reference_teams(output_dir, reference_teams_dir)
     payload["share_cards"] = _load_share_cards(output_dir)
