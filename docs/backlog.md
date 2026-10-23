@@ -16,7 +16,7 @@ stable and never reused** — a completed or dropped item keeps its number.
 
 ## Progress overview
 
-*Last updated 2026-08-03.* 49 numbered items exist (#1-#49, none dropped).
+*Last updated 2026-08-03.* 50 numbered items exist (#1-#50, none dropped; #50 added 2026-10-23).
 This table is maintained by hand alongside each grooming/implementation
 pass — if it drifts from the per-item statuses below, the per-item entries
 are the source of truth.
@@ -932,6 +932,26 @@ which, so every head-to-head figure is attributed to the whole roster.
 Closing that needs a battle-log or replay source; none is in scope or
 deferred. Every consumer of these marts states this — see
 `dbt/models/marts/schema.yml`.
+
+#### 50. Synergy and checks graph, per regulation — PROPOSED
+
+- **Size**: L
+- **Value**: Shows the whole metagame at once, scoped to a regulation:
+  which Pokémon cluster together (synergy lift), and which teams press on
+  which (check edges against a log5 baseline). Today both questions can
+  only be asked one Pokémon or one pair at a time.
+- **Blocked by**: the 2027 Q2 M1 responsive matrix (for the UI). The data
+  steps are unblocked.
+- **Touches**: `pokemon_head_to_head` (gains `regulation_scope`), a new
+  `pokemon_check_edges` mart, `pokemon_team_synergy` (gains confidence
+  columns), a new `pipelines/dashboard/graph.py`, and a `#/graph` route.
+
+Full plan: `docs/plan-synergy-checks-graph.md`. Two measured findings
+shape it. `pokemon_head_to_head` is not regulation-scoped, so it pools
+M-A through M-C. And on tournament data, only 9 of 3,476 pairs with ≥20
+matches pass a false-discovery correction, against about 160 that clear
+|z| ≥ 2 by chance. The checks layer therefore shows its evidence level,
+and the dense version waits for the ladder source (2027 Q2 S2).
 
 ---
 
