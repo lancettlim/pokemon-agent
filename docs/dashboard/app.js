@@ -1415,6 +1415,10 @@
     if (scopePath) paths.push(scopePath);
     (extraMarts || []).forEach(function (name) {
       if (files.on_demand && files.on_demand[name]) paths.push(files.on_demand[name]);
+      // Large scoped marts (head-to-head, check edges, the graph) ship one
+      // file per scope; only the selected scope's is fetched.
+      var byScope = files.on_demand_scoped && files.on_demand_scoped[name];
+      if (byScope) paths.push(byScope[regulationScope] || byScope[ALL_SCOPE]);
     });
     return Promise.all(paths.filter(Boolean).map(fetchShard)).then(function () {
       return marts;
@@ -1468,6 +1472,7 @@
   //   #/pokemon/garchomp/moves   #/compare/garchomp,kingambit
   //   #/matchup/rillaboom/sneasler   #/teams/top?tier=regional
   //   #/event/<event_id>   #/player/<player_id>   #/builder/<team>
+  //   #/graph/checks?focus=kingambit
   // ?reg= in the query string stays the regulation. A route is
   // {tab, args, query}: the tab is the panel shown, args are its path
   // segments after the head. Navigating between views pushes a history
@@ -1478,6 +1483,7 @@
     tiers: "tiers",
     usage: "usage",
     "speed-tiers": "speed",
+    graph: "graph",
     "pokemon-profile": "pokemon",
     compare: "compare",
     matchup: "matchup",
@@ -2706,6 +2712,10 @@
     });
 
     function drawTeammates(pokemonKey) {
+      // The Meta Graph's focus view puts this Pokémon's partners and checks
+      // in rings around it (docs/plan-synergy-checks-graph.md, section 4).
+      var graphLink = document.getElementById("profile-graph-link");
+      if (graphLink) graphLink.href = routeHash("graph", ["synergy"], { focus: pokemonKey });
       var triples = coreSizeSelect && coreSizeSelect.value === "triples";
       var bySynergy = !coreMetricSelect || coreMetricSelect.value === "synergy";
       document.getElementById("profile-pair-table").hidden = triples;

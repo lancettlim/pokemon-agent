@@ -159,6 +159,9 @@ def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_pat
     reassembled: dict = {}
     files = feed["mart_files"]
     paths = {files["core"], *files["scopes"].values(), *files["on_demand"].values()}
+    # Large scoped marts ship one on-demand file per scope.
+    for by_scope in files["on_demand_scoped"].values():
+        paths.update(by_scope.values())
     for path in sorted(paths):
         for name, rows in json.loads((output_dir / path).read_text(encoding="utf-8")).items():
             reassembled.setdefault(name, []).extend(rows)
@@ -383,6 +386,27 @@ def test_built_page_carries_open_graph_tags(tmp_path):
     html = (tmp_path / "out" / "index.html").read_text(encoding="utf-8")
     assert '<meta property="og:title"' in html
     assert '<meta name="description"' in html
+
+
+def test_a_scoped_on_demand_mart_ships_one_file_per_scope(tmp_path):
+    # Head-to-head is scoped (docs/plan-synergy-checks-graph.md, G1) and
+    # read only by Matchup: each scope gets its own on-demand file, and none
+    # of it lands in the scope files every view loads.
+    marts = {
+        "pokemon_head_to_head": [
+            {"pokemon_key": "a", "opponent_pokemon_key": "b", "regulation_scope": "m-c"},
+            {"pokemon_key": "a", "opponent_pokemon_key": "b", "regulation_scope": "all"},
+        ],
+        "pokemon_usage_summary": [{"pokemon_key": "a", "regulation_scope": "m-c"}],
+    }
+    index = build._write_mart_shards(marts, {"m-c": {}, "all": {}}, tmp_path)
+    scope_file = json.loads((tmp_path / index["scopes"]["m-c"]).read_text(encoding="utf-8"))
+    assert set(scope_file) == {"pokemon_usage_summary"}
+    per_scope = index["on_demand_scoped"]["pokemon_head_to_head"]
+    assert set(per_scope) == {"m-c", "all"}
+    for scope, path in per_scope.items():
+        rows = json.loads((tmp_path / path).read_text(encoding="utf-8"))["pokemon_head_to_head"]
+        assert [r["regulation_scope"] for r in rows] == [scope]
 
 
 def test_an_on_demand_mart_with_a_scope_column_ships_whole_not_per_scope(tmp_path):

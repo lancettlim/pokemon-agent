@@ -259,8 +259,9 @@ VERSION=X.Y.Z` (refresh → release).
   the hash router (every view is a `#/...` route; `docs/dashboard.md`'s
   "Routes" lists them), the shared table and tooltip/glossary components
   and the core views; `matchup.js`, `teams.js`, `expansions.js`,
-  `events.js` and `players.js` add the calculator, Top Teams/Builder,
-  Compare/Core Explorer, event pages and player pages. Marts ship as JSON
+  `events.js`, `players.js` and `graph.js` add the calculator, Top
+  Teams/Builder, Compare/Core Explorer, event pages, player pages and the
+  Meta Graph (its layouts precomputed at build time by `graph.py`). Marts ship as JSON
   shards under `docs/dashboard/data/` (core, one per regulation, and
   on-demand files), with the core payload held under 500KB compressed by
   `tests/browser/`. `dictionary.py` generates the Data section's table

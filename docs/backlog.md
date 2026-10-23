@@ -933,7 +933,7 @@ Closing that needs a battle-log or replay source; none is in scope or
 deferred. Every consumer of these marts states this — see
 `dbt/models/marts/schema.yml`.
 
-#### 50. Synergy and checks graph, per regulation — PROPOSED
+#### 50. Synergy and checks graph, per regulation — STEPS 1–3 DONE
 
 - **Size**: L
 - **Value**: Shows the whole metagame at once, scoped to a regulation:
@@ -952,6 +952,12 @@ M-A through M-C. And on tournament data, only 9 of 3,476 pairs with ≥20
 matches pass a false-discovery correction, against about 160 that clear
 |z| ≥ 2 by chance. The checks layer therefore shows its evidence level,
 and the dense version waits for the ladder source (2027 Q2 S2).
+
+Shipped 2026-10-23 (`docs/todo.md`'s "Backlog #50"): the data steps
+(G1–G3), the build-time graph (G4), tests (G5) and the `#/graph` view with
+both layers, focus mode, the table twin, U11's hide/Megas filters and U12
+keyboard navigation. Still open: the rest of section 10 (U1–U10) and the
+ladder layer.
 
 ---
 

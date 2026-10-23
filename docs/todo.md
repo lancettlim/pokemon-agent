@@ -929,6 +929,41 @@ table tracks sprint progress.
   (the staleness banner repeating the rollover banner) is fixed. The drift
   alarm was also probed by withholding M-C.
 
+## Backlog #50 — Synergy and checks graph (2026-10-23)
+
+Plan: `docs/plan-synergy-checks-graph.md`. Steps 1–3 shipped; step 4 (the
+ladder layer) waits on the 2027 Q2 S2 ladder source.
+
+- [x] G1: `pokemon_head_to_head` and `pokemon_matchup_summary` carry
+  `regulation_scope`. **Changelog note: Matchup's head-to-head records and
+  best/worst matchups now follow the selected regulation instead of pooling
+  M-A through M-C, so their numbers changed.** Both marts join the two
+  roster sides on a composite scope-and-team key: a separate
+  `regulation_scope` predicate let DuckDB pair whole scopes and exhaust its
+  temp space.
+- [x] G2: `pokemon_check_edges` (log5 baseline, binomial z, BH q per
+  scope, `strong`/`suggestive`/`none`, mirror matches excluded, ≥ 20
+  matches) with `assert_check_edges_antisymmetric`. The baseline is each
+  Pokémon's win rate over the same RK9 pairings, not
+  `pokemon_win_rate_summary` (MunchStats' self-reported records, a larger
+  population). On the 2026-10-23 data: 12 strong pairs in `all`, 1 in
+  M-A, none in M-B or M-C.
+- [x] G3: `pokemon_team_synergy` gains `expected_pair_team_count` and
+  `synergy_z`.
+- [x] G4: `pipelines/dashboard/graph.py` (layout, clusters, edge cap) and
+  per-scope `data/pokemon_graph-<scope>.json` shards (14–64KB).
+- [x] G5: unit tests (`tests/unit/dashboard/test_graph.py`), the graph
+  routes in the browser route matrix at desktop and phone widths, and
+  interaction tests (select → focus, Escape, arrow keys, caveat).
+- [x] UI: `#/graph` synergy and checks layers, focus mode, table twin,
+  evidence tiers, phone layout, U11 filters (hide the top N, Megas only),
+  U12 keyboard navigation, entry points from the profile's Team Cores and
+  from Matchup.
+- [ ] Section 10's remaining features (U1 regulation diff, U2 Builder
+  overlay, U3 edge drawer, U4 cluster matrix, U5 top-cut lens, U6
+  game-plan badges, U7 bridge finder, U8 profile mini graph, U9 share
+  card, U10 event meta map) and the type filter half of U11.
+
 ## Release readiness (v1 definition of done)
 
 All release gates pass as of this writing (see

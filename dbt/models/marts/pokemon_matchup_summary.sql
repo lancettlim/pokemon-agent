@@ -7,6 +7,10 @@
 -- Pokémon whose teams this Pokémon's teams beat most reliably, not a
 -- claim about the two Pokémon fighting each other.
 --
+-- regulation_scope: one row per (regulation_scope, pokemon_key), carried
+-- through from pokemon_head_to_head's partitions (G1 of
+-- docs/plan-synergy-checks-graph.md).
+--
 -- Best/worst are chosen by Wilson lower bound over a minimum sample, not
 -- raw win rate: with min_matches at 1 the extremes are always 100%/0% over
 -- a single match, which is noise rather than a matchup.
@@ -21,11 +25,11 @@ ranked as (
   select
     *,
     row_number() over (
-      partition by pokemon_key
+      partition by regulation_scope, pokemon_key
       order by wilson_lower_bound desc, matches_played desc, opponent_pokemon_key asc
     ) as best_rank,
     row_number() over (
-      partition by pokemon_key
+      partition by regulation_scope, pokemon_key
       order by wilson_lower_bound asc, matches_played desc, opponent_pokemon_key asc
     ) as worst_rank
   from qualified
@@ -33,15 +37,17 @@ ranked as (
 
 overall as (
   select
+    regulation_scope,
     pokemon_key,
     sum(matches_played) as total_matchup_appearances,
     count(*) as distinct_opponents,
     round(sum(wins)::double / nullif(sum(matches_played), 0), 4) as overall_win_rate
   from {{ ref('pokemon_head_to_head') }}
-  group by pokemon_key
+  group by regulation_scope, pokemon_key
 )
 
 select
+  overall.regulation_scope,
   overall.pokemon_key,
   overall.overall_win_rate,
   overall.distinct_opponents,
@@ -55,9 +61,11 @@ select
   {{ min_matches }} as min_matches_threshold
 from overall
 left join ranked as best
-  on best.pokemon_key = overall.pokemon_key
+  on best.regulation_scope = overall.regulation_scope
+  and best.pokemon_key = overall.pokemon_key
   and best.best_rank = 1
 left join ranked as worst
-  on worst.pokemon_key = overall.pokemon_key
+  on worst.regulation_scope = overall.regulation_scope
+  and worst.pokemon_key = overall.pokemon_key
   and worst.worst_rank = 1
-order by overall.total_matchup_appearances desc, overall.pokemon_key
+order by overall.regulation_scope, overall.total_matchup_appearances desc, overall.pokemon_key

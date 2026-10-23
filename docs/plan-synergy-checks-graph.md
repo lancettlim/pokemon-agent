@@ -1,7 +1,17 @@
 # Feature plan — Synergy and checks graph, per regulation
 
-Written 2026-10-23. This is a proposal, filed as `docs/backlog.md` #50.
-Nothing here is committed until its items move into `docs/todo.md`.
+Written 2026-10-23, filed as `docs/backlog.md` #50. **Steps 1–3 shipped
+on 2026-10-23** (see `docs/todo.md`'s "Backlog #50"), with three changes
+from the text below:
+
+- The log5 baseline uses each Pokémon's win rate over the same RK9
+  pairings, not `pokemon_win_rate_summary` (MunchStats' self-reported
+  records cover a larger team population than the pairings G2 counts).
+- On current data M-C has no strong check edge, so a regulation with none
+  opens the checks layer on suggestive edges, with a notice, rather than
+  an empty "strong only" view.
+- `pokemon_matchup_summary` also ships per scope on demand, which holds
+  the core payload under its 500KB budget.
 
 The site already answers "who does X pair with?" one Pokémon at a time (the
 profile's Team Cores, the Core Explorer) and "how do teams with X do against

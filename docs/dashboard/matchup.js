@@ -458,8 +458,8 @@
       });
     }
 
-    // Matchup profile (pokemon_matchup_summary): each side's whole-dataset
-    // record plus its single best and worst opponent. Complements the
+    // Matchup profile (pokemon_matchup_summary): each side's record in the
+    // selected regulation plus its single best and worst opponent. Complements the
     // pair-specific headline above, which says nothing when the two picked
     // Pokémon have never met. Inherits pokemon_head_to_head's team-vs-team
     // caveat exactly — "best matchup" means the opponent whose teams this
@@ -495,7 +495,12 @@
               App.formatPercent(row.worst_matchup_win_rate) +
               " (n=" + row.worst_matchup_matches + ")"
             : "—") +
-          "</div>";
+          "</div>" +
+          // The Meta Graph's checks layer measures the same records against
+          // a baseline (docs/plan-synergy-checks-graph.md, section 4).
+          '<div class="desc-text"><a href="' +
+          App.escapeHtml(App.routeHash("graph", ["checks"], { focus: pokemon.pokemon_key })) +
+          '">See checks on the graph</a></div>';
       }
       return (
         '<div class="matchup-side"><h4>' + role + " · " +
@@ -748,7 +753,7 @@
   var matchupRoute = function () {};
 
   App.registerTab("matchup", setupMatchup, {
-    extraMarts: ["pokemon_head_to_head"],
+    extraMarts: ["pokemon_head_to_head", "pokemon_matchup_summary"],
     onRoute: function (route) {
       matchupRoute(route);
     },

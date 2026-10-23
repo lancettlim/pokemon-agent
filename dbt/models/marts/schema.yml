@@ -447,8 +447,10 @@ models:
       were paired independently of their individual popularity. lift > 1
       is a genuine pairing; lift < 1 is paired less than chance. Built on
       top of pokemon_team_core_usage's mirrored pairs. pair_team_count is
-      exposed alongside lift since lift is noisy at low pair counts.
-      Written to data/marts/pokemon_team_synergy.csv.
+      exposed alongside lift since lift is noisy at low pair counts, with
+      expected_pair_team_count (the shared teams independence predicts)
+      and synergy_z (the Poisson z of the observed count against it) as
+      its confidence. Written to data/marts/pokemon_team_synergy.csv.
     data_tests:
       - unique_combination_of_columns:
           arguments:
@@ -673,12 +675,13 @@ models:
       log naming which Pokémon were brought (VGC brings 4 of 6) or which
       defeated which, so a row reads "teams with A beat teams with B this
       often", never "A beats B". Pairs are mirrored, and scoped to Masters,
-      to decided matches, and to the current legal pool. Written to
-      data/marts/pokemon_head_to_head.csv.
+      to decided matches, and to the current legal pool. One partition per
+      regulation_scope (each regulation plus 'all'): a match takes its
+      event's regulation. Written to data/marts/pokemon_head_to_head.csv.
     data_tests:
       - unique_combination_of_columns:
           arguments:
-            combination_of_columns: ['pokemon_key', 'opponent_pokemon_key']
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'opponent_pokemon_key']
           config:
             meta: {category: mart_quality, table_name: pokemon_head_to_head}
     columns:
@@ -697,17 +700,64 @@ models:
       One row per Pokémon: overall head-to-head win rate plus its best and
       worst matchups, chosen by Wilson lower bound over a minimum of 10
       matches (a raw win-rate extreme is always a 1-0 record). Inherits
-      pokemon_head_to_head's team-vs-team caveat exactly. Written to
+      pokemon_head_to_head's team-vs-team caveat exactly. One row per
+      regulation_scope and Pokémon. Written to
       data/marts/pokemon_matchup_summary.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_matchup_summary}
     columns:
       - name: pokemon_key
         data_tests:
-          - unique:
-              config:
-                meta: {category: mart_quality, table_name: pokemon_matchup_summary}
           - not_null:
               config:
                 meta: {category: mart_quality, table_name: pokemon_matchup_summary}
+
+  - name: pokemon_check_edges
+    description: >
+      Check edges for the synergy and checks graph (docs/plan-synergy-
+      checks-graph.md, G2): per regulation_scope and ordered pair (A, B),
+      whether teams with A beat teams with B more often than the two
+      teams' overall records predict. expected_win_rate is the log5
+      expectation from each Pokémon's overall win rate over the same
+      decided matches; edge is observed minus expected, z_score its
+      binomial z, and q_value a Benjamini-Hochberg correction over the
+      scope's unordered pairs. evidence is 'strong' (q <= 0.10),
+      'suggestive' (|z| >= 2) or 'none'. Matches where either team also
+      fields the other's Pokémon are left out, and pairs need at least 20
+      matches. CAVEAT, and it must be surfaced wherever this is displayed:
+      the grain is team vs team, NOT Pokémon vs Pokémon. No source records
+      which Pokémon were brought to a match, so a row reads "teams with A
+      beat teams with B more often than expected", never "A beats B".
+      Antisymmetric: z(A->B) = -z(B->A). Written to
+      data/marts/pokemon_check_edges.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_scope', 'pokemon_key', 'opponent_pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_check_edges}
+    columns:
+      - name: pokemon_key
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_check_edges}
+      - name: opponent_pokemon_key
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: pokemon_check_edges}
+      - name: evidence
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['strong', 'suggestive', 'none']
+              config:
+                meta: {category: mart_quality, table_name: pokemon_check_edges}
 
   - name: tournament_event_summary
     description: >
