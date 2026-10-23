@@ -344,7 +344,11 @@ statistics (S2, decisions D2 and D3), a population of their own:
   common lead pairs with their win rates. A Pokémon under 30 complete
   sides is left out. Every profile's Counters panel opens with the same
   four figures for that Pokémon (a Mega reads its base Pokémon's, and says
-  so). Labelled "Showdown ladder replays" and "not tournament data".
+  so). Labelled "Showdown ladder replays" and "not tournament data". The
+  first sample has 522 Reg M-C battles (365 complete): Rillaboom is on 36.9%
+  of ladder teams and brought 62% of the time, its side winning 53.9% with
+  it and 46.5% without; the sample grows with each daily run. Rows under
+  the 30-side floor aren't shipped.
 
 ## Tabs
 

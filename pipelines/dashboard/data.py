@@ -592,7 +592,11 @@ def _slice_ladder_spreads(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Replay bring rates and lead pairs (S3) ship the Bo1 and Bo3 ladders
 # pooled ("all"), which is what the views show; the per-variant rows stay in
 # data/marts/.
+# Bring rates on fewer complete sides than LADDER_REPLAY_MIN_SIDES are
+# noise the views don't show (static/ladder.js's MIN_BRING_SIDES), so they
+# aren't shipped.
 LADDER_REPLAY_VARIANT = "all"
+LADDER_REPLAY_MIN_SIDES = 30
 _REPLAY_DROP = ("variant", "source_name", "source_url")
 
 
@@ -601,6 +605,7 @@ def _slice_ladder_replays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         {k: v for k, v in row.items() if k not in _REPLAY_DROP}
         for row in rows
         if row.get("variant") == LADDER_REPLAY_VARIANT
+        and (row.get("complete_shown") is None or row["complete_shown"] >= LADDER_REPLAY_MIN_SIDES)
     ]
 
 

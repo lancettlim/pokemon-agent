@@ -1673,3 +1673,36 @@ def test_localised_names_cover_only_the_pokemon_the_marts_mention():
         "ja": {"incineroar": "ガオガエン", "garchomp": "ガブリアス"},
         "de": {"incineroar": "Fuegro"},
     }
+
+
+def test_replay_bring_rates_ship_pooled_rows_above_the_floor(tmp_path):
+    # docs/upgrade-plan-2027q2.md, S3: the views read Bo1 and Bo3 pooled, and
+    # never show a rate on fewer than LADDER_REPLAY_MIN_SIDES complete sides.
+    rows = [
+        {
+            "regulation_code": "m-c",
+            "variant": variant,
+            "pokemon_key": key,
+            "battles": "522",
+            "complete_battles": "365",
+            "shown": str(shown * 2),
+            "shown_share": "0.3",
+            "led": "10",
+            "lead_rate": "0.2",
+            "complete_shown": str(shown),
+            "brought": str(shown // 2),
+            "bring_rate": "0.5",
+            "shown_rank": "1",
+            "source_name": "Pokémon Showdown replays",
+            "source_url": "https://replay.pokemonshowdown.com",
+        }
+        for variant in ("bo1", "bo3", "all")
+        for key, shown in (("rillaboom", 266), ("vivillon", data.LADDER_REPLAY_MIN_SIDES - 1))
+    ]
+    _write_csv(tmp_path / "ladder_bring_rate.csv", rows)
+
+    sliced = data.load_mart(tmp_path, "ladder_bring_rate")
+
+    assert [row["pokemon_key"] for row in sliced] == ["rillaboom"]
+    assert sliced[0]["complete_shown"] == 266 and sliced[0]["bring_rate"] == 0.5
+    assert "variant" not in sliced[0] and "source_url" not in sliced[0]

@@ -242,7 +242,8 @@
 
   // ---------- Showdown replays: brought, led (S3, list #27) ----------
 
-  // A rate on fewer sides than this is left out: noise.
+  // A rate on fewer complete sides than this is left out: noise. data.py's
+  // LADDER_REPLAY_MIN_SIDES doesn't ship those rows at all.
   var MIN_BRING_SIDES = 30;
   var LEAD_PAIRS_SHOWN = 10;
   var bringTable = null;

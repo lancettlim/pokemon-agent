@@ -148,7 +148,13 @@ seeds:
       bare "Gourgeist", resolved to the form PokéAPI flags is_default
       (gourgeist-average), as the MunchStats seed does for bare species; and
       "Meowstic-M-Mega", PokéAPI's meowstic-male-mega. All 333 names in the
-      September 2026 files resolve.
+      September 2026 files resolve. Showdown replays' team preview (S3)
+      added four on 2026-10-23: "Maushold-Four" and "Meowstic-F", PokéAPI's
+      maushold-family-of-four and meowstic-female, and the cosmetic
+      "Sinistcha-Masterpiece" and "Polteageist-Antique", which PokéAPI keeps
+      as their species. Cosmetic patterns with many names (Vivillon,
+      Florges, Alcremie, Furfrou) take their species by a rule in
+      int_smogon_ladder_names instead.
     columns:
       - name: smogon_pokemon_name
         description: The Smogon ladder pokemon_name or counter_name value.

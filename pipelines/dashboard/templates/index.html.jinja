@@ -1560,16 +1560,22 @@
   .ladder-bring { margin-top: var(--space-6); }
   .lead-pair-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .lead-pair-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
-  .lead-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); min-width: 0; }
+  .lead-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 0 var(--space-3); min-width: 0; max-width: 520px; }
+  .lead-pair .pokemon-link { min-width: 0; }
+  .lead-pair .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lead-share { font-weight: 800; font-variant-numeric: tabular-nums; }
-  .lead-pair-list .ladder-sub { grid-column: 1 / -1; }
+  .lead-pair-list .ladder-sub { grid-column: 1 / -1; margin-top: 2px; padding-bottom: 4px; }
   .profile-bring { margin-top: var(--space-5); }
   .profile-bring h4 { margin: var(--space-1) 0 0; }
   .bring-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-2) 0; }
   .bring-stats div { padding: var(--space-2); border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
   .bring-stats dt { font-size: var(--font-xs); color: var(--muted); font-weight: 700; }
   .bring-stats dd { margin: 0; font-size: var(--font-lg); font-weight: 800; font-variant-numeric: tabular-nums; }
-  @media (max-width: 480px) { .bring-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) {
+    .bring-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Two names side by side truncate at phone width: one per line. */
+    .lead-pair { grid-template-columns: minmax(0, 1fr); }
+  }
   .ladder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .ladder-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
   .ladder-list .pokemon-link { min-width: 0; }

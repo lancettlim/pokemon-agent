@@ -363,6 +363,70 @@ the statistic counts, and at 1760 each encounter is weighted by the chance
 its players are rated that high, so almost no pair clears the bar. They are
 read from the all-ratings files, and labelled so.
 
+## 11. Pokémon Showdown replays (replay.pokemonshowdown.com)
+**Best for:** "Which four did they bring": team preview, the Pokémon that
+entered each battle, leads and results, for the Showdown ladder
+
+Tournament sources are team vs team; no one publishes which four of an
+official team's six were brought to a game. Showdown's replays do, for the
+ladder. Added 2026-10-23 (`docs/upgrade-plan-2027q2.md`, S3; the
+`docs/roadmap.md` Phase 4 steps) as part of the same `ladder` population as
+Smogon's statistics, feeding marts only. Credit: Pokémon Showdown, and the
+players who upload their battles.
+
+**How to extract:** public JSON, no key:
+1. `GET /search.json?format=gen9championsvgc2026regmc[bo3]` lists the
+   newest 51 public replays of a format (id, upload time, rating);
+   `&before=<uploadtime>` pages back. The format is the registry's
+   `munchstats_format`, so nothing hardcodes a regulation.
+2. `GET /<id>.json` is one replay with its log: `|poke|` (the six at team
+   preview), `|switch|`/`|drag|`/`|replace|` (each Pokémon that entered;
+   `replace` ends an Illusion), `|detailschange|` (Mega Evolution),
+   `|turn|`, `|rated|` and `|win|`. Bo3 logs also carry open team sheets
+   (`|showteam|`); they aren't read, so Bo1 and Bo3 rows mean the same.
+3. Keep rated battles uploaded while the regulation was in force. Player
+   names are read only to tell which side won; nothing stores them.
+
+**Terms:** Showdown publishes no terms for its replay server, and its
+privacy policy covers cookies, bans and chat logging, not replays. A replay
+is public because a player chose to upload it (private and
+password-protected ones aren't listed). The extractor treats them as such:
+one request a second, a capped sample rather than a mirror, no player
+names kept, aggregates only on the site, and credit on every view.
+
+**Volume and sampling:** about 2,000 Bo1 and 800 Bo3 Reg M-C replays a day
+in October 2026, one request each. Each daily run fetches at most 150 new
+replays per regulation and ladder, newest first and then back from the
+oldest held, keeping up to 5,000 battles per format. The first sample
+(2026-10-23, 300 per format) kept 1,558 of 1,800 fetched as rated and
+readable: 522 Reg M-C battles from 22 and 23 October, and M-A's and M-B's
+last day in force. 81% of sides revealed all four Pokémon they brought;
+365 of the 522 M-C battles had both sides do so.
+
+**Coverage against RK9 and MunchStats (Phase 4 step 3):** none, by
+construction. Official events are played on the game itself, not on
+Showdown, and a replay names no event, so no official match has a replay
+and nothing is joined. The battle-level marts are the ladder's, labelled so,
+beside the unchanged team-vs-team surfaces.
+
+**Names:** team preview uses Showdown's names, resolved by the same
+`int_smogon_ladder_names` as the statistics. Four names needed seed rows
+(`Maushold-Four`, `Meowstic-F`, and the cosmetic `Sinistcha-Masterpiece`
+and `Polteageist-Antique`), and cosmetic patterns with many names
+(Vivillon, Florges, Alcremie, Furfrou) take their species by rule: 18,696
+of 18,696 preview slots resolve (98.9% before).
+`assert_showdown_replay_name_coverage` warns under 99%.
+
+**Known limits:**
+- Brought means entered the battle: a Pokémon brought but never sent in
+  looks benched, most often on the winning side. Bring rates and
+  win-when-brought figures read only complete battles (both sides revealed
+  all four); leads read every battle.
+- Megas show at team preview as their base Pokémon (Bo1 hides the stone),
+  so a Mega counts with its base.
+- Uploads are self-selected and lean to memorable games; the sample is of
+  the replays, not of every ladder battle.
+
 ## 12. Official stream videos (YouTube): a curated seed
 **Best for:** "Watch on stream" links on top-cut matches
 
