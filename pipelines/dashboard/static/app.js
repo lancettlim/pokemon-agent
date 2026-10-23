@@ -1811,6 +1811,10 @@
     if (scopePath) paths.push(scopePath);
     (extraMarts || []).forEach(function (name) {
       if (files.on_demand && files.on_demand[name]) paths.push(files.on_demand[name]);
+      // Large scoped marts (head-to-head, check edges, the graph) ship one
+      // file per scope; only the selected scope's is fetched.
+      var byScope = files.on_demand_scoped && files.on_demand_scoped[name];
+      if (byScope) paths.push(byScope[regulationScope] || byScope[ALL_SCOPE]);
     });
     return Promise.all(paths.filter(Boolean).map(fetchShard)).then(function () {
       restoreDetails();
@@ -1886,6 +1890,7 @@
   //   #/pokemon/garchomp/moves   #/compare/garchomp,kingambit
   //   #/matchup/rillaboom/sneasler   #/teams/top?tier=regional
   //   #/event/<event_id>   #/player/<player_id>   #/builder/<team>
+  //   #/graph/checks?focus=kingambit
   // ?reg= in the query string stays the regulation. A route is
   // {tab, args, query}: the tab is the panel shown, args are its path
   // segments after the head. Navigating between views pushes a history
@@ -1896,6 +1901,7 @@
     tiers: "tiers",
     usage: "usage",
     "speed-tiers": "speed",
+    graph: "graph",
     "pokemon-profile": "pokemon",
     compare: "compare",
     matchup: "matchup",
@@ -3518,6 +3524,10 @@
     });
 
     function drawTeammates(pokemonKey) {
+      // The Meta Graph's focus view puts this Pokémon's partners and checks
+      // in rings around it (docs/plan-synergy-checks-graph.md, section 4).
+      var graphLink = document.getElementById("profile-graph-link");
+      if (graphLink) graphLink.href = routeHash("graph", ["synergy"], { focus: pokemonKey });
       var triples = coreSizeSelect && coreSizeSelect.value === "triples";
       var bySynergy = !coreMetricSelect || coreMetricSelect.value === "synergy";
       document.getElementById("profile-pair-table").hidden = triples;
@@ -5387,8 +5397,32 @@
     if (currentRoute.tab === tabId) dispatchRoute(currentRoute);
   }
 
+  // Views whose script loads only when first opened, so it stays out of
+  // the first view's 500KB budget (tests/browser). The script registers
+  // its tab, and registerTab initialises it if it is still the one open.
+  var LAZY_TAB_SCRIPTS = { graph: "graph.js" };
+  var lazyScriptLoading = {};
+  function loadTabScript(tabId) {
+    var src = LAZY_TAB_SCRIPTS[tabId];
+    if (!src || lazyScriptLoading[tabId]) return;
+    lazyScriptLoading[tabId] = true;
+    var script = document.createElement("script");
+    script.src = src;
+    script.onerror = function () {
+      // Forget the attempt so re-opening the tab retries.
+      lazyScriptLoading[tabId] = false;
+      script.remove();
+      renderDataLoadError(tabId, new Error("could not load " + src));
+    };
+    document.body.appendChild(script);
+  }
+
   function initTab(tabId) {
-    if (initialized[tabId] || !tabInitializers[tabId]) return;
+    if (!tabInitializers[tabId]) {
+      loadTabScript(tabId);
+      return;
+    }
+    if (initialized[tabId]) return;
     initialized[tabId] = true;
     if (!tabNeedsMarts[tabId]) {
       runInitializer(tabId);

@@ -1095,6 +1095,44 @@
   .calc-mode { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; margin-bottom: var(--space-3); }
   .calc-mode-btn { font: inherit; font-size: var(--font-sm); font-weight: 700; padding: 6px 14px; min-height: 40px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; }
   .calc-mode-btn[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  /* Meta Graph (static/graph.js). */
+  .graph-controls { align-items: flex-end; }
+  .graph-check { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+  .graph-caveat { margin: var(--space-2) 0; padding: var(--space-2) var(--space-3); border-left: 4px solid var(--warning); background: var(--warning-bg); font-size: var(--font-sm); }
+  .graph-notice { margin: var(--space-2) 0; color: var(--muted); font-size: var(--font-sm); }
+  .graph-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--space-4); align-items: start; }
+  .graph-canvas { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  .graph-svg { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  .graph-edge-synergy { stroke: var(--navy); }
+  .graph-edge-check { stroke: var(--accent-red); stroke-opacity: 0.8; }
+  .graph-edge-check.is-suggestive { stroke-dasharray: 5 4; stroke-opacity: 0.45; }
+  .graph-arrow-head { fill: var(--accent-red); }
+  .graph-ring { fill: none; stroke: var(--border); stroke-dasharray: 2 6; }
+  .graph-node { cursor: pointer; outline: none; }
+  .graph-hit { fill: transparent; }
+  .graph-halo { fill-opacity: 0.6; stroke-width: 3; }
+  .graph-node.is-focus .graph-halo { fill-opacity: 0.55; stroke-width: 4; }
+  .graph-node.is-selected .graph-halo, .graph-node:focus-visible .graph-halo { stroke: var(--navy); stroke-width: 5; }
+  .graph-label { font-size: 12px; font-weight: 700; fill: var(--navy); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; pointer-events: none; }
+  .graph-svg.has-selection .is-dim { opacity: 0.12; }
+  .graph-edge, .graph-node { transition: opacity 0.15s; }
+  .graph-side { font-size: var(--font-sm); }
+  .graph-side h4 { margin: var(--space-3) 0 var(--space-1); }
+  .graph-side-title { display: flex; align-items: center; gap: 6px; margin: 0; text-transform: none; letter-spacing: 0; }
+  .graph-side-list { list-style: none; margin: 0; padding: 0; }
+  .graph-side-list li { padding: 2px 0; }
+  .graph-side-list a { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+  .graph-legend { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; font-size: var(--font-xs); }
+  .graph-key { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .graph-key-partner::before, .graph-key-beats::before, .graph-key-beaten::before, .graph-key-dashed::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 3px solid var(--navy); }
+  .graph-key-beats::before, .graph-key-beaten::before { border-top-color: var(--accent-red); }
+  .graph-key-dashed::before { border-top: 3px dashed var(--accent-red); }
+  .graph-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+  .graph-cluster-chip { font: inherit; display: inline-flex; align-items: center; gap: 2px; min-height: 36px; padding: 2px 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--navy); cursor: pointer; text-align: left; }
+  .graph-cluster-chip[aria-pressed="true"] { border-color: var(--navy); background: var(--light-blue); }
+  .graph-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); }
+  .graph-canvas > p { padding: 0 var(--space-3); }
+  @media (max-width: 1023px) { .graph-layout { grid-template-columns: 1fr; } }
   .ko-badge { font-weight: 700; }
 
   /* Type filter (Usage, Pokémon Profile, Team Builder): one bare type icon
@@ -1942,6 +1980,7 @@
   <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
   <button class="tab-btn" role="tab" data-section="meta" data-tab="usage" aria-selected="false">Usage</button>
   <button class="tab-btn" role="tab" data-section="meta" data-tab="speed-tiers" aria-selected="false">Speed Tiers</button>
+  <button class="tab-btn" role="tab" data-section="meta" data-tab="graph" aria-selected="false">Meta Graph</button>
   <button class="tab-btn" role="tab" data-section="pokemon" data-tab="pokemon-profile" aria-selected="false">Profile</button>
   <button class="tab-btn" role="tab" data-section="pokemon" data-tab="compare" aria-selected="false">Compare</button>
   <button class="tab-btn" role="tab" data-section="pokemon" data-tab="matchup" aria-selected="false">Matchup</button>
@@ -2231,6 +2270,7 @@
             <option value="co_occurrence">Co-occurrence</option>
           </select>
         </label>
+        <a class="btn btn-sm" id="profile-graph-link" href="#/graph/synergy">See on the graph</a>
       </div>
       <div id="profile-pair-table"></div>
       <div id="profile-triple-table" hidden></div>
@@ -2711,6 +2751,46 @@
     </div>
     <div id="compare-results"></div>
   </section>
+  {# Meta Graph (docs/plan-synergy-checks-graph.md, backlog #50):
+     static/graph.js draws it from the per-scope pokemon_graph shard. #}
+  <section class="tab-panel" data-panel="graph" data-section="meta" hidden>
+    <h2 class="panel-title">Meta Graph</h2>
+    <p class="lead">The whole metagame of one regulation at once: which Pokémon cluster together, and which teams press on which.</p>
+    <details class="method"><summary>How this is computed</summary>
+      <p><strong>Synergy.</strong> An edge joins two Pokémon that share teams more often than their popularity predicts (lift above 1), on at least the chosen number of teams. Each Pokémon keeps its six most confident pairings, by how far the shared-team count sits above the count independence predicts (a Poisson z score). Colours are clusters found from those edges; they are named by number, not by archetype.</p>
+      <p><strong>Checks.</strong> An arrow from A to B means teams with A beat teams with B more often than the two teams' overall win rates predict (the log5 expectation). Matches where either team also fields the other's Pokémon are left out. Thousands of pairs are tested, so a pair counts as <em>strong</em> only when it survives a false-discovery correction (Benjamini–Hochberg, q ≤ 0.10); <em>suggestive</em> edges clear |z| ≥ 2 but not the correction, and are dashed.</p>
+      <p>Checks are measured <strong>team vs team</strong>: no source publishes which Pokémon were brought to a given match. A missing edge is not "neutral": pairs that rarely meet or never share a team have no edge at all.</p>
+      <p>Positions are computed once per regulation when the site is built, starting from the all-regulations layout, so a Pokémon stays in roughly the same place when you switch regulation.</p>
+    </details>
+    <div class="calc-mode" role="group" aria-label="Graph layer">
+      <button type="button" class="calc-mode-btn" data-graph-layer="synergy" aria-pressed="true">Synergy</button>
+      <button type="button" class="calc-mode-btn" data-graph-layer="checks" aria-pressed="false">Checks</button>
+    </div>
+    <div class="filters graph-controls">
+      <label>Focus <select id="graph-focus"></select></label>
+      <button type="button" class="btn btn-sm" id="graph-clear" hidden>Whole graph</button>
+      <label id="graph-min-label">Minimum shared teams <select id="graph-min"></select></label>
+      <label id="graph-evidence-label" hidden>Evidence
+        <select id="graph-evidence">
+          <option value="strong">Strong only</option>
+          <option value="all">Strong + suggestive</option>
+        </select>
+      </label>
+      <label>Hide most used <select id="graph-hide"></select></label>
+      <label class="graph-check"><input type="checkbox" id="graph-mega"> Megas only</label>
+    </div>
+    <p class="graph-caveat" id="graph-caveat" hidden></p>
+    <p class="graph-notice" id="graph-notice" role="status" hidden></p>
+    <h3 id="graph-title"></h3>
+    <div class="graph-layout">
+      <div class="graph-canvas" id="graph-canvas"></div>
+      <aside class="graph-side" id="graph-side" aria-live="polite"></aside>
+    </div>
+    <div class="graph-legend" id="graph-legend"></div>
+    <h3>Edges</h3>
+    <div id="graph-table"></div>
+    <p class="source-note">Synergy is co-occurrence on tournament rosters; association is not proof of a strategy. Checks come from RK9 round-by-round pairings and are team vs team, not a battle log.</p>
+  </section>
   <section class="tab-panel" data-panel="core-explorer" data-section="teams" hidden>
     <h2 class="panel-title">Team Core Explorer</h2>
     <p class="lead">Pairs and triples that recur on real teams, with sample size and lift.</p>
@@ -2931,5 +3011,6 @@
 <script src="players.js"></script>
 <script src="ladder.js"></script>
 <script src="search.js"></script>
+{# graph.js loads when the Meta Graph first opens (app.js's LAZY_TAB_SCRIPTS). #}
 </body>
 </html>

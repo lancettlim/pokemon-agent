@@ -503,3 +503,83 @@ def test_a_tab_whose_script_loads_after_its_data_still_renders(site_url, open_pa
     page.wait_for_load_state("networkidle")
     assert page.locator("#player-search-table tbody tr").count() == 8
     assert not page.errors
+
+
+def test_meta_graph_selects_then_focuses_a_node(site_url, open_page):
+    """Meta Graph (docs/plan-synergy-checks-graph.md): a first tap selects
+    a Pokémon and dims the rest, a second tap puts it in the centre, and
+    Escape returns to the whole graph."""
+    page = open_page()
+    page.goto(site_url + "#/graph")
+    page.wait_for_load_state("networkidle")
+    node = page.locator('#graph-canvas .graph-node[data-key="garchomp"]')
+    node.click()
+    assert "Garchomp" in page.locator("#graph-side").inner_text()
+    node.click()
+    page.wait_for_function("location.hash === '#/graph/synergy?focus=garchomp'")
+    assert (
+        page.locator("#graph-canvas .graph-node.is-focus").get_attribute("data-key") == "garchomp"
+    )
+    # The focus table lists every drawn edge.
+    drawn = page.locator("#graph-canvas .graph-edge").count()
+    assert drawn > 0
+    assert page.locator("#graph-table tbody tr").count() == drawn
+    page.locator("#graph-canvas .graph-node.is-focus").focus()
+    page.keyboard.press("Escape")
+    page.wait_for_function("location.hash === '#/graph/synergy'")
+    assert not page.errors
+
+
+def test_meta_graph_checks_layer_carries_the_team_caveat(site_url, open_page):
+    """Every checks view says it is team vs team, and suggestive edges are
+    dashed and only shown on request when strong ones exist."""
+    page = open_page()
+    page.goto(site_url + "#/graph/checks")
+    page.wait_for_load_state("networkidle")
+    caveat = page.locator("#graph-caveat")
+    assert caveat.is_visible()
+    assert "Team vs team" in caveat.inner_text()
+    assert page.locator("#graph-canvas .graph-edge-check").count() == 1
+    assert page.locator("#graph-canvas .graph-edge-check.is-suggestive").count() == 0
+    page.select_option("#graph-evidence", "all")
+    page.wait_for_function("location.hash === '#/graph/checks?ev=all'")
+    assert page.locator("#graph-canvas .graph-edge-check.is-suggestive").count() == 1
+    assert not page.errors
+
+
+def test_meta_graph_keyboard_moves_between_neighbours(site_url, open_page):
+    """U12: arrow keys move the selection along the graph and Enter focuses."""
+    page = open_page()
+    page.goto(site_url + "#/graph")
+    page.wait_for_load_state("networkidle")
+    first = page.locator('#graph-canvas .graph-node[tabindex="0"]')
+    first.focus()
+    start = first.get_attribute("data-key")
+    moved = None
+    for key in ("ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"):
+        page.keyboard.press(key)
+        moved = page.evaluate("document.activeElement.getAttribute('data-key')")
+        if moved and moved != start:
+            break
+    assert moved and moved != start
+    page.keyboard.press("Enter")
+    page.wait_for_function(f"location.hash === '#/graph/synergy?focus={moved}'")
+    # The re-rendered graph keeps keyboard focus: Escape works straight away.
+    page.keyboard.press("Escape")
+    page.wait_for_function("location.hash === '#/graph/synergy'")
+    assert page.evaluate("!!document.activeElement.closest('#graph-canvas')")
+    assert not page.errors
+
+
+def test_meta_graph_focus_table_lists_partners_and_checks(site_url, open_page):
+    """A focus view draws partners and check rings whatever the layer, so
+    its table carries both kinds of edge, each with its own measure."""
+    page = open_page()
+    page.goto(site_url + "#/graph/checks?focus=garchomp&ev=all")
+    page.wait_for_load_state("networkidle")
+    drawn = page.locator("#graph-canvas .graph-edge").count()
+    assert page.locator("#graph-table tbody tr").count() == drawn
+    links = page.locator("#graph-table tbody td[data-label='Link']").all_inner_texts()
+    assert "Partner" in links
+    assert "Teams that beat its teams" in links
+    assert not page.errors

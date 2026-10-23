@@ -27,6 +27,13 @@
 -- pokemon_win_rate_summary's record_count/wilson_lower_bound pairing
 -- uses.
 --
+-- Confidence (docs/plan-synergy-checks-graph.md, G3): expected_pair_team_
+-- count is the number of shared teams independence predicts (team_count_a
+-- * team_count_b / total_teams), and synergy_z is the Poisson z score of
+-- the observed count against it, (observed - expected) / sqrt(expected).
+-- Lift says how strong a pairing is; synergy_z says how sure we are of it,
+-- which is what the synergy graph caps each node's edges by.
+--
 -- regulation_scope (docs/upgrade-plan-2026q4.md, A3): one partition per
 -- Champions regulation ("m-a", "m-b", "m-c", ...) plus the roll-up 'all',
 -- each computed and ranked independently, via int_champions_roster_scoped.
@@ -54,7 +61,9 @@ scored as (
     core.partner_pokemon_key,
     core.co_occurrence_count as pair_team_count,
     (core.co_occurrence_count::double * total_teams.total_teams)
-      / (marginal_a.team_count * marginal_b.team_count) as lift_raw
+      / (marginal_a.team_count * marginal_b.team_count) as lift_raw,
+    (marginal_a.team_count::double * marginal_b.team_count) / total_teams.total_teams
+      as expected_raw
   from {{ ref('pokemon_team_core_usage') }} core
   inner join total_teams on total_teams.regulation_scope = core.regulation_scope
   inner join marginal marginal_a
@@ -70,6 +79,8 @@ select
   partner_pokemon_key,
   pair_team_count,
   round(lift_raw, 4) as lift,
+  round(expected_raw, 4) as expected_pair_team_count,
+  round((pair_team_count - expected_raw) / sqrt(expected_raw), 4) as synergy_z,
   row_number() over (partition by regulation_scope, pokemon_key order by lift_raw desc, partner_pokemon_key) as lift_rank
 from scored
 order by regulation_scope, pokemon_key, lift desc

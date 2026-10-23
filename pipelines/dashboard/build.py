@@ -46,7 +46,7 @@ from typing import Any
 import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from pipelines.dashboard import data, dictionary, sprites
+from pipelines.dashboard import data, dictionary, graph, sprites
 from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
@@ -115,6 +115,9 @@ _CRITICAL_PAYLOAD_KEYS = (
 #   data/<mart>.json          the largest unscoped marts, each fetched only
 #                             by the tab that reads it (registerTab's
 #                             extraMarts in static/app.js)
+#   data/<mart>-<scope>.json  large scoped marts only one tab reads, split
+#                             per scope and fetched on demand like the
+#                             above, but only the selected scope's file
 # The page's scripts, in load order (templates/index.html.jinja's <script>
 # tags). Each is copied verbatim next to index.html.
 SCRIPT_NAMES = (
@@ -126,11 +129,13 @@ SCRIPT_NAMES = (
     "players.js",
     "ladder.js",
     "search.js",
+    # Not a <script> tag: app.js loads it when the Meta Graph first opens
+    # (LAZY_TAB_SCRIPTS), keeping it out of the first view's budget.
+    "graph.js",
 )
 
 SHARD_DIR = "data"
 ON_DEMAND_MARTS = (
-    "pokemon_head_to_head",
     "pokemon_team_core_triple_usage",
     "player_signature_pokemon",
     # Event-, team- and player-grain marts (docs/upgrade-plan-2027q1.md,
@@ -172,6 +177,16 @@ ON_DEMAND_MARTS = (
     "ladder_lead_pairs",
     # The Archetypes tab's matchup heatmap (list #30).
     "archetype_matchups",
+)
+# Scoped, and read only by Matchup and the Graph view (docs/plan-synergy-
+# checks-graph.md): head-to-head became scoped in G1, which multiplied its
+# rows by the number of scopes, and the matchup summary with it, which
+# would otherwise ride in every scope file and break the core budget.
+SCOPED_ON_DEMAND_MARTS = (
+    "pokemon_head_to_head",
+    "pokemon_matchup_summary",
+    "pokemon_check_edges",
+    "pokemon_graph",
 )
 
 # Per-move, per-item and per-ability details (type, power, effect text...)
@@ -230,7 +245,8 @@ def _write_mart_shards(
 ) -> dict[str, Any]:
     """Writes the mart shards under output_dir/data/ and returns their
     index ({"core": path, "scopes": {scope: path}, "on_demand": {mart:
-    path}}), paths relative to output_dir. Stale shards from a previous
+    path}, "on_demand_scoped": {mart: {scope: path}}}), paths relative to
+    output_dir. Stale shards from a previous
     build (a scope or mart that no longer exists) are removed first."""
     shard_dir = output_dir / SHARD_DIR
     shard_dir.mkdir(parents=True, exist_ok=True)
@@ -261,18 +277,19 @@ def _write_mart_shards(
     # A scoped mart is split across the scope files unless it's on-demand:
     # those load whole, with the page that needs them, and copying one into
     # every scope file too would put it in the default view's download.
+    on_demand = set(ON_DEMAND_MARTS) | set(SCOPED_ON_DEMAND_MARTS)
     scoped_names = [
         n
         for n, rows in marts.items()
         if rows
         and "regulation_scope" in rows[0]
-        and n not in ON_DEMAND_MARTS
+        and n not in on_demand
         and n not in BUILD_ONLY_MARTS
     ]
     core = {
         name: rows
         for name, rows in marts.items()
-        if name not in scoped_names and name not in ON_DEMAND_MARTS and name not in BUILD_ONLY_MARTS
+        if name not in scoped_names and name not in on_demand and name not in BUILD_ONLY_MARTS
     }
     detail_joins = []
     for mart, (key, details_mart, fields) in DETAIL_SPLITS.items():
@@ -287,6 +304,7 @@ def _write_mart_shards(
         "core": write("core", core),
         "scopes": {},
         "on_demand": {},
+        "on_demand_scoped": {},
         "build_only": [name for name in BUILD_ONLY_MARTS if name in marts],
         "name_fields": [list(pair) for pair in data.NAME_JOINS],
         "detail_joins": detail_joins,
@@ -317,7 +335,43 @@ def _write_mart_shards(
     for name in ON_DEMAND_MARTS:
         if name in marts:
             index["on_demand"][name] = write(name, {name: marts[name]})
+    # One file per scope. Head-to-head and check edges are official-only
+    # (RK9 pairings), so a population scope falls back to its official
+    # rows, listed under official_fallback like the scope files above.
+    for name in SCOPED_ON_DEMAND_MARTS:
+        if name not in marts:
+            continue
+        # The fallback points at the official scope's file rather than
+        # writing a copy: head-to-head is several MB per scope.
+        files: dict[str, str] = {}
+        for scope in sorted(scopes, key=lambda sc: data.scope_population(sc) != data.OFFICIAL):
+            rows = [r for r in marts[name] if r.get("regulation_scope") == scope]
+            official = data.scope_regulation(scope)
+            if not rows and data.scope_population(scope) != data.OFFICIAL and official in files:
+                files[scope] = files[official]
+                index["official_fallback"].setdefault(scope, []).append(name)
+                continue
+            files[scope] = write(f"{name}-{scope.replace(':', '-')}", {name: rows})
+        index["on_demand_scoped"][name] = files
     return index
+
+
+def _build_graphs(marts_dir: Path, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """The Graph view's per-scope graphs (pipelines/dashboard/graph.py).
+    Reads the full pokemon_team_synergy mart rather than the payload's
+    copy, which is sliced by lift: the graph keeps each node's edges by
+    synergy_z instead."""
+    marts = payload["marts"]
+    return graph.build_graphs(
+        data.load_mart(marts_dir, "pokemon_team_synergy", sliced=False),
+        marts.get("pokemon_check_edges", []),
+        marts.get("pokemon_usage_summary", []),
+        {
+            scope: (kpis or {}).get("team_count") or 0
+            for scope, kpis in payload["kpis_by_scope"].items()
+        },
+        marts.get("detected_archetype_summary", []),
+    )
 
 
 def _asset_coverage(payload: dict[str, Any], referenced_keys: set[str]) -> list[dict[str, Any]]:
@@ -647,6 +701,7 @@ def build(
     the claude.ai artifact's file limit.
     """
     payload = data.build_payload(marts_dir, normalized_dir, regulations=regulations, today=today)
+    payload["marts"]["pokemon_graph"] = _build_graphs(marts_dir, payload)
 
     referenced_keys = _referenced_pokemon_keys(payload["marts"])
     payload["sprites"] = sprites.copy_sprites(

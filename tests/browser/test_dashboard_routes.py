@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,11 @@ ROUTES = [
     "#/usage/trends",
     "#/usage/ladder",
     "#/speed",
+    "#/graph",
+    "#/graph/checks",
+    "#/graph/checks?ev=all",
+    "#/graph/synergy?focus=garchomp",
+    "#/graph/checks?focus=garchomp&ev=all",
     "#/pokemon/garchomp",
     "#/pokemon/garchomp/abilities",
     "#/pokemon/garchomp/moves",
@@ -210,7 +216,12 @@ def test_core_payload_stays_under_budget():
     html = index.read_text(encoding="utf-8")
     start = html.index("window.DASHBOARD_DATA = ") + len("window.DASHBOARD_DATA = ")
     critical = json.loads(html[start : html.index("</script>", start)].rstrip().rstrip(";"))
-    files = [index] + sorted(PUBLISHED_SITE.glob("*.js"))
+    # The scripts the page loads up front, plus the service worker it
+    # registers. A view script app.js loads on demand (LAZY_TAB_SCRIPTS:
+    # graph.js) is not part of the first view.
+    up_front = re.findall(r'<script src="([^"]+)"', html)
+    files = [index] + [PUBLISHED_SITE / name for name in sorted(set(up_front) | {"sw.js"})]
+    files = [path for path in files if path.exists()]
     mart_files = critical.get("mart_files") or {}
     if mart_files:
         files.append(PUBLISHED_SITE / mart_files["core"])

@@ -324,6 +324,8 @@ def write_fixture_marts(
                     "partner_pokemon_key": row["partner_pokemon_key"],
                     "pair_team_count": row["co_occurrence_count"],
                     "lift": round(1.8 - row["usage_rank"] * 0.1, 3),
+                    "expected_pair_team_count": round(row["co_occurrence_count"] / 1.5, 3),
+                    "synergy_z": round(4 - row["usage_rank"] * 0.4, 3),
                     "lift_rank": row["usage_rank"],
                 }
                 for row in partner_rows(scope)
@@ -562,6 +564,7 @@ def write_fixture_marts(
         marts_dir / "pokemon_head_to_head.csv",
         [
             {
+                "regulation_scope": scope,
                 "pokemon_key": a,
                 "opponent_pokemon_key": b,
                 "matches_played": 40,
@@ -571,15 +574,51 @@ def write_fixture_marts(
                 "wilson_lower_bound": 0.39 if a < b else 0.3,
                 "matchup_rank": 1,
             }
+            for scope in SCOPES
             for a in KEYS
             for b in KEYS
             if a != b
         ],
     )
+
+    # Check edges (docs/plan-synergy-checks-graph.md, G2): antisymmetric,
+    # with one strong and one suggestive pair per scope.
+    def check_rows(scope):
+        rows = []
+        for a, b, wins, evidence in (
+            (KEYS[0], KEYS[1], 30, "strong"),
+            (KEYS[2], KEYS[3], 26, "suggestive"),
+        ):
+            for own, opp, w, z in ((a, b, wins, 3.2), (b, a, 40 - wins, -3.2)):
+                rows.append(
+                    {
+                        "regulation_scope": scope,
+                        "pokemon_key": own,
+                        "opponent_pokemon_key": opp,
+                        "matches_played": 40,
+                        "wins": w,
+                        "losses": 40 - w,
+                        "observed_win_rate": w / 40,
+                        "pokemon_win_rate": 0.5,
+                        "opponent_win_rate": 0.5,
+                        "expected_win_rate": 0.5,
+                        "edge": w / 40 - 0.5,
+                        "z_score": z if evidence == "strong" else z * 0.7,
+                        "p_value": 0.001,
+                        "q_value": 0.05 if evidence == "strong" else 0.4,
+                        "evidence": evidence,
+                        "tested_pairs": 28,
+                        "min_matches_threshold": 20,
+                    }
+                )
+        return rows
+
+    _write(marts_dir / "pokemon_check_edges.csv", scoped(check_rows))
     _write(
         marts_dir / "pokemon_matchup_summary.csv",
         [
             {
+                "regulation_scope": scope,
                 "pokemon_key": key,
                 "overall_win_rate": 0.52,
                 "distinct_opponents": 7,
@@ -592,6 +631,7 @@ def write_fixture_marts(
                 "worst_matchup_matches": 40,
                 "min_matches_threshold": 10,
             }
+            for scope in SCOPES
             for i, key in enumerate(KEYS)
         ],
     )

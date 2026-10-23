@@ -354,7 +354,7 @@ statistics (S2, decisions D2 and D3), a population of their own:
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
 B2): the views are grouped into five sections, each with its own row of
-views. **Meta** has Overview, Tier List, Usage and Speed Tiers. **Pokémon**
+views. **Meta** has Overview, Tier List, Usage, Speed Tiers and Meta Graph. **Pokémon**
 has Profile, Compare and Matchup. **Teams** has Top Teams, Archetypes, Core
 Explorer and Players & Regions. **Builder** has Team Builder, and **Data**
 has Data & Sources. The section bar sticks to the top of the page, and on
@@ -365,6 +365,29 @@ Explorer, Matchup) carries a type-ahead search with sprites
 (`attachPokemonCombobox`), and `/` or Ctrl/⌘+K opens the global search
 (Pokémon, players and events; `static/search.js`, 2027 Q2 Q3).
 
+- **Meta Graph** (`static/graph.js`, backlog #50, `docs/plan-synergy-
+  checks-graph.md`) draws one regulation's metagame as a graph. The
+  **Synergy** layer joins Pokémon that share teams more often than their
+  popularity predicts (lift > 1), each keeping its six most confident
+  pairings by `synergy_z`, coloured by label-propagation cluster. The
+  **Checks** layer draws an arrow A → B where teams with A beat teams with
+  B more often than log5 predicts from the two sides' records
+  (`pokemon_check_edges`): solid when the pair survives a
+  Benjamini–Hochberg correction (q ≤ 0.10), dashed when it only clears
+  |z| ≥ 2. Strong edges are the default; a regulation with none (M-C, as
+  of 2026-10) falls back to suggestive ones and says so. Every checks view
+  carries the team-vs-team caveat. Tapping a node highlights its links,
+  tapping again (or Enter) puts it in the centre with rings for partners,
+  "its teams beat" and "teams that beat its teams"; arrow keys move
+  between neighbours and Escape backs out. Filters: minimum shared teams
+  or matches, hide the N most used, Megas only. A table twin below the
+  graph lists the same edges. Phones open on chips for the five most-used
+  Pokémon plus the table, with the full graph behind a button. Layouts are
+  computed at build time (`pipelines/dashboard/graph.py`: seeded
+  Fruchterman–Reingold, `'all'` first and each regulation refined from it,
+  so positions are stable across regulations) and shipped as one
+  `data/pokemon_graph-<scope>.json` per regulation. The profile's Team
+  Cores and Matchup's records link into a focus view.
 - **Tier List** bands Pokémon by team share in the selected regulation
   (S ≥ 24%, A 12–24%, B 6–12%, C 3–6% of teams), each with a win-rate chip coloured
   only when the 95% Wilson interval sits clearly above or below 50%.
@@ -719,10 +742,11 @@ reached 22 MB:
 |---|---|---|
 | `data/core.json` | unscoped marts the common tabs read | first tab that needs marts |
 | `data/scope-<scope>.json` | the selected regulation's rows of every scoped mart | with core, for the page's regulation only |
-| `data/pokemon_head_to_head.json`, `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the three largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
+| `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
 | `data/ladder_pokemon_usage.json`, `data/ladder_checks_counters.json`, `data/ladder_stat_point_spreads.json` | the Showdown ladder marts (S2), sliced to what the views show (`data.py`'s `_slice_ladder_*`), about 190 KB compressed together | the Usage tab (usage) and the profile (counters, spreads) |
 | `data/ladder_bring_rate.json`, `data/ladder_lead_pairs.json` | Showdown replay bring rates and lead pairs (S3), Bo1 and Bo3 pooled | the Usage tab (both) and the profile (bring rate) |
 | `data/online_upcoming_events.json` | upcoming Limitless online tournaments (list #31) | the Events tab |
+| `data/<mart>-<scope>.json` (`SCOPED_ON_DEMAND_MARTS`: head-to-head, matchup summary, check edges, the Meta Graph) | one regulation's rows of a scoped mart only one view reads | only the page's regulation, only by Matchup or Meta Graph (`mart_files.on_demand_scoped`) |
 
 The default M-C view downloads about 400 KB compressed in total, against
 roughly 2 MB for the old single file.
@@ -800,8 +824,11 @@ official scope's rows instead, listed in `mart_files.official_fallback`,
 and `App.regulationCode` is the regulation part for views that only read
 official events. KPIs are precomputed per scope
 (`kpis_by_scope`) and the template renders one KPI row per scope. Marts
-without the column (head-to-head, triple cores, country, players) still
-cover all Champions regulations.
+without the column (triple cores, country, players) still cover all
+Champions regulations. Head-to-head and the matchup summary gained the
+column in 2026-10 (`docs/plan-synergy-checks-graph.md`, G1): before that,
+Matchup's records pooled every regulation, so its numbers changed when they
+became scoped.
 
 **What changed panel**: the top of Overview compares the selected
 regulation with the one before it (`pokemon_regulation_movers`, summarised
@@ -956,6 +983,7 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 | Route | View |
 |---|---|
 | `#/overview`, `#/tiers`, `#/speed` | Meta views |
+| `#/graph[/synergy\|checks]?focus=<key>&min=<n>&ev=all&hide=<n>&mega=1` | Meta Graph: layer, focused Pokémon, edge floor, suggestive check edges, hide the N most used, Megas only |
 | `#/usage[/win-rate\|success\|trends\|megas\|ladder]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window; `ladder` is Ladder vs tournament |
 | `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure\|counters\|spreads]` | A Pokémon's profile; `counters` and `spreads` are Showdown ladder data |
 | `#/compare/<a>,<b>[,<c>[,<d>]]`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons of two to four Pokémon; `meta` is the calculator's "vs the meta" mode |

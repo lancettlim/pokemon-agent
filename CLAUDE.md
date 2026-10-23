@@ -325,10 +325,12 @@ VERSION=X.Y.Z` (refresh → release).
   the hash router (every view is a `#/...` route; `docs/dashboard.md`'s
   "Routes" lists them), the shared table and tooltip/glossary components
   and the core views; `matchup.js`, `teams.js`, `expansions.js`,
-  `events.js`, `players.js` and `ladder.js` add the calculator, Top
-  Teams/Builder, Compare/Core Explorer, event pages, player pages and the
-  Showdown ladder views (hooked into the Usage tab and profile through
-  `App.extendTab`); `search.js` is the global search (`/`, Ctrl/⌘+K), and
+  `events.js`, `players.js`, `ladder.js` and `graph.js` add the
+  calculator, Top Teams/Builder, Compare/Core Explorer, event pages, player
+  pages, the Showdown ladder views (hooked into the Usage tab and profile
+  through `App.extendTab`) and the Meta Graph (its layouts precomputed at
+  build time by `graph.py`); `search.js` is the global search (`/`,
+  Ctrl/⌘+K), and
   `sw.js` the offline service worker, written by `build.py` with its
   precache list. `templates/embed.html.jinja` becomes `embed.html`, the
   embeddable Top 12 widget creators put in an `<iframe>`, with its own

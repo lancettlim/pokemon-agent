@@ -125,7 +125,23 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("item_count", "ability_count"),
         ("item_hhi", "ability_hhi"),
     ),
-    "pokemon_team_synergy": (("pair_team_count", "lift_rank"), ("lift",)),
+    "pokemon_team_synergy": (
+        ("pair_team_count", "lift_rank"),
+        ("lift", "expected_pair_team_count", "synergy_z"),
+    ),
+    "pokemon_check_edges": (
+        ("matches_played", "wins", "losses", "tested_pairs", "min_matches_threshold"),
+        (
+            "observed_win_rate",
+            "pokemon_win_rate",
+            "opponent_win_rate",
+            "expected_win_rate",
+            "edge",
+            "z_score",
+            "p_value",
+            "q_value",
+        ),
+    ),
     "pokemon_regulation_movers": (
         (
             "usage_count",
@@ -408,7 +424,17 @@ def _top_per_anchor(rows: list[dict[str, Any]], *, metric: str, limit: int) -> l
 
 def _slice_team_synergy(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     kept = [r for r in rows if (r.get("pair_team_count") or 0) >= MIN_SYNERGY_PAIR_TEAMS]
-    return _top_per_anchor(kept, metric="lift", limit=MAX_SYNERGY_PARTNERS_PER_POKEMON)
+    top = _top_per_anchor(kept, metric="lift", limit=MAX_SYNERGY_PARTNERS_PER_POKEMON)
+    # No view shows the expected count; synergy_z (the Meta Graph's sort)
+    # carries the confidence. Dropping it holds the core payload budget.
+    return [{k: v for k, v in r.items() if k != "expected_pair_team_count"} for r in top]
+
+
+def _slice_check_edges(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Only pairs with some evidence reach the browser: a 'none' edge is
+    one the data can't tell from chance (docs/plan-synergy-checks-graph.md,
+    GD1). The mart keeps every pair over its match floor."""
+    return [row for row in rows if row.get("evidence") in ("strong", "suggestive")]
 
 
 def _slice_team_core_usage(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -635,6 +661,7 @@ MART_SLICERS = {
     "pokemon_set_variants": _slice_set_variants,
     "tournament_team_results": _slice_team_results,
     "pokemon_team_synergy": _slice_team_synergy,
+    "pokemon_check_edges": _slice_check_edges,
     "pokemon_team_core_usage": _slice_team_core_usage,
     "pokemon_team_core_triple_usage": _slice_team_core_triples,
     "detected_archetype_summary": _slice_detected_archetypes,
@@ -774,14 +801,15 @@ def _coerce(
     return coerced
 
 
-def load_mart(marts_dir: Path, mart_name: str) -> list[dict[str, Any]]:
+def load_mart(marts_dir: Path, mart_name: str, *, sliced: bool = True) -> list[dict[str, Any]]:
     """Returns [] (not an error) if the mart's CSV doesn't exist yet.
     Marts listed in MART_SLICERS are cut down to the dashboard-relevant
-    slice after coercion — see that dict's comment for why."""
+    slice after coercion — see that dict's comment for why — unless
+    `sliced` is False (the graph builder reads full synergy)."""
     int_fields, float_fields = MART_FIELDS[mart_name]
     rows = _read_csv_rows(marts_dir / f"{mart_name}.csv")
     coerced = [_coerce(row, int_fields=int_fields, float_fields=float_fields) for row in rows]
-    slicer = MART_SLICERS.get(mart_name)
+    slicer = MART_SLICERS.get(mart_name) if sliced else None
     return slicer(coerced) if slicer else coerced
 
 

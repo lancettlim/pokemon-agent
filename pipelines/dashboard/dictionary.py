@@ -39,6 +39,12 @@ DERIVED_DESCRIPTIONS = {
         "name and country as the source spells them, teams on record (one per "
         "event), best finish and regulations played."
     ),
+    "pokemon_graph": (
+        "One row per regulation, derived at build time for the Graph view: the "
+        "synergy and checks graph's nodes with precomputed positions and "
+        "clusters, its synergy edges (from pokemon_team_synergy) and its check "
+        "edges (from pokemon_check_edges)."
+    ),
 }
 
 
@@ -91,6 +97,8 @@ def _shard_for(name: str, rows: list[dict[str, Any]], mart_files: dict[str, Any]
         return None
     if name in (mart_files.get("on_demand") or {}):
         return mart_files["on_demand"][name]
+    if name in (mart_files.get("on_demand_scoped") or {}):
+        return f"data/{name}-<regulation>.json"
     if rows and "regulation_scope" in rows[0]:
         return "data/scope-<regulation>.json"
     return mart_files.get("core")

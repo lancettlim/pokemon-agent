@@ -14,6 +14,14 @@
 -- pokemon_key alone returns that Pokémon's full opponent list, matching
 -- pokemon_team_core_usage's existing convention for partner pairs.
 --
+-- regulation_scope (docs/plan-synergy-checks-graph.md, G1): one partition
+-- per Champions regulation plus the roll-up 'all', via
+-- int_champions_roster_scoped. A match takes its event's regulation (both
+-- teams of a match come from the same event, so the opponent's roster is
+-- read in the scope of the side's own team). Before this, a matchup from
+-- M-A showed up on an M-C page -- the blending the regulation registry
+-- exists to stop.
+--
 -- Scoped to Masters (the only division with rosters, see
 -- assert_rk9_pairing_mapping_coverage.sql), to decided matches (a tie or
 -- bye has no winner to attribute), and to the current legal pool.
@@ -36,20 +44,34 @@ with decided as (
     and winner_team_id is not null
 ),
 
--- Legal-pool roster membership, one row per (team, Pokémon). distinct
--- guards against a team that fielded the same Pokémon in two slots
--- inflating its own pair counts.
+-- Legal-pool roster membership, one row per (scope, team, Pokémon).
+-- distinct guards against a team that fielded the same Pokémon in two
+-- slots inflating its own pair counts. scoped_team_key folds scope and
+-- team into one join key: joining the two roster sides on
+-- regulation_scope as a separate predicate let the planner pair every
+-- roster row with every other in the same scope before filtering by team,
+-- which ran DuckDB out of temp space.
 roster as (
   select distinct
+    member.regulation_scope,
     member.team_id,
+    member.regulation_scope || ':' || member.team_id as scoped_team_key,
     member.pokemon_key
-  from {{ ref('int_champions_roster_official') }} member
+  from {{ ref('int_champions_roster_scoped') }} member
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
+  -- Official events only (docs/upgrade-plan-2027q2.md, S1): RK9 pairings
+  -- exist only for them, and the official scopes are "m-c" and 'all'.
+  where member.scope_population = 'official'
 ),
 
--- Each decided match contributes both directions.
+scoped_teams as (
+  select distinct regulation_scope, team_id from roster
+),
+
+-- Each decided match contributes both directions, once per scope its
+-- teams belong to (their own regulation and 'all').
 sides as (
   select
     decided.match_id,
@@ -66,20 +88,33 @@ sides as (
   from decided
 ),
 
-pairs as (
+scoped_sides as (
   select
-    own_roster.pokemon_key,
-    opponent_roster.pokemon_key as opponent_pokemon_key,
+    scoped_teams.regulation_scope,
+    scoped_teams.regulation_scope || ':' || sides.own_team_id as own_key,
+    scoped_teams.regulation_scope || ':' || sides.opponent_team_id as opponent_key,
     case when sides.winner_team_id = sides.own_team_id then 1 else 0 end as is_win
   from sides
+  inner join scoped_teams
+    on scoped_teams.team_id = sides.own_team_id
+),
+
+pairs as (
+  select
+    scoped_sides.regulation_scope,
+    own_roster.pokemon_key,
+    opponent_roster.pokemon_key as opponent_pokemon_key,
+    scoped_sides.is_win
+  from scoped_sides
   inner join roster as own_roster
-    on own_roster.team_id = sides.own_team_id
+    on own_roster.scoped_team_key = scoped_sides.own_key
   inner join roster as opponent_roster
-    on opponent_roster.team_id = sides.opponent_team_id
+    on opponent_roster.scoped_team_key = scoped_sides.opponent_key
 ),
 
 agg as (
   select
+    regulation_scope,
     pokemon_key,
     opponent_pokemon_key,
     count(*) as matches_played,
@@ -87,7 +122,7 @@ agg as (
     count(*) - sum(is_win) as losses,
     round(sum(is_win)::double / count(*), 4) as win_rate
   from pairs
-  group by pokemon_key, opponent_pokemon_key
+  group by regulation_scope, pokemon_key, opponent_pokemon_key
 ),
 
 -- z = 1.96 (95% confidence), same Wilson score lower bound
@@ -105,6 +140,7 @@ scored as (
 )
 
 select
+  regulation_scope,
   pokemon_key,
   opponent_pokemon_key,
   matches_played,
@@ -113,8 +149,8 @@ select
   win_rate,
   round(greatest(wilson_lower_bound_raw, 0), 4) as wilson_lower_bound,
   row_number() over (
-    partition by pokemon_key
+    partition by regulation_scope, pokemon_key
     order by wilson_lower_bound_raw desc, matches_played desc, opponent_pokemon_key asc
   ) as matchup_rank
 from scored
-order by pokemon_key, matchup_rank
+order by regulation_scope, pokemon_key, matchup_rank
