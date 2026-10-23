@@ -389,3 +389,16 @@ def test_extract_retries_transient_error_then_succeeds(tmp_path, monkeypatch):
         rows = list(csv.DictReader(fh))
 
     assert len(rows) == 3
+
+
+def test_an_event_counts_as_live_from_the_day_before_to_three_days_after():
+    # docs/upgrade-plan-2027q2.md, E4.
+    from datetime import date
+
+    event = "2026-12-05"
+    assert not munchstats.is_live(event, date(2026, 12, 3))
+    assert munchstats.is_live(event, date(2026, 12, 4))
+    assert munchstats.is_live(event, date(2026, 12, 8))
+    assert not munchstats.is_live(event, date(2026, 12, 9))
+    assert not munchstats.is_live("", date(2026, 12, 5))
+    assert not munchstats.is_live("not a date", date(2026, 12, 5))

@@ -265,6 +265,23 @@ def _run_tracked_extract(
     return True
 
 
+def live_event_ids(today=None) -> list[str]:
+    """Events running now or just over (munchstats.is_live), from the
+    newest MunchStats snapshot: run `extract munchstats` first and a new
+    event's date is already in it. Used to re-fetch live RK9 pairings (E4)
+    and by `live-events`, which the event-weekend workflow asks before it
+    spends a rebuild."""
+    path = _latest_snapshot_path("munchstats")
+    if path is None:
+        return []
+    live: dict[str, None] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("event_id") and munchstats.is_live(row.get("event_date"), today):
+                live[row["event_id"]] = None
+    return list(live)
+
+
 def _run_limitless_play(dataset_version: str) -> int:
     """Online tournaments in two tracked passes sharing one rate limiter:
     team sheets (limitless_play), then the pairings of the same tournaments
@@ -341,6 +358,10 @@ def _run_extract(source: str, dataset_version: str) -> int:
         # behind a metadata signature check; for rk9 it's every round of a
         # concluded event, whose pairings are immutable once uploaded.
         extract_kwargs["previous_snapshot_path"] = _latest_snapshot_path(staging_subdir)
+    if source == "rk9":
+        # An event still running is fetched again (E4): its cached pairings
+        # stop at whichever round was live when they were cached.
+        extract_kwargs["refresh_event_ids"] = live_event_ids()
     ok = _run_tracked_extract(
         source_name=_source_display_name(module, staging_subdir),
         staging_subdir=staging_subdir,
@@ -533,6 +554,12 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("validate", help="Run dbt build and write the validation report")
 
+    subparsers.add_parser(
+        "live-events",
+        help="Print the RK9 ids of events running now or just over, one per line "
+        "(from the newest MunchStats snapshot); exit 1 when there are none",
+    )
+
     release_parser = subparsers.add_parser(
         "release", help="Publish a versioned release package (gated on validate)"
     )
@@ -597,6 +624,11 @@ def main(argv: list[str] | None = None) -> int:
         if dataset_version is None:
             dataset_version = versioning.latest_published_version()
         return _run_extract(args.source, dataset_version)
+    if args.command == "live-events":
+        live = live_event_ids()
+        for event_id in live:
+            print(event_id)
+        return 0 if live else 1
     if args.command == "validate":
         return _run_validate()
     if args.command == "release":

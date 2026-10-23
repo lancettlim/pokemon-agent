@@ -825,6 +825,85 @@ models:
         description: "The placement-1 team's Pokémon, pipe-delimited in slot order."
       - name: recency_rank
         description: "1 for the regulation's newest event, counting back."
+  - name: pokemon_event_phase_usage
+    description: >
+      Day 2 conversion (docs/upgrade-plan-2027q2.md, E1): each Pokémon's
+      share of the teams that reached Day 2 or the top cut against its
+      share of the whole field at the same events, and the ratio between
+      them. Official events with RK9 pairings; Day 2 and the top cut are
+      read off the round structure (int_event_phases). Two grains:
+      scope_kind 'event' (event_id set, scope_code the event's regulation)
+      and 'regulation' (scope_code a regulation or 'all', event_id null).
+      Feeds event pages' conversion table and the Top 12 board's Day 2
+      switch. Written to data/marts/pokemon_event_phase_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['scope_kind', 'scope_code', 'event_id', 'phase', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_event_phase_usage}
+    columns:
+      - name: phase
+        description: "'day2' or 'top_cut'."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['day2', 'top_cut']
+              config:
+                meta: {category: mart_quality, table_name: pokemon_event_phase_usage}
+      - name: team_count
+        description: "Teams in the phase that brought the Pokémon."
+      - name: phase_team_count
+        description: "Teams in the phase: the share's n."
+      - name: team_share
+        description: "team_count / phase_team_count."
+      - name: field_team_count
+        description: "Every team at the same events: the field's n."
+      - name: field_team_share
+        description: "The Pokémon's share of the whole field at the same events."
+      - name: conversion
+        description: "team_share / field_team_share; 1.0 means it reached the phase at its field rate."
+      - name: is_reliable
+        description: "Both sides have at least 100 teams (the What changed panel's floor). When false, show counts but not the ratio."
+  - name: tournament_top_cut_matches
+    description: >
+      The single-elimination bracket of each official event with RK9
+      pairings (docs/upgrade-plan-2027q2.md, E2): one row per top-cut
+      match, each side with its player, placement and six Pokémon. Team vs
+      team: no source names the Pokémon brought to a game. Written to
+      data/marts/tournament_top_cut_matches.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['match_id']
+          config:
+            meta: {category: mart_quality, table_name: tournament_top_cut_matches}
+    columns:
+      - name: bracket_round
+        description: "1 for the top cut's first round, counting up to the final."
+      - name: top_cut_size
+        description: "Players in the top cut: its first round's slots less the byes (13 in a 16-slot bracket with three byes)."
+      - name: bracket_size
+        description: "Slots in the top cut's first round (16, or 32)."
+      - name: round_label
+        description: "'Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals' or 'Final'."
+  - name: tournament_top_cut_paths
+    description: >
+      Every Masters round each top-cut team played (docs/upgrade-plan-
+      2027q2.md, E2), Day 1 to the end, with the opponent and the result:
+      the path an event page shows when a bracket player is clicked. Team
+      vs team. Written to data/marts/tournament_top_cut_paths.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['event_id', 'team_id', 'round_number']
+          config:
+            meta: {category: mart_quality, table_name: tournament_top_cut_paths}
+    columns:
+      - name: phase
+        description: "'Day 1', 'Day 2' or 'Top cut'."
+      - name: result
+        description: "W, L, T or Bye, for this team."
   - name: online_event_summary
     description: >
       One row per Limitless online tournament (docs/upgrade-plan-2027q2.md,

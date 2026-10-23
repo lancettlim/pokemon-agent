@@ -141,6 +141,11 @@ ON_DEMAND_MARTS = (
     "team_mega_count",
     # The Events tab's online list (docs/upgrade-plan-2027q2.md, S1).
     "online_event_summary",
+    # Event pages' Day 2 conversion, bracket and paths (E1, E2). The board's
+    # Day 2 switch reads the inline KPIs instead.
+    "pokemon_event_phase_usage",
+    "tournament_top_cut_matches",
+    "tournament_top_cut_paths",
 )
 
 # Marts the build summarises into the inline KPIs and no view reads raw:
@@ -287,6 +292,20 @@ def _load_share_cards(output_dir: Path) -> dict[str, Any]:
     }
     manifest["whats_changed"] = {
         k: v for k, v in (manifest.get("whats_changed") or {}).items() if (output_dir / v).exists()
+    }
+    # Top 12 cards (V8): {"regulation"|"event": {key: {phase: {layout: path}}}}.
+    top12 = manifest.get("top12") or {}
+    manifest["top12"] = {
+        kind: {
+            key: {
+                phase: {
+                    layout: path for layout, path in layouts.items() if (output_dir / path).exists()
+                }
+                for phase, layouts in phases.items()
+            }
+            for key, phases in (top12.get(kind) or {}).items()
+        }
+        for kind in ("regulation", "event")
     }
     if manifest.get("og_image") and not (output_dir / manifest["og_image"]).exists():
         manifest["og_image"] = None

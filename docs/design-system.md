@@ -762,6 +762,35 @@ official sample. The event window's choices sit under an "Official
 events" heading. On the official scope, the Top 12 board's switch reads
 "Official | Online", not "All players", once an Online board exists.
 
+### Top-cut bracket and path (2027 Q2, E2)
+
+An event page's bracket (`.bracket`) is one column per round from 1024px
+(`.bracket-round`, its title above evenly spaced matches) and round tabs
+(a `.segmented` control) below it, one round at a time. A match
+(`.bracket-match`) is two stacked sides, each a player button over the
+team's compact strip, with W or L at the right; the winner's name is bold.
+A top seed's bye is one side and an italic "Bye". The chip says how many
+players made the cut ("13 PLAYERS"), the note how many seeds had byes.
+Picking a player opens `.path-panel` under the bracket: every round they
+played, as round number, a W/L/T/Bye badge, the phase chip and the
+opponent's player line and strip. Both say "team vs team".
+
+### Day 2 conversion (2027 Q2, E1)
+
+A data table of field share, Day 2 share and conversion ("×1.30", green at
+×1.10 and up, red at ×0.90 and down). The ratio shows "—" when either side
+has under 100 teams, and the note says it is held back.
+
+### Share controls and toast (2027 Q2, V8 and M4)
+
+`App.shareCardControlsHtml(card, title)` renders "Share", only where the
+browser can share files (it hands the 4:5 and 9:16 PNGs to the system
+share sheet), and "Download card" (the 16:9 PNG) everywhere, both 44px
+tall. The board puts them under its tiles, an event page in its header.
+`App.showToast(message)` shows one line above the phone's bottom bar for
+2.6s; a copy on a touch screen confirms with it, since there is no hover
+feedback. It respects `prefers-reduced-motion`.
+
 ### Segmented control (2027 Q2)
 
 `.segmented` holds two to four mutually exclusive `<button

@@ -174,6 +174,35 @@ competitive graphics and work on every screen. What changed, by sprint:
   (`online_event_summary`), each linking to its page on Limitless; online
   events get no event pages and online handles no player pages.
 
+**Sprint 13 — event weekend.**
+
+- **Day 2 and the top cut** are read off RK9's round structure
+  (`int_event_phases`): Day 2 starts at the first round with under half
+  the tables of the one before, and the top cut is the trailing run of
+  rounds where no loser plays again. The derived Day 2 fields match the
+  players Limitless lists for Day 2 (Worlds 57 and 57, NAIC 156 and 156);
+  `assert_day2_matches_limitless_lists` keeps checking. The top cut admits
+  everyone with a qualifying record and pads its bracket with byes, so a
+  16-slot bracket often holds 13 players.
+- **Day 2 conversion** (E1, `pokemon_event_phase_usage`): each event page
+  shows field share against Day 2 share, and the Top 12 board gains a Day
+  2 switch. In M-C, Kingambit converts at ×1.30. The ratio is held back
+  where either side has under 100 teams.
+- **Bracket and paths** (E2, `tournament_top_cut_matches`,
+  `tournament_top_cut_paths`): one column per round from 1024px, round
+  tabs below it; picking a player opens every round they played, Day 1 to
+  the final. Team vs team, and labelled so.
+- **Top 12 cards** (V8): see "Share cards and link previews" below; the
+  default regulation's 16:9 card is now the Open Graph image.
+- **Sharing from a phone** (M4): "Share" hands the 4:5 and 9:16 cards to
+  the system share sheet where the browser can share files; "Download
+  card" saves the 16:9 one everywhere. Copying on a touch screen confirms
+  with a toast.
+- **Event weekends** (E4): see "Event-weekend refresh" below.
+- **RK9 identity fix**: a name and country two entrants share is no longer
+  resolved to one roster (both Noah Gardners at Indianapolis 2026 had been
+  credited to the one in the top 16), and only Masters pairings resolve.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -584,6 +613,17 @@ published site went four months without a rebuild while its data aged out
 of the current regulation. The repo needs "Allow GitHub Actions to create
 and approve pull requests" enabled (Settings → Actions → General).
 
+**Event-weekend refresh** (`.github/workflows/event-weekend.yml`,
+docs/upgrade-plan-2027q2.md E4): hourly from Friday to Monday UTC it
+refreshes MunchStats and asks `python -m pipelines.cli live-events` whether
+an event is running or just over (from the day before its date to three
+days after). If one is, it re-extracts RK9 (a live event's pairings and
+rosters are fetched again rather than reused from the cache), runs every
+release gate, renders the share cards, rebuilds the site and deploys it
+straight to Pages. It commits nothing: the weekly pull request is still
+how data reaches `main`, and the next push to `docs/**` redeploys from
+`main`. With no live event, a run stops after the check.
+
 **Regulation selector**: every regulation-sensitive mart is partitioned
 by `regulation_scope` (each regulation plus `all`). The header's Regulation
 dropdown chooses one scope for the whole page. Changing it reloads the page
@@ -711,16 +751,26 @@ share_cards.py`, docs/upgrade-plan-2027q1.md C4) renders, with Playwright:
 - a 1200×630 "What changed" card per regulation
   (`images/cards/whats-changed-<scope>.png`), using the same comparison the
   Overview opens on, offered as "Download summary card";
-- `images/cards/og.png`, a copy of the default regulation's card, used as
-  the Open Graph / Twitter image.
+- the Top 12 board as a card (docs/upgrade-plan-2027q2.md, V8):
+  `images/cards/top12-<regulation|event>-<key>-<all|day2>-<landscape|portrait|story>.png`
+  at 1920×1080, 1080×1350 and 1080×1920, the portrait two in the phone
+  board's layout. The default regulation and its events (newest eight)
+  get every format; other regulations get 16:9 only and older events
+  none, which keeps a rebuild to about forty cards. Each is quantized to
+  256 colours (about 175KB). The board and event pages offer them as
+  "Share" (4:5 and 9:16, through the Web Share API) and "Download card"
+  (16:9);
+- `images/cards/og.png`, a copy of the default regulation's 16:9 Top 12
+  card (else its "What changed" card), used as the Open Graph / Twitter
+  image.
 
 It writes `images/cards/manifest.json`, which `build-dashboard` reads, so it
 runs first: `make dashboard` and the weekly refresh workflow both do. The
 build also writes `og:`/`twitter:` title and description tags from the
-default regulation's headline ("Reg M-C: Rillaboom leads at 8.7% of roster
-slots across 3,770 teams from 5 events…"), so a shared link unfurls with
+default regulation's headline ("Reg M-C: Rillaboom is on 51.9% of 3,770
+teams from 5 events…"), so a shared link unfurls with
 the current state. Without the manifest the site simply has no download
-buttons and no preview image. The cards add about 1.6MB to
+buttons and no preview image. The cards add about 9MB to
 `docs/dashboard/`, replaced on each refresh.
 
 ## Routes

@@ -965,7 +965,10 @@ sprint progress.
   `.broadcast-band` slash and halftone; Oswald (OFL) as the one
   self-hosted display face (D4), a 28KB Latin subset.
 - [ ] Every new component built to its M3 per-tier layout (V2–V8, E1–E3, S2, Q3)
-- [ ] Phone sharing through the Web Share API, and a 9:16 story card (M4)
+- [x] Phone sharing through the Web Share API, and a 9:16 story card (M4)
+  "Share" hands the 4:5 and 9:16 Top 12 cards to the share sheet where the
+  browser can share files; "Download card" saves the 16:9 one; a copy on a
+  touch screen confirms with a toast.
 - [x] Team strip v2 with item and Mega badges, replacing `teamCompositionHtml` everywhere, PNG cards included (V3)
   `teamStripHtml` in `static/app.js`; a tile with a known set opens it in a
   popover. `teamCompositionHtml` is now the strip's compact entry point.
@@ -986,10 +989,22 @@ sprint progress.
   are resolved in `int_limitless_play_mapped`. Apply for a Limitless API
   key as a public-facing project (`LIMITLESS_API_KEY`) to lift the rate
   limit.
-- [ ] `pokemon_event_phase_usage` mart and the Day 2 conversion board (E1)
-- [ ] Top-cut bracket and player path on event pages (E2)
-- [ ] Top 12 share cards, 16:9, 4:5 and 9:16, per regulation and event; becomes the OG image (V8)
-- [ ] Event-weekend hourly refresh of RK9 pairings (E4)
+- [x] `pokemon_event_phase_usage` mart and the Day 2 conversion board (E1)
+  Day 2 and the top cut come from RK9's round structure
+  (`int_event_phases`), checked against Limitless' Day 2 lists by
+  `assert_day2_matches_limitless_lists` (Worlds 57 and 57, NAIC 156 and
+  156). The board gains a Day 2 switch; event pages a conversion table.
+- [x] Top-cut bracket and player path on event pages (E2)
+  `tournament_top_cut_matches` and `tournament_top_cut_paths`. Brackets
+  admit every qualifying record and pad with byes, so the chip counts
+  players. Shared names no longer resolve to one roster in
+  `int_rk9_mapped`.
+- [x] Top 12 share cards, 16:9, 4:5 and 9:16, per regulation and event; becomes the OG image (V8)
+  The default regulation and its newest eight events in every format,
+  other regulations in 16:9; about forty quantized PNGs.
+- [x] Event-weekend hourly refresh of RK9 pairings (E4)
+  `.github/workflows/event-weekend.yml` plus `pipelines.cli live-events`;
+  MunchStats and RK9 now re-fetch a live event instead of reusing it.
 - [ ] Smogon ladder extractor; `ladder_pokemon_usage`, `ladder_checks_counters`; profile panel and ladder-vs-tournament view (S2, after D2)
 - [ ] Stat Point spreads from the ladder, labelled ladder-only (D3)
 - [ ] Check MunchStats for published in-game Battle Data ranks (S4)

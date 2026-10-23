@@ -230,6 +230,25 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ),
         (),
     ),
+    # docs/upgrade-plan-2027q2.md, E1 and E2: Day 2 conversion, the bracket
+    # and each top-cut team's path.
+    "pokemon_event_phase_usage": (
+        ("team_count", "phase_team_count", "field_usage_count", "field_team_count", "usage_rank"),
+        ("team_share", "field_team_share", "conversion"),
+    ),
+    "tournament_top_cut_matches": (
+        (
+            "round_number",
+            "bracket_round",
+            "top_cut_size",
+            "bracket_size",
+            "table_number",
+            "placement_1",
+            "placement_2",
+        ),
+        (),
+    ),
+    "tournament_top_cut_paths": (("round_number", "table_number", "opponent_placement"), ()),
     # docs/upgrade-plan-2027q2.md, S1: the Events tab's online list.
     "online_event_summary": (
         (
@@ -1261,6 +1280,58 @@ def _latest_event_date(
     return max(dates, default=None)
 
 
+def day2_board(
+    phase_rows: list[dict[str, Any]], scope: str, profile_by_key: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The Top 12 board's Day 2 switch (docs/upgrade-plan-2027q2.md, V2 and
+    E1): the scope's most-used Pokémon among teams that reached Day 2, from
+    pokemon_event_phase_usage's regulation grain. Each tile also carries its
+    conversion (Day 2 share over field share) when both sides are big
+    enough to trust. None when the scope has no event with a Day 2."""
+    rows = [
+        r
+        for r in phase_rows
+        if r.get("scope_kind") == "regulation"
+        and r.get("scope_code") == scope
+        and r.get("phase") == "day2"
+    ]
+    if not rows:
+        return None
+    regulation = scope_regulation(scope)
+    events = {
+        r.get("event_id")
+        for r in phase_rows
+        if r.get("scope_kind") == "event"
+        and r.get("phase") == "day2"
+        and (regulation == ALL_SCOPE or r.get("scope_code") == regulation)
+    }
+    usage_rows = [
+        {
+            "pokemon_key": r["pokemon_key"],
+            "pokemon_name": r.get("pokemon_name"),
+            "usage_rank": r.get("usage_rank"),
+            "team_share": r.get("team_share"),
+            "usage_count": r.get("team_count"),
+            "usage_share": None,
+            "scope_team_count": r.get("phase_team_count"),
+        }
+        for r in rows
+    ]
+    conversion = {
+        r["pokemon_key"]: r.get("conversion") for r in rows if _truthy(r.get("is_reliable"))
+    }
+    board = {
+        "label": "Day 2",
+        "team_count": rows[0].get("phase_team_count"),
+        "event_count": len(events),
+        "forms": top_board(usage_rows, profile_by_key, "forms"),
+        "species": top_board(usage_rows, profile_by_key, "species"),
+    }
+    for tile in board["forms"]:
+        tile["conversion"] = conversion.get(tile["pokemon_key"])
+    return board
+
+
 def compute_kpis(
     marts: dict[str, list[dict[str, Any]]],
     today: date | None = None,
@@ -1323,6 +1394,9 @@ def compute_kpis(
     # borrows its regulation's official summary (compute_kpis_by_scope).
     regulation = scope_regulation(scope)
     official = scope_population(scope) == OFFICIAL
+    day2 = day2_board(marts.get("pokemon_event_phase_usage", []), scope, profile_by_key)
+    if official and day2:
+        boards["day2"] = day2
     movers = (
         None
         if regulation == ALL_SCOPE or not official

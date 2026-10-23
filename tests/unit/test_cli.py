@@ -155,19 +155,29 @@ def test_run_extract_munchstats_passes_previous_snapshot_path(tmp_path, monkeypa
 def test_run_extract_rk9_passes_previous_snapshot_path(tmp_path, monkeypatch):
     # rk9 shares munchstats' incremental path: a concluded event's pairings
     # never change, so the previous snapshot is reused rather than re-fetched.
+    # It also re-fetches events still running (docs/upgrade-plan-2027q2.md,
+    # E4), read off the newest MunchStats snapshot.
     monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
     _stub_extraction_summary(monkeypatch)
     previous_path = tmp_path / "rk9_pairings" / "2026-07-29.csv"
     _write_csv(previous_path, [], ["a"])
-    fake = _RecordingMunchstatsExtractor()
+
+    class _RecordingRk9Extractor(_RecordingMunchstatsExtractor):
+        def extract(self, output_path, *, refresh_event_ids=(), **kwargs):
+            self.refresh = list(refresh_event_ids)
+            super().extract(output_path, **kwargs)
+
+    fake = _RecordingRk9Extractor()
     monkeypatch.setattr(cli, "_EXTRACTORS", {"rk9": (fake, "rk9_pairings")})
     monkeypatch.setattr(cli, "_RETENTION_COUNTS", {"rk9_pairings": 7})
     monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+    monkeypatch.setattr(cli, "live_event_ids", lambda: ["LIVE"])
 
     exit_code = cli._run_extract("rk9", "1.2.3")
 
     assert exit_code == 0
     assert fake.calls == [(tmp_path / "rk9_pairings" / "2026-07-30.csv", "1.2.3", previous_path)]
+    assert fake.refresh == ["LIVE"]
 
 
 def test_run_extract_other_sources_do_not_receive_previous_snapshot_path(tmp_path, monkeypatch):
@@ -638,3 +648,23 @@ def test_main_build_dashboard_dispatches_with_overrides_and_no_fetch_icons(monke
         "output_dir": cli.Path("custom/out"),
         "fetch_icons": False,
     }
+
+
+def test_live_event_ids_reads_the_newest_munchstats_snapshot(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, E4: the event-weekend workflow asks this
+    # before it spends a rebuild, and rk9 re-fetches these events.
+    from datetime import date
+
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    fields = ["event_id", "event_date"]
+    _write_csv(
+        tmp_path / "munchstats" / "2026-12-06.csv",
+        [
+            {"event_id": "LIVE", "event_date": "2026-12-05"},
+            {"event_id": "LIVE", "event_date": "2026-12-05"},
+            {"event_id": "OLD", "event_date": "2026-10-09"},
+        ],
+        fields,
+    )
+    assert cli.live_event_ids(date(2026, 12, 6)) == ["LIVE"]
+    assert cli.live_event_ids(date(2026, 12, 20)) == []

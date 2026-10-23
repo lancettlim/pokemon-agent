@@ -1315,6 +1315,52 @@
   .official-only-note .phase-chip { margin-right: 6px; }
   .phase-chip.is-ladder { background: var(--series-green); }
   .phase-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  /* Top-cut bracket (E2): one column per round from 1024px, round tabs
+     below it. A match is two stacked sides, each a player button (it opens
+     the path) above the team's compact strip, the winner in bold. */
+  .bracket { margin-bottom: var(--space-4); }
+  .bracket-tabs { margin-bottom: var(--space-3); max-width: 100%; overflow-x: auto; }
+  .bracket-rounds { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .bracket-round { display: flex; flex-direction: column; min-width: 0; }
+  .bracket-matches { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: var(--space-2); }
+  .bracket-bye { display: block; color: var(--muted); font-style: italic; font-size: var(--font-sm); }
+  .bracket-round-title { margin: 0 0 var(--space-1); font-size: var(--font-xs); font-weight: 800; font-style: italic; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .bracket-match { border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+  .bracket-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); padding: 6px var(--space-2); }
+  .bracket-side + .bracket-side { border-top: 1px solid var(--light-blue); }
+  .bracket-side .team-strip-host { grid-column: 1 / -1; }
+  .bracket-side .sb-score { grid-row: 1; grid-column: 2; font-weight: 800; color: var(--muted); }
+  .bracket-side .sb-score:empty { display: none; }
+  .bracket-side.is-winner .sb-score { color: var(--positive); }
+  .bracket-side:not(.is-winner) .sb-name { font-weight: 600; }
+  .bracket-player { display: block; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .bracket-player[aria-expanded="true"] .sb-name { text-decoration: underline; }
+  .bracket-player.is-unknown { display: flex; align-items: center; color: var(--muted); font-style: italic; cursor: default; }
+  @media (max-width: 1023px) {
+    .bracket-rounds { display: block; }
+    .bracket-round:not(.is-active) { display: none; }
+    .bracket-round-title { display: none; }
+  }
+  @media (min-width: 1024px) { .bracket-tabs { display: none; } }
+  /* Day 2 conversion (E1): ×1.30 green, ×0.70 red, near ×1 plain. */
+  .conversion { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .conversion.is-up { color: var(--positive); }
+  .conversion.is-down { color: var(--danger); }
+  /* A top-cut player's path (E2), opened from the bracket. */
+  .path-panel { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-5); }
+  .path-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .path-head h4 { margin: 0; }
+  .path-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+  .path-list li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+  .path-round { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 2.6em; }
+  .path-result { display: inline-flex; align-items: center; justify-content: center; justify-self: start; min-width: 2.4em; padding: 2px 6px; border-radius: 4px; font-weight: 800; background: var(--light-blue); }
+  .path-result.is-w { background: var(--positive); color: #fff; }
+  .path-result.is-l { background: var(--danger); color: #fff; }
+  .path-opponent { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); min-width: 0; }
+  @media (max-width: 480px) {
+    .path-list li { grid-template-columns: auto auto; }
+    .path-opponent { grid-column: 1 / -1; }
+  }
   /* Segmented control: a small set of mutually exclusive choices, used in
      a view's band (the board's scope and grouping, round tabs). */
   .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; background: var(--surface); }
@@ -1492,7 +1538,18 @@
   .board-types { display: inline-flex; gap: 2px; }
   .board-name { display: block; margin-top: 2px; font-weight: 800; font-size: var(--font-sm); line-height: 1.15; overflow-wrap: normal; }
   .board-form { font-size: 0.78em; font-weight: 700; opacity: 0.85; }
-  .board-more { margin: var(--space-3) 0 0; text-align: right; font-size: var(--font-sm); }
+  .board-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); margin: var(--space-3) 0 0; font-size: var(--font-sm); }
+  .share-controls { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); margin-right: auto; }
+  .share-controls .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  /* Toast (M4): one line of confirmation above the phone's bottom bar. */
+  .toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 60; max-width: min(92vw, 420px); padding: 10px 16px; border-radius: var(--radius-pill); background: var(--panel-dark); color: #fff; font-size: var(--font-sm); font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s; }
+  .toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
+  @media (min-width: 721px) { .toast { bottom: 24px; } }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+  .event-cards { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+  .event-card-pair { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .event-card-pair .share-controls { margin-right: 0; }
+  .page-band .event-cards .btn { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
   .board-more a { color: var(--blue); font-weight: 700; }
   @media (max-width: 1023px) {
     .board-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 44px; }
@@ -2215,6 +2272,17 @@
     {# Every event-scoped section says its phase (docs/upgrade-plan-2027q2.md, V5). #}
     <div class="section-head"><h3>Top 8</h3></div>
     <div class="team-card-grid" id="event-top8"></div>
+    {# The top-cut bracket (docs/upgrade-plan-2027q2.md, E2): round tabs
+       below 1024px, columns above; a player opens their path. static/
+       events.js fills it when RK9 published the event's pairings. #}
+    <div class="section-head" id="event-bracket-head" hidden><h3>Top cut</h3><span class="phase-chip" id="event-bracket-chip"></span></div>
+    <p class="sub" id="event-bracket-note" hidden></p>
+    <div class="bracket" id="event-bracket" hidden></div>
+    <div class="path-panel" id="event-path" hidden></div>
+    {# Day 2 conversion (E1): field share against Day 2 share. #}
+    <div class="section-head" id="event-conversion-head" hidden><h3>Day 2 conversion</h3><span class="phase-chip">Day 2</span></div>
+    <p class="sub" id="event-conversion-note" hidden></p>
+    <div id="event-conversion-table"></div>
     <div class="section-head"><h3>Over- and under-performers</h3><span class="phase-chip">All players</span></div>
     <p class="sub" id="event-performers-note"></p>
     <div class="performer-columns" id="event-performers">

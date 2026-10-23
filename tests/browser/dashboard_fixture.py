@@ -980,3 +980,162 @@ def write_fixture_manifest(manifests_dir: Path) -> None:
         },
     }
     (manifests_dir / "manifest-9.9.0.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+# Sprint 13 (docs/upgrade-plan-2027q2.md, E1 and E2): Day 2 conversion and
+# EVT-LOU's top-8 bracket. Day 2 is the event's first six teams; the top
+# cut its first eight, seeded 1v8, 4v5, 3v6, 2v7, the better seed winning.
+DAY2_TEAMS = 6
+CUT_EVENT = "EVT-LOU"
+
+
+def write_fixture_event_phase_marts(marts_dir: Path) -> None:
+    teams = _rosters()
+    by_id = {t["team_id"]: t for t in teams}
+    phase_rows = []
+
+    def grain(kind, scope, event_id, field):
+        day2 = [t for t in field if t["placement"] <= DAY2_TEAMS]
+        cut = [t for t in field if t["placement"] <= 8]
+        for phase, members in (("day2", day2), ("top_cut", cut)):
+            usage = sorted(
+                KEYS,
+                key=lambda k: (-sum(k in t["keys"] for t in members), KEYS.index(k)),
+            )
+            for rank, key in enumerate(usage, start=1):
+                in_phase = sum(key in t["keys"] for t in members)
+                in_field = sum(key in t["keys"] for t in field)
+                if not in_field:
+                    continue
+                share = in_phase / len(members)
+                field_share = in_field / len(field)
+                phase_rows.append(
+                    {
+                        "scope_kind": kind,
+                        "scope_code": scope,
+                        "event_id": event_id,
+                        "phase": phase,
+                        "pokemon_key": key,
+                        "team_count": in_phase,
+                        "phase_team_count": len(members),
+                        "team_share": round(share, 4),
+                        "field_usage_count": in_field,
+                        "field_team_count": len(field),
+                        "field_team_share": round(field_share, 4),
+                        "conversion": round(share / field_share, 3),
+                        # The fixture's fields are tiny: mark M-C's regulation
+                        # grain reliable so the board and table show ratios.
+                        "is_reliable": "true" if kind == "regulation" else "false",
+                        "usage_rank": rank,
+                    }
+                )
+
+    for event_id, (_, _, _, regulation, _) in EVENTS.items():
+        grain("event", regulation, event_id, [t for t in teams if t["event_id"] == event_id])
+    for scope in SCOPES:
+        field = [t for t in teams if scope == "all" or EVENTS[t["event_id"]][3] == scope]
+        grain("regulation", scope, "", field)
+    _write(marts_dir / "pokemon_event_phase_usage.csv", phase_rows)
+
+    def side(team_id):
+        team = by_id[team_id]
+        return {
+            "team_id": team_id,
+            "player_id": team["player_id"],
+            "player_name": team["player_name"],
+            "player_country": team["player_country"],
+            "placement": team["placement"],
+            "pokemon_keys": "|".join(team["keys"]),
+        }
+
+    seeds = [f"{CUT_EVENT}-T{i:02d}" for i in range(1, 9)]
+    rounds = [
+        (13, "Quarterfinals", [(1, 8), (4, 5), (3, 6), (2, 7)]),
+        (14, "Semifinals", [(1, 4), (2, 3)]),
+        (15, "Final", [(1, 2)]),
+    ]
+    matches = []
+    paths = []
+    for bracket_round, (round_number, label, pairs) in enumerate(rounds, start=1):
+        for table, (a, b) in enumerate(pairs, start=1):
+            one, two = side(seeds[a - 1]), side(seeds[b - 1])
+            row = {
+                "match_id": f"M-{round_number}-{table}",
+                "event_id": CUT_EVENT,
+                "regulation_code": "m-c",
+                "round_number": round_number,
+                "bracket_round": bracket_round,
+                "top_cut_size": 8,
+                "bracket_size": 8,
+                "round_label": label,
+                "table_number": table,
+                "winner_team_id": one["team_id"],
+                "outcome": "player1_win",
+                "is_complete": "true",
+            }
+            for n, s in ((1, one), (2, two)):
+                row.update({f"{field}_{n}": value for field, value in s.items()})
+            matches.append(row)
+            for me, them, result in ((one, two, "W"), (two, one, "L")):
+                paths.append(
+                    {
+                        "event_id": CUT_EVENT,
+                        "team_id": me["team_id"],
+                        "round_number": round_number,
+                        "phase": "Top cut",
+                        "table_number": table,
+                        "result": result,
+                        "opponent_team_id": them["team_id"],
+                        "opponent_player_name": them["player_name"],
+                        "opponent_player_country": them["player_country"],
+                        "opponent_placement": them["placement"],
+                        "opponent_pokemon_keys": them["pokemon_keys"],
+                        "match_id": row["match_id"],
+                    }
+                )
+    # The champion's Swiss rounds, so a path spans phases.
+    for round_number, phase in ((1, "Day 1"), (9, "Day 2")):
+        them = side(seeds[7 if round_number == 1 else 5])
+        paths.append(
+            {
+                "event_id": CUT_EVENT,
+                "team_id": seeds[0],
+                "round_number": round_number,
+                "phase": phase,
+                "table_number": 1,
+                "result": "W",
+                "opponent_team_id": them["team_id"],
+                "opponent_player_name": them["player_name"],
+                "opponent_player_country": them["player_country"],
+                "opponent_placement": them["placement"],
+                "opponent_pokemon_keys": them["pokemon_keys"],
+                "match_id": f"S-{round_number}",
+            }
+        )
+    _write(marts_dir / "tournament_top_cut_matches.csv", matches)
+    _write(marts_dir / "tournament_top_cut_paths.csv", paths)
+
+
+# A one-pixel PNG: the share-card manifest only has to point at real files.
+_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360f8cf000002010101d3b8a1d20000000049454e44ae426082"
+)
+
+
+def write_fixture_share_cards(output_dir: Path) -> None:
+    """A stand-in for render-share-cards' output (V8): Top 12 cards for M-C
+    and EVT-LOU in every format, so the share controls render."""
+    cards_dir = output_dir / "images" / "cards"
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    top12 = {"regulation": {}, "event": {}}
+    for kind, key in (("regulation", "m-c"), ("event", CUT_EVENT)):
+        for phase in ("all", "day2"):
+            for layout in ("landscape", "portrait", "story"):
+                name = f"top12-{kind}-{key}-{phase}-{layout}.png"
+                (cards_dir / name).write_bytes(_PIXEL_PNG)
+                top12[kind].setdefault(key, {}).setdefault(phase, {})[layout] = (
+                    f"images/cards/{name}"
+                )
+    manifest = {"event": None, "teams": {}, "whats_changed": {}, "top12": top12, "og_image": None}
+    (cards_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

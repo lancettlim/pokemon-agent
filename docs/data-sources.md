@@ -224,7 +224,12 @@ grounds that MunchStats reports only team-level records.
 4. `event_id` needs no mapping: MunchStats reuses RK9's own event ids, so
    this joins straight to `tournament_event.event_id`. Players resolve to
    `team_id` on (name, country) — measured at 99.8% across 24,139 Masters
-   pairing slots.
+   pairing slots. A (name, country) two entrants share (it appears twice in
+   one round, or twice on the roster) is left unresolved rather than
+   guessed, and only Masters pairings resolve: MunchStats has no Junior or
+   Senior rosters.
+5. Day 2 and the top cut are not published as fields; `int_event_phases`
+   reads them off the round structure (`docs/dashboard.md`, Sprint 13).
 
 Note the grain honestly: an outcome is **team vs team**. RK9 publishes no
 per-battle log naming which four of a team's six Pokémon were brought, or

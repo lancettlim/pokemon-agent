@@ -1551,3 +1551,35 @@ def test_an_online_scope_without_official_results_has_no_official_panels():
     # The staleness banner reads the online events' own date.
     assert online["latest_event_date"] == "2026-12-06"
     assert by_scope["m-c"]["latest_event_date"] == "2026-10-09"
+
+
+def test_day2_board_ranks_day2_teams_and_carries_reliable_conversion():
+    # docs/upgrade-plan-2027q2.md, E1: the Top 12 board's Day 2 switch.
+    def row(key, rank, count, conversion, reliable="true", kind="regulation", event_id=""):
+        return {
+            "scope_kind": kind,
+            "scope_code": "m-c",
+            "event_id": event_id,
+            "phase": "day2",
+            "pokemon_key": key,
+            "pokemon_name": key.title(),
+            "team_count": count,
+            "phase_team_count": 500,
+            "team_share": round(count / 500, 4),
+            "conversion": conversion,
+            "is_reliable": reliable,
+            "usage_rank": rank,
+        }
+
+    rows = [
+        row("kingambit", 2, 150, 1.299),
+        row("rillaboom", 1, 250, 0.959),
+        row("rillaboom", 1, 40, 1.1, reliable="false", kind="event", event_id="E1"),
+        row("rillaboom", 1, 40, 1.1, reliable="false", kind="event", event_id="E2"),
+    ]
+    board = data.day2_board(rows, "m-c", {})
+    assert board["label"] == "Day 2"
+    assert (board["team_count"], board["event_count"]) == (500, 2)
+    assert [t["pokemon_key"] for t in board["forms"]] == ["rillaboom", "kingambit"]
+    assert board["forms"][1]["conversion"] == 1.299
+    assert data.day2_board(rows, "m-b", {}) is None

@@ -263,8 +263,10 @@ VERSION=X.Y.Z` (refresh → release).
   <id>|--spec <path.json> --output <path.png>`. `share_cards.py`
   (`python -m pipelines.cli render-share-cards`, run before
   `build-dashboard`) pre-renders the dashboard's share images: the newest
-  event's top 8 and a "What changed" card per regulation, the default one
-  doubling as the site's Open Graph image.
+  event's top 8, a "What changed" card per regulation, and the Top 12 board
+  as a card in 16:9, 4:5 and 9:16 per regulation and per event (All players
+  and Day 2), the default regulation's 16:9 one doubling as the site's Open
+  Graph image.
 - `pipelines/dashboard/` — the M6 static analytics dashboard, built on top
   of the Phase 3 marts (not part of `dbt/` or the release gates):
   `data.py` reads `data/marts/*.csv` (degrading gracefully to empty lists

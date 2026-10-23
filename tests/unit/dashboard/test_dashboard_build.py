@@ -435,3 +435,27 @@ def test_a_population_scope_falls_back_to_official_rows_it_lacks(tmp_path):
         "pokemon_set_variants",
     ]
     assert "m-c" not in index["official_fallback"]
+
+
+def test_share_card_manifest_keeps_only_top12_cards_on_disk(tmp_path):
+    # docs/upgrade-plan-2027q2.md, V8: a card the renderer listed but didn't
+    # write is dropped, so the page never offers a broken download.
+    cards = tmp_path / "images" / "cards"
+    cards.mkdir(parents=True)
+    (cards / "a.png").write_bytes(b"png")
+    manifest = {
+        "teams": {},
+        "whats_changed": {},
+        "top12": {
+            "regulation": {
+                "m-c": {
+                    "all": {"landscape": "images/cards/a.png", "story": "images/cards/missing.png"}
+                }
+            }
+        },
+        "og_image": None,
+    }
+    (cards / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    loaded = build._load_share_cards(tmp_path)
+    assert loaded["top12"]["regulation"]["m-c"]["all"] == {"landscape": "images/cards/a.png"}
+    assert loaded["top12"]["event"] == {}

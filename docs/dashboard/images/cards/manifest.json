@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-10-22T00:28:59Z",
+  "generated_at_utc": "2026-10-22T01:01:07Z",
   "event": {
     "event_id": "LO002-drfp6esCSpyU3s",
     "event_name": "2027 Louisville Pok\u00e9mon VGC Regional Championships"
@@ -18,6 +18,108 @@
     "m-a": "images/cards/whats-changed-m-a.png",
     "m-b": "images/cards/whats-changed-m-b.png",
     "m-c": "images/cards/whats-changed-m-c.png"
+  },
+  "top12": {
+    "regulation": {
+      "m-a": {
+        "all": {
+          "landscape": "images/cards/top12-regulation-m-a-all-landscape.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-regulation-m-a-day2-landscape.png"
+        }
+      },
+      "m-b": {
+        "all": {
+          "landscape": "images/cards/top12-regulation-m-b-all-landscape.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-regulation-m-b-day2-landscape.png"
+        }
+      },
+      "m-c": {
+        "all": {
+          "landscape": "images/cards/top12-regulation-m-c-all-landscape.png",
+          "portrait": "images/cards/top12-regulation-m-c-all-portrait.png",
+          "story": "images/cards/top12-regulation-m-c-all-story.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-regulation-m-c-day2-landscape.png",
+          "portrait": "images/cards/top12-regulation-m-c-day2-portrait.png",
+          "story": "images/cards/top12-regulation-m-c-day2-story.png"
+        }
+      },
+      "all": {
+        "all": {
+          "landscape": "images/cards/top12-regulation-all-all-landscape.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-regulation-all-day2-landscape.png"
+        }
+      }
+    },
+    "event": {
+      "LO002-drfp6esCSpyU3s": {
+        "all": {
+          "landscape": "images/cards/top12-event-LO002-drfp6esCSpyU3s-all-landscape.png",
+          "portrait": "images/cards/top12-event-LO002-drfp6esCSpyU3s-all-portrait.png",
+          "story": "images/cards/top12-event-LO002-drfp6esCSpyU3s-all-story.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-event-LO002-drfp6esCSpyU3s-day2-landscape.png",
+          "portrait": "images/cards/top12-event-LO002-drfp6esCSpyU3s-day2-portrait.png",
+          "story": "images/cards/top12-event-LO002-drfp6esCSpyU3s-day2-story.png"
+        }
+      },
+      "RE002-wN97aUf4Psz0ZJ": {
+        "all": {
+          "landscape": "images/cards/top12-event-RE002-wN97aUf4Psz0ZJ-all-landscape.png",
+          "portrait": "images/cards/top12-event-RE002-wN97aUf4Psz0ZJ-all-portrait.png",
+          "story": "images/cards/top12-event-RE002-wN97aUf4Psz0ZJ-all-story.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-event-RE002-wN97aUf4Psz0ZJ-day2-landscape.png",
+          "portrait": "images/cards/top12-event-RE002-wN97aUf4Psz0ZJ-day2-portrait.png",
+          "story": "images/cards/top12-event-RE002-wN97aUf4Psz0ZJ-day2-story.png"
+        }
+      },
+      "FR002-fiunEHp9wx4mh4": {
+        "all": {
+          "landscape": "images/cards/top12-event-FR002-fiunEHp9wx4mh4-all-landscape.png",
+          "portrait": "images/cards/top12-event-FR002-fiunEHp9wx4mh4-all-portrait.png",
+          "story": "images/cards/top12-event-FR002-fiunEHp9wx4mh4-all-story.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-event-FR002-fiunEHp9wx4mh4-day2-landscape.png",
+          "portrait": "images/cards/top12-event-FR002-fiunEHp9wx4mh4-day2-portrait.png",
+          "story": "images/cards/top12-event-FR002-fiunEHp9wx4mh4-day2-story.png"
+        }
+      },
+      "BR002-IU5yO1W76UpdyA": {
+        "all": {
+          "landscape": "images/cards/top12-event-BR002-IU5yO1W76UpdyA-all-landscape.png",
+          "portrait": "images/cards/top12-event-BR002-IU5yO1W76UpdyA-all-portrait.png",
+          "story": "images/cards/top12-event-BR002-IU5yO1W76UpdyA-all-story.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-event-BR002-IU5yO1W76UpdyA-day2-landscape.png",
+          "portrait": "images/cards/top12-event-BR002-IU5yO1W76UpdyA-day2-portrait.png",
+          "story": "images/cards/top12-event-BR002-IU5yO1W76UpdyA-day2-story.png"
+        }
+      },
+      "BA002-JL3KVbvivVKNAc": {
+        "all": {
+          "landscape": "images/cards/top12-event-BA002-JL3KVbvivVKNAc-all-landscape.png",
+          "portrait": "images/cards/top12-event-BA002-JL3KVbvivVKNAc-all-portrait.png",
+          "story": "images/cards/top12-event-BA002-JL3KVbvivVKNAc-all-story.png"
+        },
+        "day2": {
+          "landscape": "images/cards/top12-event-BA002-JL3KVbvivVKNAc-day2-landscape.png",
+          "portrait": "images/cards/top12-event-BA002-JL3KVbvivVKNAc-day2-portrait.png",
+          "story": "images/cards/top12-event-BA002-JL3KVbvivVKNAc-day2-story.png"
+        }
+      }
+    }
   },
   "og_image": "images/cards/og.png"
 }

@@ -362,6 +362,11 @@ value there (vs. as dashboard-only support data) is clearer.
   see "PokéAPI high-resolution artwork" below)
 - **OP.GG Pokémon Champions**: daily change check, publish on change detection
 - **MunchStats**: daily check with publish after new tournament/event detection
+- **Event weekends**: an event dated from the day before to three days
+  ago is live: MunchStats and RK9 fetch it again on every run instead of
+  reusing their cached copy, and `.github/workflows/event-weekend.yml`
+  rebuilds and publishes the dashboard hourly while one is
+  (`docs/upgrade-plan-2027q2.md`, E4)
 - **Limitless online tournaments**: daily. The lookback is the regulation
   in force; a tournament more than two days old that the previous
   snapshot holds is reused rather than re-fetched (the API allows 50

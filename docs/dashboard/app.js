@@ -972,6 +972,7 @@
     wilson: ["Wilson bound", "The low end of a 95% confidence interval on a win rate. A 3–0 record and a 300–200 record both look strong; the Wilson bound tells them apart by sample size."],
     hhi: ["HHI", "How concentrated a Pokémon's item (or ability) choice is, from 0 to 1: 1 means everyone runs the same one, near 0 means the choice is spread out. The Herfindahl–Hirschman index."],
     locked: ["Locked in", "An HHI of 0.5 or more: one choice crowds out the rest."],
+    conversion: ["Day 2 conversion", "A Pokémon's share of the teams that reached Day 2 divided by its share of the whole field at the same events. ×1.00 means its teams made Day 2 at the field's rate; ×1.30 means 30% more often. Shown only when both sides have at least 100 teams."],
     lift: ["Synergy lift", "How much more often two (or three) Pokémon share a team than their popularity alone predicts. ×1.0 is chance; ×2.0 is twice as often."],
     pts: ["pts", "Percentage points: the plain difference between two percentages. 4.6% to 8.2% is +3.6 pts."],
     topcut: ["Top cut", "A finish in the top 8 (for usage) or top 16 (for team lists) of an event."],
@@ -1025,11 +1026,32 @@
   // Copies text, confirming on the button. Some hosts refuse clipboard
   // writes; then the text appears selected next to the button so the
   // reader can copy it by hand.
+  // A short confirmation at the foot of the screen (docs/upgrade-plan-
+  // 2027q2.md, M4). Touch screens have no hover feedback, so a copy there
+  // also says so out loud, not only on the button.
+  var toastTimer = null;
+  function showToast(message) {
+    var toast = document.getElementById("toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "toast";
+      toast.className = "toast";
+      toast.setAttribute("role", "status");
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("is-shown");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("is-shown"); }, 2600);
+  }
+  var TOUCH_ONLY = window.matchMedia ? window.matchMedia("(hover: none)").matches : false;
+
   function copyWithFallback(button, text, doneLabel) {
     var label = button.textContent;
     function done() {
       button.textContent = doneLabel || "Copied";
       setTimeout(function () { button.textContent = label; }, 1500);
+      if (TOUCH_ONLY) showToast(/showdown/i.test(label) ? "Copied for Showdown" : "Copied");
     }
     function fallback() {
       var box = button.parentNode.querySelector("textarea.copy-fallback");
@@ -2252,7 +2274,11 @@
       ? Number(tile.usage_count || 0).toLocaleString() + " of " + Number(tile.team_total).toLocaleString() + " teams"
       : "";
     var forms = String(tile.form_keys || "").split("|").filter(Boolean);
-    var detail = [teams, tile.usage_share != null ? formatPercent(tile.usage_share) + " of roster slots" : ""]
+    var detail = [
+      teams,
+      tile.usage_share != null ? formatPercent(tile.usage_share) + " of roster slots" : "",
+      tile.conversion != null ? "×" + Number(tile.conversion).toFixed(2) + " Day 2 conversion" : "",
+    ]
       .concat(forms.length > 1 ? ["includes " + forms.map(function (k) { return pokemonNames[k] || k; }).join(", ")] : [])
       .filter(Boolean).join(" · ");
     var label = (index + 1) + ". " + tile.pokemon_name + ", on " + formatPercent(tile.team_share) + " of teams" +
@@ -2266,11 +2292,64 @@
       '<span class="board-name">' + boardNameHtml(tile.pokemon_name) + "</span></span></a>";
   }
 
+  // ---------- share cards (V8, M4) ----------
+  // A Top 12 card's controls: "Share" hands the 4:5 and 9:16 PNGs to the
+  // system share sheet where the browser can share files (phones), and
+  // "Download card" saves the 16:9 one everywhere.
+  function canShareFiles() {
+    try {
+      return !!(navigator.share && navigator.canShare &&
+        navigator.canShare({ files: [new File([new Blob()], "card.png", { type: "image/png" })] }));
+    } catch (e) {
+      return false;
+    }
+  }
+  function shareCardControlsHtml(card, title) {
+    if (!card) return "";
+    var files = [card.portrait, card.story].filter(Boolean);
+    var share = files.length && canShareFiles()
+      ? '<button type="button" class="btn btn-sm" data-share-files="' + escapeHtml(files.join("|")) +
+        '" data-share-title="' + escapeHtml(title) + '">Share</button>'
+      : "";
+    var download = card.landscape
+      ? '<a class="btn btn-sm" href="' + escapeHtml(card.landscape) + '" download>Download card</a>'
+      : "";
+    return share || download ? '<span class="share-controls">' + share + download + "</span>" : "";
+  }
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("[data-share-files]");
+    if (!btn) return;
+    var paths = btn.getAttribute("data-share-files").split("|");
+    var title = btn.getAttribute("data-share-title") || document.title;
+    Promise.all(paths.map(function (path) {
+      return fetch(path).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.blob();
+      }).then(function (blob) {
+        return new File([blob], path.split("/").pop(), { type: "image/png" });
+      });
+    })).then(function (files) {
+      return navigator.share({ files: files, title: title, text: title + " · " + window.location.href });
+    }).catch(function (error) {
+      if (error && error.name === "AbortError") return;
+      showToast("Couldn't open the share sheet. Use Download card instead.");
+    });
+  });
+
   function segmentedHtml(label, attr, options, current) {
     return '<div class="segmented" role="group" aria-label="' + escapeHtml(label) + '">' + options.map(function (o) {
       return '<button type="button" ' + attr + '="' + escapeHtml(o.id) + '" aria-pressed="' + (o.id === current) + '">' +
         escapeHtml(o.label) + "</button>";
     }).join("") + "</div>";
+  }
+
+  // The board's card: official scopes' All players and Day 2 boards have
+  // one; an online board's figures aren't on any card.
+  function boardShareHtml() {
+    if (!isOfficialScope || (boardState.scope !== "all" && boardState.scope !== "day2")) return "";
+    var cards = (((DATA.share_cards || {}).top12 || {}).regulation || {})[regulationCode] || {};
+    return shareCardControlsHtml(cards[boardState.scope],
+      "Top 12 Pokémon · " + shortRegulation(regulationCode) + (boardState.scope === "day2" ? " · Day 2" : ""));
   }
 
   function renderBoard() {
@@ -2307,7 +2386,8 @@
       (tiles.length
         ? tiles.map(boardTileHtml).join("")
         : '<p class="empty-state" style="grid-column: 1 / -1">No usage recorded for this scope yet.</p>') +
-      '</div><p class="board-more"><a href="' + routeHash("usage", []) + '">Every Pokémon in the Usage table &rarr;</a></p></div>';
+      '</div><p class="board-more">' + boardShareHtml() + '<a href="' + routeHash("usage", []) +
+      '">Every Pokémon in the Usage table &rarr;</a></p></div>';
   }
 
   document.addEventListener("click", function (e) {
@@ -4910,6 +4990,10 @@
     isMegaKey: isMegaKey,
     playerLineHtml: playerLineHtml,
     scoreboardRowHtml: scoreboardRowHtml,
+    segmentedHtml: segmentedHtml,
+    shareCardControlsHtml: shareCardControlsHtml,
+    showToast: showToast,
+    termHtml: termHtml,
     phaseChipHtml: phaseChipHtml,
     placementPhase: placementPhase,
     typeBadgeSquare: typeBadgeSquare,
