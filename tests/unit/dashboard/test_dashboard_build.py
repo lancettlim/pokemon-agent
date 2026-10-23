@@ -550,3 +550,42 @@ def test_build_writes_the_embed_page_beside_the_dashboard(tmp_path):
     start = html.index("window.EMBED_DATA = ") + len("window.EMBED_DATA = ")
     embed = json.loads(html[start : html.index("</script>", start)].rstrip().rstrip(";"))
     assert "boards" in embed and embed["site_url"] == build.SITE_URL
+
+
+def test_build_can_leave_out_item_icons_and_most_hero_art(tmp_path, monkeypatch):
+    # The claude.ai artifact's lighter build (pipelines/dashboard/artifact.py).
+    from PIL import Image
+
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    artwork_cache_dir = tmp_path / "artwork"
+    _populate_marts(marts_dir, normalized_dir)
+    _write_csv(
+        normalized_dir / "pokemon_asset.csv",
+        [
+            {"pokemon_key": key, "image_kind": "home_render", "local_cache_path": f"{key}.png"}
+            for key in ("pikachu", "raichu")
+        ],
+    )
+    artwork_cache_dir.mkdir()
+    for key in ("pikachu", "raichu"):
+        Image.new("RGBA", (64, 64)).save(artwork_cache_dir / f"{key}.png", "PNG")
+
+    def no_fetch(*args, **kwargs):
+        raise AssertionError("item icons were resolved")
+
+    monkeypatch.setattr(build, "_resolve_item_icons", no_fetch)
+
+    payload = _build(
+        marts_dir,
+        normalized_dir,
+        tmp_path / "out",
+        artwork_cache_dir=artwork_cache_dir,
+        fetch_icons=True,
+        item_icons=False,
+        hero_art_keys=lambda payload: {"raichu"},
+    )
+
+    assert payload["item_icons"] == {}
+    assert payload["hero_art"] == {"raichu": "images/hero/raichu.webp"}
+    assert not (tmp_path / "out" / "images" / "hero" / "pikachu.webp").exists()
