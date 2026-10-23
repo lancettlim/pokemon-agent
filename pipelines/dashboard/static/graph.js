@@ -124,7 +124,10 @@
   }
 
   function checkEdges() {
-    var min = state.min || CHECK_MINS[0];
+    // On the Synergy layer state.min counts shared teams, so a focus view's
+    // check rings keep the default match floor (as partnersOf does the
+    // other way round).
+    var min = state.layer === "checks" ? state.min || CHECK_MINS[0] : CHECK_MINS[0];
     var hidden = hiddenKeys();
     var ev = effectiveEv();
     return (graph ? graph.checks : []).filter(function (e) {
@@ -598,9 +601,33 @@
 
   // ---------- table twin ----------
 
+  var RING_LABELS = {
+    partner: "Partner",
+    beats: "Its teams beat",
+    beaten: "Teams that beat its teams",
+  };
+
   function buildTable(mode) {
     if (tableMode === mode && table) return;
     tableMode = mode;
+    if (mode === "focus") {
+      // A focus view draws partners and both check rings whatever the
+      // layer, so its table lists every drawn edge with its own metrics.
+      table = App.createDataTable(els.table, {
+        caption: "Edges in this focus view",
+        limit: 40,
+        empty: "This Pokémon has no edge that clears the current floors.",
+        columns: [
+          { key: "other_name", label: "Pokémon", type: "pokemon", keyField: "other", main: true, sortable: true },
+          { key: "ring_label", label: "Link", main: true, sortable: true },
+          { key: "detail", label: "Measure", main: true },
+          { key: "sample", label: "Sample", type: "int",
+            title: function (r) { return r.ring === "partner" ? "Teams together" : "Matches"; } },
+          { key: "evidence", label: "Evidence", sortable: true, hideOnPhone: true },
+        ],
+      });
+      return;
+    }
     if (mode === "checks") {
       table = App.createDataTable(els.table, {
         caption: "Check edges",
@@ -639,6 +666,25 @@
         ],
       });
     }
+  }
+
+  function setFocusTableRows(drawn) {
+    buildTable("focus");
+    table.setRows(drawn.map(function (d) {
+      var e = d.edge;
+      var other = d.ring === "beaten" ? e.a : e.b;
+      return {
+        other: other,
+        other_name: nameOf(other),
+        ring: d.ring,
+        ring_label: RING_LABELS[d.ring],
+        detail: d.ring === "partner"
+          ? liftText(e.lift) + " lift"
+          : App.formatPercent(e.observed) + " vs " + App.formatPercent(e.expected) + " expected",
+        sample: d.ring === "partner" ? e.teams : e.matches,
+        evidence: d.ring === "partner" ? "—" : e.evidence,
+      };
+    }));
   }
 
   function setTableRows(edges) {
@@ -752,7 +798,20 @@
       '<p><button type="button" class="btn btn-sm" data-graph-full>Full graph</button></p>';
   }
 
+  // render() replaces the SVG, which drops keyboard focus if it was on a
+  // node (Enter focusing a Pokémon, Escape leaving it). Put focus back on
+  // the new graph's tab stop so the keys keep working.
   function render() {
+    var hadFocus = !!(els.canvas && document.activeElement &&
+      els.canvas.contains(document.activeElement));
+    renderView();
+    if (hadFocus) {
+      var stop = els.canvas.querySelector('.graph-node[tabindex="0"]');
+      if (stop) stop.focus();
+    }
+  }
+
+  function renderView() {
     graph = currentGraph();
     nodesByKey = {};
     if (graph) graph.nodes.forEach(function (n) { nodesByKey[n.k] = n; });
@@ -782,9 +841,7 @@
       els.canvas.appendChild(view.svg);
       wireSvg(view.svg, view.edges.map(function (x) { return x.edge; }));
       renderLegend(view);
-      setTableRows(state.layer === "checks"
-        ? checkEdges().filter(function (e) { return e.a === state.focus || e.b === state.focus; })
-        : partnersOf(state.focus));
+      setFocusTableRows(view.edges);
       renderSide(state.selected || state.focus);
       return;
     }

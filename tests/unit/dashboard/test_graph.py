@@ -204,3 +204,16 @@ def test_build_graphs_shapes_one_row_per_scope():
 
 def test_empty_input_builds_no_graphs():
     assert graph.build_graphs([], [], [], {}) == []
+
+
+def test_team_counts_ignore_event_tier_rows():
+    # pokemon_usage_summary carries an overall row and one per event tier;
+    # a tier row listed after the overall one must not overwrite it.
+    keys = ["a1", "a2", "a3", "a4", "b1", "b2", "b3", "b4"]
+    usage = _usage("m-c", keys) + [
+        {"regulation_scope": "m-c", "pokemon_key": k, "event_tier": "Regional", "usage_count": 1}
+        for k in keys
+    ]
+    (only,) = graph.build_graphs(_two_cliques("m-c"), [], usage, {"m-c": 100})
+    node = next(n for n in only["nodes"] if n["k"] == "a1")
+    assert node["teams"] == 10

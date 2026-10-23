@@ -411,9 +411,12 @@ def build_graphs(
     graphs = []
     base: dict[str, tuple[float, float]] | None = None
     for scope in scopes:
+        # pokemon_usage_summary also carries one row per event tier; only
+        # the overall row (no event_tier) is the scope's team count.
         team_counts = {
             row["pokemon_key"]: int(_num(row.get("usage_count")))
             for row in usage_by_scope.get(scope, [])
+            if not row.get("event_tier")
         }
         graph = _scope_graph(
             scope,
