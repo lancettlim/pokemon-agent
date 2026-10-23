@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ ROUTES = [
     "#/usage/win-rate",
     "#/usage/success",
     "#/usage/trends",
+    "#/usage/ladder",
     "#/speed",
     "#/graph",
     "#/graph/checks",
@@ -28,7 +30,10 @@ ROUTES = [
     "#/pokemon/garchomp/cores",
     "#/pokemon/garchomp/teams",
     "#/pokemon/garchomp/pressure",
+    "#/pokemon/kingambit/counters",
+    "#/pokemon/kingambit/spreads",
     "#/compare/garchomp,kingambit",
+    "#/compare/garchomp,kingambit,incineroar,rillaboom",
     "#/matchup/rillaboom/sneasler",
     "#/matchup/garchomp/meta",
     "#/usage?window=last-1",
@@ -60,7 +65,7 @@ VIEWPORTS = [(1440, 900), (390, 844)]
 # Elements that only exist once a view has rendered data, not just its
 # static intro text.
 CONTENT_SELECTOR = (
-    ".grid-6xn-tile, tbody tr, .tier-chip, .mover-list li, .expansion-card, "
+    ".grid-6xn-tile, .board-tile, tbody tr, .tier-chip, .mover-list li, .expansion-card, "
     ".compare-card, .roster-item, .type-effect-tile, .event-card, .team-card, "
     ".set-card, .data-card"
 )
@@ -211,7 +216,12 @@ def test_core_payload_stays_under_budget():
     html = index.read_text(encoding="utf-8")
     start = html.index("window.DASHBOARD_DATA = ") + len("window.DASHBOARD_DATA = ")
     critical = json.loads(html[start : html.index("</script>", start)].rstrip().rstrip(";"))
-    files = [index] + sorted(PUBLISHED_SITE.glob("*.js"))
+    # The scripts the page loads up front, plus the service worker it
+    # registers. A view script app.js loads on demand (LAZY_TAB_SCRIPTS:
+    # graph.js) is not part of the first view.
+    up_front = re.findall(r'<script src="([^"]+)"', html)
+    files = [index] + [PUBLISHED_SITE / name for name in sorted(set(up_front) | {"sw.js"})]
+    files = [path for path in files if path.exists()]
     mart_files = critical.get("mart_files") or {}
     if mart_files:
         files.append(PUBLISHED_SITE / mart_files["core"])

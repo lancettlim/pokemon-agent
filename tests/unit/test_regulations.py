@@ -35,3 +35,21 @@ def test_current_regulation_falls_back_to_latest_when_registry_lags(tmp_path):
 def test_format_sets_match_the_seed():
     assert "gen9championsvgc2026regmc" in regulations.munchstats_formats()
     assert "m-c" in regulations.limitless_formats()
+
+
+def test_online_format_labels_come_from_the_seed():
+    # docs/upgrade-plan-2027q2.md, S1: Limitless' online platform labels
+    # sets "M-C"; nothing in the extractor hardcodes them.
+    assert "M-C" in regulations.limitless_play_formats()
+    assert all(r.limitless_play_format for r in regulations.load_regulations())
+
+
+def test_a_registry_without_the_online_column_still_loads(tmp_path):
+    registry = tmp_path / "regs.csv"
+    registry.write_text(
+        "regulation_code,regulation_name,munchstats_format,limitless_format,start_date,end_date\n"
+        "m-a,A,fa,la,2026-04-08,2026-06-17\n",
+        encoding="utf-8",
+    )
+    assert regulations.load_regulations(registry)[0].limitless_play_format == ""
+    assert regulations.limitless_play_formats(registry) == frozenset()

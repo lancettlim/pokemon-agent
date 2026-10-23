@@ -96,6 +96,260 @@ The dashboard degrades gracefully in several ways:
   renders an empty-state message rather than erroring (see "Pro Team
   Gallery" below).
 
+## The 2027 Q2 cycle ("Broadcast grade")
+
+`docs/upgrade-plan-2027q2.md` made the site read like the official
+competitive graphics and work on every screen. What changed, by sprint:
+
+**Sprint 10 — the board, on every screen.**
+
+- **Team share is the headline metric** (V1, decision D5). Every usage
+  figure is the share of *teams* that brought a Pokémon (Rillaboom: 1,958
+  of 3,770 M-C teams, 51.9%), the unit the official usage card,
+  Pikalytics and Smogon report, instead of the share of roster slots
+  (8.7%). The marts carry `team_share` beside `usage_share`; every
+  tooltip still shows the slot share, and the Overview announces the
+  change once. The Tier List's bands moved with it (S ≥ 24%, A 12–24%,
+  B 6–12%, C 3–6% of teams: the old bands times six).
+- **The Top 12 board** (V2) opens the Overview: six tiles, a title band
+  and six more, as on the official card, with hero art breaking each
+  tile's edge and the team share in gold display numerals. It reflows to
+  band-on-top with 4 columns on tablets and 3 on phones, and has a
+  Species / Forms toggle (Species folds each Mega into the Pokémon holding
+  its stone, as the official card does). It renders from the inline KPIs
+  (`top_12_boards`), so it needs no fetch; the KPI strip moved below it.
+- **Responsive matrix** (M1, M2, Q1). `tests/browser/
+  test_responsive_matrix.py` opens every route at 360, 390, 768, 1024 and
+  1440px plus three spot checks and fails on horizontal scroll, sub-44px
+  tap targets, sub-16px fields and oversized sticky chrome; CI uploads a
+  screenshot of every route at every width. It caught both review
+  findings: the profile 34px too wide on phones, and every route 39px too
+  wide from 721px to 807px.
+- **Stat Points** (Q2). Speed Tiers, the calculator and the glossary use
+  Champions' terms: 32 Stat Points, Stat Alignment, IVs fixed at 31.
+- **Broadcast tokens and a display font** (V7, D4). The board's palette
+  is a set of design tokens with dark values, and `fonts/` serves one
+  self-hosted display face, Oswald (OFL), as a 28KB Latin subset that
+  `build.py` copies from `static/fonts/`. The footer says the site is an
+  unofficial fan project.
+
+**Sprint 11 — teams look like teams.**
+
+- **Team strip** (V3). Every team is six square tiles with its held items
+  and a Mega badge on the Mega holder; a tile opens its set. The
+  Overview's winner strip reads the winner's sheet from the inline KPIs
+  (`latest_event.winner_sets`), and the PNG team cards carry the same
+  badges.
+- **Player lines and scoreboard rows** (V4): "NAME [CC] [W–L]" chips on
+  team cards, event headers and player pages.
+- **Phase chips** (V5) on every team card and event section.
+- **Square type badges** (V6) from our own glyphs
+  (`pipelines/render/type_glyphs.py`), on the board and the PNG cards.
+- **Mega usage panel** (E3): `mega_stone_usage` and `team_mega_count`
+  (on-demand shards) behind the Usage tab's Megas view and a section on
+  every event page. In M-C, 81.6% of teams carry two Mega Stones.
+- Event and player pages open on a broadcast band.
+
+**Sprint 12 — online events.**
+
+- **Limitless online tournaments** (S1, `pipelines/extract/limitless_play.py`)
+  are their own population: 13,418 published M-C sheets from 234
+  tournaments in the first six weeks of M-C, against 3,770 official teams. They never blend
+  into official figures by default.
+- **Official / Online / All**: an Events select beside the regulation one.
+  The scope is `regulation[:population]` (`?reg=m-c`, `?reg=m-c:online`,
+  `?reg=m-c:combined`), the marts carry each scope as `regulation_scope`,
+  and each ships as its own shard (`data/scope-m-c-online.json`). Official
+  stays the default for every headline number and for "What changed".
+- **Labels**: on an Online or All scope a blue population banner gives the
+  sample and the way back; official-only views (event pages, players, Top
+  Teams, head-to-head, archetypes, the event window, trends, triple cores)
+  carry an "OFFICIAL" note and cite the official sample. The Top 12 board
+  gains an Online switch on the official scope, beside "Official".
+- **Rollover to Online**: when the regulation in force has under 300
+  official teams but 300+ online ones, the page opens on its online events
+  with the rollover banner saying so, instead of on the previous
+  regulation. M-D will have data within days of 2026-12-03.
+- **Events tab**: the online tournaments get their own list
+  (`online_event_summary`), each linking to its page on Limitless; online
+  events get no event pages and online handles no player pages.
+
+**Sprint 13 — event weekend.**
+
+- **Day 2 and the top cut** are read off RK9's round structure
+  (`int_event_phases`): Day 2 starts at the first round with under half
+  the tables of the one before, and the top cut is the trailing run of
+  rounds where no loser plays again. The derived Day 2 fields match the
+  players Limitless lists for Day 2 (Worlds 57 and 57, NAIC 156 and 156);
+  `assert_day2_matches_limitless_lists` keeps checking. The top cut admits
+  everyone with a qualifying record and pads its bracket with byes, so a
+  16-slot bracket often holds 13 players.
+- **Day 2 conversion** (E1, `pokemon_event_phase_usage`): each event page
+  shows field share against Day 2 share, and the Top 12 board gains a Day
+  2 switch. In M-C, Kingambit converts at ×1.30. The ratio is held back
+  where either side has under 100 teams.
+- **Bracket and paths** (E2, `tournament_top_cut_matches`,
+  `tournament_top_cut_paths`): one column per round from 1024px, round
+  tabs below it; picking a player opens every round they played, Day 1 to
+  the final. Team vs team, and labelled so.
+- **Top 12 cards** (V8): see "Share cards and link previews" below; the
+  default regulation's 16:9 card is now the Open Graph image.
+- **Sharing from a phone** (M4): "Share" hands the 4:5 and 9:16 cards to
+  the system share sheet where the browser can share files; "Download
+  card" saves the 16:9 one everywhere. Copying on a touch screen confirms
+  with a toast.
+- **Event weekends** (E4): see "Event-weekend refresh" below.
+- **RK9 identity fix**: a name and country two entrants share is no longer
+  resolved to one roster (both Noah Gardners at Indianapolis 2026 had been
+  credited to the one in the top 16), and only Masters pairings resolve.
+
+**Sprint 14 — the ladder lens.** Smogon's monthly Showdown ladder
+statistics (S2, decisions D2 and D3), a population of their own:
+`static/ladder.js`, hooked into the Usage tab and the profile through
+`App.extendTab`, reading three on-demand marts. Every view carries a
+"Showdown ladder" label and none adds a ladder figure to a tournament one.
+
+- **Ladder vs tournament** (`#/usage/ladder`, `ladder_pokemon_usage`):
+  ladder usage against the same regulation's official tournament team
+  share. From 768px a scatter on one square-root scale (the dashed
+  diagonal is the same share on both; blue is played more on the ladder,
+  red more at tournaments, grey within 2 pts; each dot a 44px target that
+  opens the profile), and at every width two ranked lists, "Played more on
+  the ladder" and "Played more at tournaments", which are the scatter's
+  text equivalent and all a phone shows. Bo1/Bo3 and 1760+/All ratings
+  switches. In M-C, Mega Raichu Y is on 12.5% of 1760+ ladder teams
+  against 25.9% of official ones; Basculegion runs the other way, 20.6%
+  against 15.0%.
+- **Checks and counters** (`#/pokemon/<key>/counters`,
+  `ladder_checks_counters`): the six opponents that most often KO the
+  Pokémon or force it out, with the rate and n, "Show all" for twelve.
+  The only Pokémon-vs-Pokémon signal on the site, labelled "Showdown
+  ladder, from battle logs". All ratings on the Bo1 ladder, since Smogon
+  publishes almost no pairs for 1760+ (see `docs/data-sources.md` §10).
+- **Stat Point spreads** (`#/pokemon/<key>/spreads`,
+  `ladder_stat_point_spreads`): the six spreads 1760+ Bo1 ladder players
+  ran most, labelled "Showdown ladder; tournament sheets don't publish
+  spreads". They never reach a tournament view, a set card or the Builder.
+- Under "All regulations", the ladder views show the newest regulation
+  with ladder data and say so; a regulation Smogon has no file for says
+  that instead of showing an empty panel.
+- **Profile header on phones**: the stat bars need 260px, which never fit
+  beside the 128px hero at 360–480px, so the header was clipped by the
+  panel's edge; it now wraps.
+- **S4, checked and parked**: MunchStats shows the game's ranked Battle
+  Data only in its rendered pages, not its published JSON (see
+  `docs/data-sources.md` §4).
+
+**Sprint 15 — quality and shell.**
+
+- **Global search** (Q3, `static/search.js`): one box for Pokémon, players
+  and events, opened by `/`, Ctrl/⌘+K, the header's search button from
+  1024px or the ⋯ menu's Search below that (the narrower headers have no
+  52px to spare). A full-screen sheet on phones, a 640px panel under the
+  header from 768px. Pokémon search at once from the inline names; players
+  (`player_index`) and events (`tournament_event_summary`) arrive with the
+  first open. With an empty box it lists the last six picks.
+- **Pokémon names in five more languages** (Q4): the ⋯ menu's "Pokémon
+  names" select (English, 日本語, Español, Português, Français, Deutsch),
+  remembered per browser; changing it reloads the page. The build inlines
+  `localised_names` (four maps, the 350 Pokémon the marts mention, 11 KB
+  compressed), and app.js swaps them into the name map and the inline KPIs
+  before anything renders; shard rows take theirs from the map as they
+  load. Numbers and copy stay in English, Portuguese uses the English names
+  (the Brazilian games do), the PNG share cards stay English, and search
+  matches the English name too. Search now keeps letters of any script, so
+  a Japanese query works.
+- **Offline at the venue** (Q5, `sw.js`): pages, scripts and data shards
+  network first, images cache first, other origins untouched. `build.py`
+  writes the worker with its precache list (the page, scripts, font, core
+  shard and default regulation's shard) and an id hashed from them, the
+  inline payload counted without its timestamp, so an unchanged rebuild
+  keeps visitors' caches. Offline, a banner says the figures are the saved
+  ones and when they were built. Browser tests block service workers unless
+  a test is about them, since a worker answers requests `page.route()`
+  means to intercept.
+- **Rank change on Usage** (list #19): a Rank column with ▲/▼ against the
+  regulation before its newest event, or, in an event window, before the
+  window. Official events only; online and combined scopes show "—".
+- **Builder legality** (list #22): item clause and species clause warnings
+  above the slots (`form_species` gives each form's species, so Charizard
+  and Mega Charizard Y clash), and a notice when a saved team loses Pokémon
+  to a regulation change.
+- **Board tiles at 481–720px**: the large-phone tier's four tiles are about
+  106px wide, too narrow for the number and two type badges side by side,
+  which spilled into the next tile; the phone layout (number on its own
+  line, badges in the corner) now applies up to 720px. The responsive
+  matrix gains a 481px spot check.
+
+**Sprint 16 — Builder and views.**
+
+- **Team sheet image** (list #21): the Builder's "Download team sheet
+  image" draws an Open Team Sheet (each Pokémon's ability, held item and
+  moves; no Stat Points or Stat Alignment, as an open sheet shows) on a
+  1200×760 canvas and saves it as a PNG, names in the page's language,
+  long ones shrunk to fit.
+- **Ladder checks in the threat screen** (list #23): a column naming the
+  team members among each common threat's twelve strongest Showdown ladder
+  checks, with each one's rate and n in the tooltip; the note says it is
+  ladder data. The threat list itself was sorted on a `usage_rank` the
+  profile rows don't carry, so it listed arbitrary Pokémon (Mega Absol Z
+  first); it now takes the 12 highest team shares.
+- **Speed line** (list #24): on Speed Tiers, your Builder team (outlined)
+  above a number line and the 16 most-used Pokémon below, all at max Speed
+  investment, sprites stacked into lanes where they would overlap.
+  "Tailwind on your side" doubles your team; "Trick Room" flips which end
+  moves first. Phones get the same as a list in move order, speed ties
+  marked. Without a saved team the Tailwind toggle is off and the note
+  says why.
+- **Archetype matchups** (list #30, `archetype_matchups`): decided official
+  matches between the primary teams of the listed archetypes, a heatmap of
+  the top ten from 768px (blue where the row wins, red where it loses,
+  uncoloured near even and under 20 matches; the number stays in ink) and
+  a select-and-list below. Team vs team, and labelled so.
+- **Compare tray** (list #34): "Pin to compare" on every profile; up to
+  four pinned Pokémon follow the visitor in a tray (a bottom sheet over the
+  phone's bottom bar, a card from 721px) that opens Compare on them.
+  Compare now takes two to four Pokémon, adding and removing columns.
+
+**Sprint 17 — sources and distribution.**
+
+- **"Watch on stream" links** (S5, E5): `tournament_top_cut_matches.vod_url`
+  from the curated `featured_match_vods` seed puts a "▶ Watch on stream"
+  link under a bracket match with a video (opens YouTube in a new tab).
+  Five finals so far, each a dedicated Play! Pokémon upload checked for its
+  title and channel; a match inside a day-long stream gets a row once
+  someone has its timestamp (`docs/data-sources.md` §12).
+- **Upcoming online tournaments** (list #31, `online_upcoming_events`): on
+  the Events tab above the past online list, the next 14 days of Limitless
+  online tournaments in the visitor's own time zone (named in the note),
+  grouped by local day ("Today", "Tomorrow", then the date), each with its
+  time, organiser, platform, registrations and whether registration is
+  open, linking to Limitless. The list is a day old by the time it is read,
+  so tournaments that have started are dropped in the browser. A row per
+  tournament on phones, the registrations under the name.
+- **Embeddable Top 12** (list #33): `embed.html`, a page for an
+  `<iframe>` (`templates/embed.html.jinja`, its own ~20KB inline payload
+  from `build.py`'s `_embed_payload`, no shards or app scripts). Query
+  parameters choose the regulation (`reg`), board (`board=all|day2|online`),
+  grouping, `view=grid|list`, name language and theme. Every view carries
+  its citation (team share, the sample, the update date, "an unofficial
+  fan project") and links back to the dashboard. The Overview board's
+  "Embed" button gives the snippet for what it shows, with Copy and
+  Preview. Twelve tiles fit the snippet's 480px height from 320px wide;
+  outside its red frame the page is transparent.
+- **Which four do they bring?** (S3, list #27; `ladder_bring_rate`,
+  `ladder_lead_pairs`): under the Ladder view, a table of how often each
+  Pokémon is on Showdown ladder teams, brought, led, and its side's win
+  rate brought versus benched, from sampled replays; then the ten most
+  common lead pairs with their win rates. A Pokémon under 30 complete
+  sides is left out. Every profile's Counters panel opens with the same
+  four figures for that Pokémon (a Mega reads its base Pokémon's, and says
+  so). Labelled "Showdown ladder replays" and "not tournament data". The
+  first sample has 522 Reg M-C battles (365 complete): Rillaboom is on 36.9%
+  of ladder teams and brought 62% of the time, its side winning 53.9% with
+  it and 46.5% without; the sample grows with each daily run. Rows under
+  the 30-side floor aren't shipped.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -108,7 +362,8 @@ phones it becomes a bottom navigation bar. The KPI strip shows on Meta
 only. View buttons keep the `.tab-btn[data-tab]` contract, so scripts that
 click a tab still work. Every Pokémon picker (Profile, Compare, Core
 Explorer, Matchup) carries a type-ahead search with sprites
-(`attachPokemonCombobox`), and `/` jumps to the Profile search.
+(`attachPokemonCombobox`), and `/` or Ctrl/⌘+K opens the global search
+(Pokémon, players and events; `static/search.js`, 2027 Q2 Q3).
 
 - **Meta Graph** (`static/graph.js`, backlog #50, `docs/plan-synergy-
   checks-graph.md`) draws one regulation's metagame as a graph. The
@@ -133,8 +388,8 @@ Explorer, Matchup) carries a type-ahead search with sprites
   so positions are stable across regulations) and shipped as one
   `data/pokemon_graph-<scope>.json` per regulation. The profile's Team
   Cores and Matchup's records link into a focus view.
-- **Tier List** bands Pokémon by usage share in the selected regulation
-  (S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%), each with a win-rate chip coloured
+- **Tier List** bands Pokémon by team share in the selected regulation
+  (S ≥ 24%, A 12–24%, B 6–12%, C 3–6% of teams), each with a win-rate chip coloured
   only when the 95% Wilson interval sits clearly above or below 50%.
   Clicking a Pokémon opens its profile.
 - **Team Builder** gains **Suggested partners**: Pokémon with a synergy
@@ -160,9 +415,10 @@ Teams, and restructured every remaining tab around
 **mart-wiring pass** (see "Marts wired in the mart-wiring pass" below)
 added Players & Regions and extended four of the existing tabs:
 
-- **Overview** — the KPI cards plus a "Top 12" `.grid-6xn`, ranked by
-  `usage_share`. (The old "Top 30" ranked list was removed — the Usage tab
-  is the full leaderboard now.)
+- **Overview** — the Top 12 board (2027 Q2, V2; see above), then "What
+  changed", the latest event and starter teams, and the KPI cards. (The
+  old "Top 30" ranked list and the Top 12 `.grid-6xn` were removed — the
+  Usage tab is the full leaderboard now.)
 - **Usage** — tier/regulation/type/role/usage-%/speed filters, a
   `.grid-6xn` of usage-share leaders, a full Usage leaders table, then the
   same grid+table pattern again for Win rate leaders (with a
@@ -473,9 +729,9 @@ tabs naming this command. The published GitHub Pages site is unaffected.
 
 `index.html` carries only the **critical payload** inline
 (`_CRITICAL_PAYLOAD_KEYS` in `build.py`): KPIs per regulation, provenance,
-the sprite/hero-art/type-icon/item-icon maps, type colors, display names,
-reference teams, the regulation registry and `mart_files`, about 45 KB
-compressed. Overview renders from it with no fetch.
+the sprite/hero-art/type-icon/item-icon maps, type colors, display names
+(and their four localised maps, Q4), each form's species, reference teams,
+the regulation registry and `mart_files`, about 60 KB compressed. Overview renders from it with no fetch.
 
 The marts are split into **shard files under `docs/dashboard/data/`**
 (`_write_mart_shards`, docs/upgrade-plan-2026q4.md B7). Once the marts
@@ -486,11 +742,24 @@ reached 22 MB:
 |---|---|---|
 | `data/core.json` | unscoped marts the common tabs read | first tab that needs marts |
 | `data/scope-<scope>.json` | the selected regulation's rows of every scoped mart | with core, for the page's regulation only |
-| `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json`, ... (`ON_DEMAND_MARTS`) | the largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Profile and Core Explorer, Players & Regions, ...) |
+| `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
+| `data/ladder_pokemon_usage.json`, `data/ladder_checks_counters.json`, `data/ladder_stat_point_spreads.json` | the Showdown ladder marts (S2), sliced to what the views show (`data.py`'s `_slice_ladder_*`), about 190 KB compressed together | the Usage tab (usage) and the profile (counters, spreads) |
+| `data/ladder_bring_rate.json`, `data/ladder_lead_pairs.json` | Showdown replay bring rates and lead pairs (S3), Bo1 and Bo3 pooled | the Usage tab (both) and the profile (bring rate) |
+| `data/online_upcoming_events.json` | upcoming Limitless online tournaments (list #31) | the Events tab |
 | `data/<mart>-<scope>.json` (`SCOPED_ON_DEMAND_MARTS`: head-to-head, matchup summary, check edges, the Meta Graph) | one regulation's rows of a scoped mart only one view reads | only the page's regulation, only by Matchup or Meta Graph (`mart_files.on_demand_scoped`) |
 
 The default M-C view downloads about 400 KB compressed in total, against
 roughly 2 MB for the old single file.
+
+The profile's move, item and ability tables repeat each move's type,
+power, accuracy and effect text on every Pokémon's row, which once took the
+core payload past its 500 KB budget (`tests/browser/`). `build.py`'s
+`DETAIL_SPLITS` strips those columns from the shards and writes one row
+per move, item or ability into core as `pokemon_move_usage_details`,
+`pokemon_item_usage_details` and `pokemon_ability_usage_details`;
+`mart_files.detail_joins` lists each join, and `ensureData`'s
+`restoreDetails()` puts the columns back as the marts load, so views read
+the marts as before.
 
 `data.json` remains backlog #32's JSON feed. It holds every non-mart key
 plus `mart_files`, the index of the shard paths, and together they are the
@@ -529,6 +798,17 @@ published site went four months without a rebuild while its data aged out
 of the current regulation. The repo needs "Allow GitHub Actions to create
 and approve pull requests" enabled (Settings → Actions → General).
 
+**Event-weekend refresh** (`.github/workflows/event-weekend.yml`,
+docs/upgrade-plan-2027q2.md E4): hourly from Friday to Monday UTC it
+refreshes MunchStats and asks `python -m pipelines.cli live-events` whether
+an event is running or just over (from the day before its date to three
+days after). If one is, it re-extracts RK9 (a live event's pairings and
+rosters are fetched again rather than reused from the cache), runs every
+release gate, renders the share cards, rebuilds the site and deploys it
+straight to Pages. It commits nothing: the weekly pull request is still
+how data reaches `main`, and the next push to `docs/**` redeploys from
+`main`. With no live event, a run stops after the check.
+
 **Regulation selector**: every regulation-sensitive mart is partitioned
 by `regulation_scope` (each regulation plus `all`). The header's Regulation
 dropdown chooses one scope for the whole page. Changing it reloads the page
@@ -537,7 +817,12 @@ opens on is described under "Regulation rollover playbook" below. The open
 view and its state live in the URL hash (`#/usage/win-rate`,
 `#/pokemon/garchomp`; see "Routes"). `static/app.js` narrows each scoped mart to the selected scope
 once, as its shard loads (`applyRegulationScope`), so the tab code reads
-`marts.<name>` exactly as before. KPIs are precomputed per scope
+`marts.<name>` exactly as before. Since Sprint 12 the scope can carry a
+population (`m-c:online`, `m-c:combined`), picked with the Events select;
+a mart with no rows for it (player records are official-only) ships the
+official scope's rows instead, listed in `mart_files.official_fallback`,
+and `App.regulationCode` is the regulation part for views that only read
+official events. KPIs are precomputed per scope
 (`kpis_by_scope`) and the template renders one KPI row per scope. Marts
 without the column (triple cores, country, players) still cover all
 Champions regulations. Head-to-head and the matchup summary gained the
@@ -583,6 +868,20 @@ https://lancettlim.github.io/pokemon-agent/dashboard/.
 `location.replace`, so it works with JS disabled too) that sends
 `https://<owner>.github.io/<repo>/` itself to `dashboard/` — the site root
 would otherwise 404, since nothing else lives at `docs/`'s top level.
+
+**claude.ai artifact mirror**: the dashboard is also mirrored to a private
+claude.ai artifact (https://claude.ai/artifact/Lfb9NxbaAwRkshcGCQ11wR),
+which Claude Code sessions republish whenever they change dashboard code,
+before pushing it. An artifact version holds at most 511 files and the
+full site has about a thousand, most of them images, so `python -m
+pipelines.cli build-artifact-site --output-dir <fresh dir>`
+(`pipelines/dashboard/artifact.py`) builds a lighter copy: every sprite,
+type icon, script and data shard, hero art only for the Pokémon on a Top
+12 board (the rest fall back to their sprite), no item icons (items show
+as names) and no share cards (the share and download buttons don't
+appear). It also writes `<dir>.plan.json`, the page plus the files in
+publish-sized batches (255 files and 64MB each). The rules for keeping it
+current are in `CLAUDE.md`'s "Dashboard artifact".
 
 ## Regulation rollover playbook
 
@@ -654,16 +953,26 @@ share_cards.py`, docs/upgrade-plan-2027q1.md C4) renders, with Playwright:
 - a 1200×630 "What changed" card per regulation
   (`images/cards/whats-changed-<scope>.png`), using the same comparison the
   Overview opens on, offered as "Download summary card";
-- `images/cards/og.png`, a copy of the default regulation's card, used as
-  the Open Graph / Twitter image.
+- the Top 12 board as a card (docs/upgrade-plan-2027q2.md, V8):
+  `images/cards/top12-<regulation|event>-<key>-<all|day2>-<landscape|portrait|story>.png`
+  at 1920×1080, 1080×1350 and 1080×1920, the portrait two in the phone
+  board's layout. The default regulation and its events (newest eight)
+  get every format; other regulations get 16:9 only and older events
+  none, which keeps a rebuild to about forty cards. Each is quantized to
+  256 colours (about 175KB). The board and event pages offer them as
+  "Share" (4:5 and 9:16, through the Web Share API) and "Download card"
+  (16:9);
+- `images/cards/og.png`, a copy of the default regulation's 16:9 Top 12
+  card (else its "What changed" card), used as the Open Graph / Twitter
+  image.
 
 It writes `images/cards/manifest.json`, which `build-dashboard` reads, so it
 runs first: `make dashboard` and the weekly refresh workflow both do. The
 build also writes `og:`/`twitter:` title and description tags from the
-default regulation's headline ("Reg M-C: Rillaboom leads at 8.7% of roster
-slots across 3,770 teams from 5 events…"), so a shared link unfurls with
+default regulation's headline ("Reg M-C: Rillaboom is on 51.9% of 3,770
+teams from 5 events…"), so a shared link unfurls with
 the current state. Without the manifest the site simply has no download
-buttons and no preview image. The cards add about 1.6MB to
+buttons and no preview image. The cards add about 9MB to
 `docs/dashboard/`, replaced on each refresh.
 
 ## Routes
@@ -675,11 +984,11 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 |---|---|
 | `#/overview`, `#/tiers`, `#/speed` | Meta views |
 | `#/graph[/synergy\|checks]?focus=<key>&min=<n>&ev=all&hide=<n>&mega=1` | Meta Graph: layer, focused Pokémon, edge floor, suggestive check edges, hide the N most used, Megas only |
-| `#/usage[/win-rate\|success\|trends]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window |
-| `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure]` | A Pokémon's profile |
-| `#/compare/<a>,<b>`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons; `meta` is the calculator's "vs the meta" mode |
+| `#/usage[/win-rate\|success\|trends\|megas\|ladder]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window; `ladder` is Ladder vs tournament |
+| `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure\|counters\|spreads]` | A Pokémon's profile; `counters` and `spreads` are Showdown ladder data |
+| `#/compare/<a>,<b>[,<c>[,<d>]]`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons of two to four Pokémon; `meta` is the calculator's "vs the meta" mode |
 | `#/teams[/converged]?tier=regional&sort=win-rate` | Top Teams |
-| `#/events`, `#/event/<event_id>` | Event index and event pages |
+| `#/events`, `#/event/<event_id>` | Event index (with upcoming online tournaments) and event pages |
 | `#/cores/<key>[/triple]`, `#/archetypes` | Cores and archetypes |
 | `#/players[/regions\|signatures]`, `#/player/<player_id>` | Find a player, players by region and signature Pokémon; a player's page |
 | `#/builder`, `#/builder/team/<team_id>`, `#/builder/list/<team_list_id>`, `#/builder/add/<key>.<set>`, `#/builder/<key>.<set>,...` | Team Builder, loading a real team, a converged list, one added Pokémon, or a shared team |
@@ -688,7 +997,12 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 Moving to another view pushes a history entry; refining the current one (a
 filter, a sub-tab) replaces it. Links from before routing (`#usage`,
 `?tab=compare&a=..&b=..`) are rewritten to their routes on load.
-`?reg=` in the query string stays the regulation.
+`?reg=` in the query string stays the scope: a regulation, or a regulation
+and population (`?reg=m-c:online`).
+
+`embed.html?reg=<code>&board=all|day2|online&group=forms|species&view=grid|list&lang=<ja|es|fr|de>&theme=auto|light|dark`
+is the embeddable Top 12 widget (list #33), a separate page rather than a
+route; every parameter is optional.
 
 ## Data section: table cards and dictionary
 

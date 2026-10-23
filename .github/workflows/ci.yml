@@ -55,8 +55,22 @@ jobs:
       - name: Install Chromium for the browser tests
         run: uv run playwright install --with-deps chromium
 
+      # The responsive matrix (docs/upgrade-plan-2027q2.md, M1) runs its full
+      # sweep under CI and saves every route at every width; the upload
+      # below lets a reviewer see the phone and tablet layouts on every PR.
       - name: Test
+        env:
+          DASHBOARD_SCREENSHOT_DIR: ${{ runner.temp }}/dashboard-screenshots
         run: make test
+
+      - name: Upload dashboard screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-screenshots
+          path: ${{ runner.temp }}/dashboard-screenshots
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Restore staging snapshot history
         uses: actions/cache/restore@v4

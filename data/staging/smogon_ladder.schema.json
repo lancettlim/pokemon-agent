@@ -1,0 +1,98 @@
+{
+  "source_name": "Smogon usage statistics",
+  "source_url": "https://www.smogon.com/stats/",
+  "refresh_cadence": "monthly upstream; extracted daily, a held month reused",
+  "records_captured": [
+    "Monthly Showdown ladder usage per Pokémon, per registered regulation, Bo1 and Bo3, rating cutoffs 1760 and 0"
+  ],
+  "fields": [
+    {
+      "name": "month",
+      "type": "string",
+      "required": true,
+      "description": "The month the statistics cover, YYYY-MM"
+    },
+    {
+      "name": "metagame",
+      "type": "string",
+      "required": true,
+      "description": "Smogon's metagame slug, the regulation registry's munchstats_format (\"gen9championsvgc2026regmc\")"
+    },
+    {
+      "name": "regulation_code",
+      "type": "string",
+      "required": true,
+      "description": "The registered regulation the file belongs to (dbt/seeds/champions_regulations.csv)"
+    },
+    {
+      "name": "variant",
+      "type": "string",
+      "required": true,
+      "description": "bo1 or bo3: the Showdown ladder the battles were played on"
+    },
+    {
+      "name": "cutoff",
+      "type": "integer",
+      "required": true,
+      "description": "Rating floor: 1760 weights each battle by the chance its players are rated above 1760; 0 counts every battle equally"
+    },
+    {
+      "name": "battles",
+      "type": "integer",
+      "required": true,
+      "description": "Battles in the file"
+    },
+    {
+      "name": "pokemon_name",
+      "type": "string",
+      "required": true,
+      "description": "Showdown display name (\"Charizard-Mega-Y\"); mapped to pokemon_key by int_smogon_ladder_mapped"
+    },
+    {
+      "name": "raw_count",
+      "type": "integer",
+      "required": true,
+      "description": "Teams the Pokémon appeared on, unweighted"
+    },
+    {
+      "name": "usage",
+      "type": "number",
+      "required": true,
+      "description": "Weighted share of teams the Pokémon appeared on, 0 to 1; comparable with tournament team share"
+    },
+    {
+      "name": "source_name",
+      "type": "string",
+      "required": true,
+      "description": "Constant: Smogon usage statistics"
+    },
+    {
+      "name": "source_url",
+      "type": "string",
+      "required": true,
+      "description": "The chaos JSON file the row comes from"
+    },
+    {
+      "name": "source_record_id",
+      "type": "string",
+      "required": true,
+      "description": "Unique row id within the source: month/file:Pokémon[:opponent or spread]"
+    },
+    {
+      "name": "extracted_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "ISO-8601 UTC extraction timestamp"
+    },
+    {
+      "name": "dataset_version",
+      "type": "string",
+      "required": true,
+      "description": "Dataset version"
+    }
+  ],
+  "known_risks": [
+    "Ladder players are a different population from tournament players: never blend these figures into tournament ones",
+    "A regulation's month is the newest one it was in force for at least half of (pick_month), so an ended regulation keeps its last full month"
+  ]
+}

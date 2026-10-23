@@ -1,6 +1,6 @@
 {
   "table_name": "tournament_match",
-  "purpose": "match-level head-to-head tournament results: who faced whom, in which round, and who won",
+  "purpose": "match-level head-to-head tournament results: who faced whom, in which round, and who won (RK9 pairings for official events, Limitless pairings for online tournaments)",
   "primary_key": "match_id",
   "join_keys": [
     "event_id",
@@ -13,7 +13,7 @@
       "name": "match_id",
       "type": "string",
       "required": true,
-      "description": "Primary key; deterministic hash of event/pod/round/table/player-1"
+      "description": "Primary key; deterministic hash of event/pod/round/table/player-1 for RK9, and of event/phase/round/table/both handles for an online pairing (the platform gives byes and no-shows no table)"
     },
     {
       "name": "event_id",
@@ -25,7 +25,7 @@
       "name": "division",
       "type": "string",
       "required": true,
-      "description": "Age division the match was played in, e.g. \"Masters\", \"Senior\", \"Junior\""
+      "description": "Age division the match was played in, e.g. \"Masters\", \"Senior\", \"Junior\"; \"Online\" for a Limitless online pairing"
     },
     {
       "name": "round_number",
@@ -73,13 +73,13 @@
       "name": "outcome",
       "type": "string",
       "required": true,
-      "description": "player1_win | player2_win | tie | bye, derived from RK9's winner/loser cell markup"
+      "description": "player1_win | player2_win | tie | bye, derived from RK9's winner/loser cell markup or the online platform's winner field; online pairings can also be no_result (the platform recorded none)"
     },
     {
       "name": "is_complete",
       "type": "boolean",
       "required": true,
-      "description": "Whether RK9 marked the match complete; an in-progress round reports false"
+      "description": "Whether the match has a result: RK9 marks an in-progress round false, and an online no_result pairing is false"
     },
     {
       "name": "source_name",

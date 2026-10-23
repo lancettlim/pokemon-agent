@@ -51,3 +51,6 @@ data/assets/
 !/releases/data/0.2.0/
 !/releases/data/0.3.0/
 /releases/packages/
+
+# Claude Code hook state (.claude/hooks/artifact_republish.py)
+/.claude/state/

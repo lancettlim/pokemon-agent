@@ -62,6 +62,9 @@ roster as (
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
+  -- Official events only, as in pokemon_head_to_head: RK9 pairings exist
+  -- only for them.
+  where member.scope_population = 'official'
 ),
 
 -- Teams in a scope, so a side whose team has no legal roster in the scope

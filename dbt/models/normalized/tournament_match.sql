@@ -12,6 +12,12 @@
 -- Byes are kept (outcome = 'bye', team_id_2 null): a bye is a real,
 -- scheduled round result that affects a player's record, and dropping it
 -- would silently disagree with the win/loss totals tournament_team reports.
+--
+-- Online pairings (docs/upgrade-plan-2027q2.md, S1) follow with division
+-- 'Online'; a pairing the platform reports with no result is kept as
+-- 'no_result' with is_complete false. Their key includes both handles:
+-- the platform gives byes and no-shows no table number, so a round can
+-- list one player against several table-less entries.
 select
   md5(
     event_id || ':' || pod_id || ':' || cast(round_number as varchar)
@@ -35,3 +41,27 @@ select
   extracted_at_utc,
   dataset_version
 from {{ ref('int_rk9_mapped') }}
+union all
+select
+  md5(
+    event_id || ':' || cast(phase as varchar) || ':' || cast(round_number as varchar)
+    || ':' || coalesce(cast(table_number as varchar), 'bye') || ':' || player1_handle
+    || ':' || coalesce(player2_handle, '')
+  ) as match_id,
+  event_id,
+  'Online' as division,
+  round_number,
+  table_number,
+  player_id_1,
+  team_id_1,
+  player_id_2,
+  team_id_2,
+  winner_team_id,
+  outcome,
+  is_complete,
+  source_name,
+  source_url,
+  source_record_id,
+  extracted_at_utc,
+  dataset_version
+from {{ ref('int_limitless_play_pairings_mapped') }}

@@ -1,0 +1,184 @@
+{
+  "source_name": "Limitless Online",
+  "source_url": "https://play.limitlesstcg.com/api",
+  "refresh_cadence": "daily (incremental: a tournament settled for two days is reused from the previous snapshot); hourly is never needed, online events are not the event-weekend path",
+  "records_captured": [
+    "Team sheets of qualifying online Champions tournaments: one row per team-sheet slot, with the player's placing, W-L-T record and drop (docs/upgrade-plan-2027q2.md, S1)"
+  ],
+  "fields": [
+    {
+      "name": "tournament_id",
+      "type": "string",
+      "required": true,
+      "description": "Limitless' tournament id (24 hex characters)"
+    },
+    {
+      "name": "tournament_name",
+      "type": "string",
+      "required": true,
+      "description": "Tournament name as the organiser gave it"
+    },
+    {
+      "name": "tournament_date",
+      "type": "string",
+      "required": true,
+      "description": "Tournament start date (YYYY-MM-DD, UTC)"
+    },
+    {
+      "name": "tournament_format",
+      "type": "string",
+      "required": true,
+      "description": "Limitless' format label (\"M-C\"), matched against champions_regulations.limitless_play_format"
+    },
+    {
+      "name": "player_count",
+      "type": "integer",
+      "required": true,
+      "description": "Players registered"
+    },
+    {
+      "name": "organizer_id",
+      "type": "string",
+      "required": false,
+      "description": "Limitless organiser id"
+    },
+    {
+      "name": "player_handle",
+      "type": "string",
+      "required": true,
+      "description": "The player's Limitless handle (not a legal name)"
+    },
+    {
+      "name": "player_name",
+      "type": "string",
+      "required": true,
+      "description": "The player's display name on Limitless"
+    },
+    {
+      "name": "player_country",
+      "type": "string",
+      "required": false,
+      "description": "Two-letter country code, when the player set one"
+    },
+    {
+      "name": "placement",
+      "type": "integer",
+      "required": false,
+      "description": "Final placing; blank for a player who dropped (int_limitless_play_mapped places them after every finisher, by record)"
+    },
+    {
+      "name": "record_wins",
+      "type": "integer",
+      "required": false,
+      "description": "Wins"
+    },
+    {
+      "name": "record_losses",
+      "type": "integer",
+      "required": false,
+      "description": "Losses"
+    },
+    {
+      "name": "record_ties",
+      "type": "integer",
+      "required": false,
+      "description": "Ties"
+    },
+    {
+      "name": "dropped",
+      "type": "boolean",
+      "required": true,
+      "description": "Whether the player dropped"
+    },
+    {
+      "name": "slot_number",
+      "type": "integer",
+      "required": true,
+      "description": "Position on the team sheet, 1-6"
+    },
+    {
+      "name": "pokemon_slug",
+      "type": "string",
+      "required": true,
+      "description": "Limitless' species slug (the same convention as limitlessvgc.com), mapped through limitless_slug_to_pokeapi_form"
+    },
+    {
+      "name": "pokemon_display_name",
+      "type": "string",
+      "required": false,
+      "description": "Limitless' display name"
+    },
+    {
+      "name": "item_name",
+      "type": "string",
+      "required": false,
+      "description": "Held item"
+    },
+    {
+      "name": "ability",
+      "type": "string",
+      "required": false,
+      "description": "Ability"
+    },
+    {
+      "name": "nature",
+      "type": "string",
+      "required": false,
+      "description": "Stat Alignment (nature)"
+    },
+    {
+      "name": "tera_type",
+      "type": "string",
+      "required": false,
+      "description": "Tera type if listed (Champions has no Tera mechanic; kept raw)"
+    },
+    {
+      "name": "moves",
+      "type": "string",
+      "required": false,
+      "description": "Pipe-delimited moves"
+    },
+    {
+      "name": "fetched_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "When this tournament's rows were last fetched from the API. Unlike extracted_at_utc it survives a reuse, so a copy fetched mid-event is fetched again rather than kept (pipelines/extract/limitless_play.py, _is_final)."
+    },
+    {
+      "name": "source_name",
+      "type": "string",
+      "required": true,
+      "description": "Constant: Limitless Online"
+    },
+    {
+      "name": "source_url",
+      "type": "string",
+      "required": true,
+      "description": "The tournament's standings (or pairings) page on play.limitlesstcg.com"
+    },
+    {
+      "name": "source_record_id",
+      "type": "string",
+      "required": true,
+      "description": "Unique row id within the source"
+    },
+    {
+      "name": "extracted_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "ISO-8601 UTC extraction timestamp"
+    },
+    {
+      "name": "dataset_version",
+      "type": "string",
+      "required": true,
+      "description": "Dataset version this staging snapshot feeds"
+    }
+  ],
+  "known_risks": [
+    "Online handles are not legal names: never join them to RK9 or MunchStats identities",
+    "Organisers choose whether lists are public; a player without a published list has standings and pairings but no roster rows",
+    "Monotype and other house-rule events share the format label; the extractor drops Monotype by name and events under 16 players",
+    "Unauthenticated rate limit of 50 requests per 5 minutes; a key raises it for public-facing projects"
+  ]
+}

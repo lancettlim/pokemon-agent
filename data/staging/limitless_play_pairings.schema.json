@@ -1,0 +1,91 @@
+{
+  "source_name": "Limitless Online",
+  "source_url": "https://play.limitlesstcg.com/api",
+  "refresh_cadence": "with limitless_play",
+  "records_captured": [
+    "Round-by-round pairings and winners of the same tournaments (Swiss phase 1, top cut phases 2+)"
+  ],
+  "fields": [
+    {
+      "name": "tournament_id",
+      "type": "string",
+      "required": true,
+      "description": "Limitless' tournament id"
+    },
+    {
+      "name": "phase",
+      "type": "integer",
+      "required": true,
+      "description": "Tournament phase: 1 is Swiss, later phases are the top cut"
+    },
+    {
+      "name": "round_number",
+      "type": "integer",
+      "required": true,
+      "description": "Round within the tournament"
+    },
+    {
+      "name": "table_number",
+      "type": "integer",
+      "required": false,
+      "description": "Table, absent for a bye"
+    },
+    {
+      "name": "player1_handle",
+      "type": "string",
+      "required": true,
+      "description": "First player's handle"
+    },
+    {
+      "name": "player2_handle",
+      "type": "string",
+      "required": false,
+      "description": "Second player's handle; empty for a bye"
+    },
+    {
+      "name": "winner_handle",
+      "type": "string",
+      "required": false,
+      "description": "The winner's handle, \"0\" for a tie, \"-1\" for no result"
+    },
+    {
+      "name": "fetched_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "When this tournament's rows were last fetched from the API. Unlike extracted_at_utc it survives a reuse, so a copy fetched mid-event is fetched again rather than kept (pipelines/extract/limitless_play.py, _is_final)."
+    },
+    {
+      "name": "source_name",
+      "type": "string",
+      "required": true,
+      "description": "Constant: Limitless Online"
+    },
+    {
+      "name": "source_url",
+      "type": "string",
+      "required": true,
+      "description": "The tournament's standings (or pairings) page on play.limitlesstcg.com"
+    },
+    {
+      "name": "source_record_id",
+      "type": "string",
+      "required": true,
+      "description": "Unique row id within the source"
+    },
+    {
+      "name": "extracted_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "ISO-8601 UTC extraction timestamp"
+    },
+    {
+      "name": "dataset_version",
+      "type": "string",
+      "required": true,
+      "description": "Dataset version this staging snapshot feeds"
+    }
+  ],
+  "known_risks": [
+    "The API reports a tie as 0 and no result as -1 rather than a handle"
+  ]
+}

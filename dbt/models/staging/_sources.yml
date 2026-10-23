@@ -47,6 +47,16 @@ sources:
           - row_count_anomaly:
               config:
                 meta: {category: row_count_anomaly, source_name: pokeapi}
+      - name: pokeapi_names
+        description: "Raw PokéAPI localised Pokémon names (Japanese, Spanish, French, German), refreshed with the weekly pokeapi run (docs/upgrade-plan-2027q2.md, Q4). See data/staging/pokeapi_names.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 14, period: day}
+          error_after: {count: 21, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: pokeapi_names}
       - name: pokeapi_move
         description: "Raw PokéAPI move detail rows, scoped to moves seen in tournament rosters. See data/staging/pokeapi_move.schema.json."
         loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
@@ -117,6 +127,74 @@ sources:
           - row_count_anomaly:
               config:
                 meta: {category: row_count_anomaly, source_name: limitless}
+      - name: limitless_play
+        description: "Raw Limitless online-tournament team sheets, one row per slot (docs/upgrade-plan-2027q2.md, S1). See data/staging/limitless_play.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: limitless_play}
+      - name: limitless_play_pairings
+        description: "Raw Limitless online-tournament pairings and winners. See data/staging/limitless_play_pairings.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: limitless_play_pairings}
+      # No row_count_anomaly: an upcoming list can rightly halve overnight
+      # (a big weekend's events start), which says nothing about the source.
+      - name: limitless_play_upcoming
+        description: "Raw Limitless upcoming online tournaments (docs/upgrade-plan-2027q2.md, list #31). See data/staging/limitless_play_upcoming.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+      - name: smogon_ladder
+        description: "Raw Smogon monthly Showdown ladder usage per Pokémon (docs/upgrade-plan-2027q2.md, S2). See data/staging/smogon_ladder.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: smogon_ladder}
+      - name: smogon_ladder_counters
+        description: "Raw Smogon ladder checks and counters, from the same files. See data/staging/smogon_ladder_counters.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: smogon_ladder_counters}
+      - name: smogon_ladder_spreads
+        description: "Raw Smogon ladder Stat Point spreads, from the same files. See data/staging/smogon_ladder_spreads.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: smogon_ladder_spreads}
+      - name: showdown_replays
+        description: "Raw Showdown ladder replays, one row per battle side (docs/upgrade-plan-2027q2.md, S3). See data/staging/showdown_replays.schema.json."
+        loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+        data_tests:
+          - row_count_anomaly:
+              config:
+                meta: {category: row_count_anomaly, source_name: showdown_replays}
       - name: pokebase
         description: "Raw PokéBase per-regulation Champions legal-pool membership. See data/staging/pokebase.schema.json."
         loaded_at_field: "CAST(extracted_at_utc AS TIMESTAMP)"

@@ -27,7 +27,7 @@ with members as (
         then 1
       else 0
     end as is_complete_slot
-  from {{ ref('int_champions_roster') }} roster
+  from {{ ref('int_champions_roster_official') }} roster
 ),
 teams as (
   select

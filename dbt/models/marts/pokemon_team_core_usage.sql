@@ -59,7 +59,7 @@ select
   ) as partner_share,
   row_number() over (
     partition by regulation_scope, pokemon_key
-    order by co_occurrence_count desc
+    order by co_occurrence_count desc, partner_pokemon_key
   ) as usage_rank
 from mirrored
 order by regulation_scope, pokemon_key, co_occurrence_count desc

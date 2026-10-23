@@ -61,6 +61,9 @@ roster as (
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = member.pokemon_key
     and champions.is_legal = true
+  -- Official events only (docs/upgrade-plan-2027q2.md, S1): RK9 pairings
+  -- exist only for them, and the official scopes are "m-c" and 'all'.
+  where member.scope_population = 'official'
 ),
 
 scoped_teams as (

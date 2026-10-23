@@ -15,6 +15,26 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_usage_summary}
     columns:
+      - name: team_share
+        description: >
+          Share of the partition's teams that brought this Pokémon
+          (usage_count over the team count): the headline usage metric
+          (docs/upgrade-plan-2027q2.md, V1), the unit the official usage
+          card, Pikalytics and Smogon report.
+      - name: usage_share
+        description: >
+          Share of all roster slots (six per team), about one sixth of
+          team_share. Kept for tooltips and local queries; team_share is the
+          headline.
+      - name: scope_team_count
+        description: >
+          Teams in the (regulation_scope, event_tier) partition,
+          team_share's denominator. Counts every team, including any whose
+          members fall outside the current legal pool.
+      - name: usage_count
+        description: >
+          Teams (and roster slots: a Pokémon appears at most once per team)
+          that brought this Pokémon in the partition.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -304,7 +324,8 @@ models:
       overall usage_count/usage_share/win_rate/record_count.
       max_investment_speed (backlog.md #16) is the Level-50 Speed stat
       under the standard "max speed investment" competitive convention
-      (252 EVs, a beneficial nature, 31 IV) rather than raw base speed --
+      (32 Stat Points, a beneficial Stat Alignment, IVs fixed at 31 in
+      Champions) rather than raw base speed --
       see pokemon_speed_tiers below for the full modified-speed bracket
       table built on top of it. Written to
       data/marts/pokemon_champions_profile.csv.
@@ -315,6 +336,12 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_champions_profile}
     columns:
+      - name: team_share
+        description: >
+          Share of the partition's teams that brought this Pokémon
+          (usage_count over the team count): the headline usage metric
+          (docs/upgrade-plan-2027q2.md, V1), the unit the official usage
+          card, Pikalytics and Smogon report.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -336,6 +363,17 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_usage_by_regulation}
     columns:
+      - name: team_share
+        description: >
+          Share of the partition's teams that brought this Pokémon
+          (usage_count over the team count): the headline usage metric
+          (docs/upgrade-plan-2027q2.md, V1), the unit the official usage
+          card, Pikalytics and Smogon report.
+      - name: usage_share
+        description: >
+          Share of all roster slots (six per team), about one sixth of
+          team_share. Kept for tooltips and local queries; team_share is the
+          headline.
       - name: regulation_code
         data_tests:
           - not_null:
@@ -362,6 +400,21 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_regulation_movers}
     columns:
+      - name: team_share
+        description: >
+          This regulation's team share (see
+          pokemon_usage_summary.team_share).
+      - name: previous_team_share
+        description: >
+          The previous regulation's team share.
+      - name: team_share_delta
+        description: >
+          team_share minus previous_team_share, in share points: the
+          headline 'What changed' delta.
+      - name: usage_share_delta
+        description: >
+          The same delta over roster-slot shares, about one sixth of
+          team_share_delta.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -409,6 +462,14 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_placement_weighted_usage}
     columns:
+      - name: top_cut_team_share
+        description: >
+          Share of the scope's top-8 teams that brought the Pokémon.
+      - name: weighted_team_share
+        description: >
+          The Pokémon's teams' summed 1/placement weight over every placed
+          team's: team share where a win counts fully and a 10th place a
+          tenth.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -429,6 +490,9 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_usage_by_event_date}
     columns:
+      - name: team_share
+        description: >
+          Share of that date's teams that brought the Pokémon.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -577,6 +641,13 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_usage_by_country}
     columns:
+      - name: team_share
+        description: >
+          Share of the country's teams that brought the Pokémon, over
+          country_team_count.
+      - name: country_team_count
+        description: >
+          Teams whose player reported this country.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -608,6 +679,12 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_speed_tiers}
     columns:
+      - name: team_share
+        description: >
+          Share of the partition's teams that brought this Pokémon
+          (usage_count over the team count): the headline usage metric
+          (docs/upgrade-plan-2027q2.md, V1), the unit the official usage
+          card, Pikalytics and Smogon report.
       - name: pokemon_key
         data_tests:
           - not_null:
@@ -798,6 +875,374 @@ models:
         description: "The placement-1 team's Pokémon, pipe-delimited in slot order."
       - name: recency_rank
         description: "1 for the regulation's newest event, counting back."
+  - name: pokemon_event_phase_usage
+    description: >
+      Day 2 conversion (docs/upgrade-plan-2027q2.md, E1): each Pokémon's
+      share of the teams that reached Day 2 or the top cut against its
+      share of the whole field at the same events, and the ratio between
+      them. Official events with RK9 pairings; Day 2 and the top cut are
+      read off the round structure (int_event_phases). Two grains:
+      scope_kind 'event' (event_id set, scope_code the event's regulation)
+      and 'regulation' (scope_code a regulation or 'all', event_id null).
+      Feeds event pages' conversion table and the Top 12 board's Day 2
+      switch. Written to data/marts/pokemon_event_phase_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['scope_kind', 'scope_code', 'event_id', 'phase', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_event_phase_usage}
+    columns:
+      - name: phase
+        description: "'day2' or 'top_cut'."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['day2', 'top_cut']
+              config:
+                meta: {category: mart_quality, table_name: pokemon_event_phase_usage}
+      - name: team_count
+        description: "Teams in the phase that brought the Pokémon."
+      - name: phase_team_count
+        description: "Teams in the phase: the share's n."
+      - name: team_share
+        description: "team_count / phase_team_count."
+      - name: field_team_count
+        description: "Every team at the same events: the field's n."
+      - name: field_team_share
+        description: "The Pokémon's share of the whole field at the same events."
+      - name: conversion
+        description: "team_share / field_team_share; 1.0 means it reached the phase at its field rate."
+      - name: is_reliable
+        description: "Both sides have at least 100 teams (the What changed panel's floor). When false, show counts but not the ratio."
+  - name: tournament_top_cut_matches
+    description: >
+      The single-elimination bracket of each official event with RK9
+      pairings (docs/upgrade-plan-2027q2.md, E2): one row per top-cut
+      match, each side with its player, placement and six Pokémon. Team vs
+      team: no source names the Pokémon brought to a game. Written to
+      data/marts/tournament_top_cut_matches.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['match_id']
+          config:
+            meta: {category: mart_quality, table_name: tournament_top_cut_matches}
+    columns:
+      - name: bracket_round
+        description: "1 for the top cut's first round, counting up to the final."
+      - name: top_cut_size
+        description: "Players in the top cut: its first round's slots less the byes (13 in a 16-slot bracket with three byes)."
+      - name: bracket_size
+        description: "Slots in the top cut's first round (16, or 32)."
+      - name: round_label
+        description: "'Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals' or 'Final'."
+      - name: vod_url
+        description: "A video of the match from the curated featured_match_vods seed (S5), with `&t=<n>s` when it starts partway in; empty for a match with none."
+  - name: tournament_top_cut_paths
+    description: >
+      Every Masters round each top-cut team played (docs/upgrade-plan-
+      2027q2.md, E2), Day 1 to the end, with the opponent and the result:
+      the path an event page shows when a bracket player is clicked. Team
+      vs team. Written to data/marts/tournament_top_cut_paths.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['event_id', 'team_id', 'round_number']
+          config:
+            meta: {category: mart_quality, table_name: tournament_top_cut_paths}
+    columns:
+      - name: phase
+        description: "'Day 1', 'Day 2' or 'Top cut'."
+      - name: result
+        description: "W, L, T or Bye, for this team."
+  - name: ladder_bring_rate
+    description: >
+      How often each Pokémon is shown at team preview, brought, led and
+      Mega Evolved on the Showdown ladder, and how its side does when it is
+      brought versus left at home (docs/upgrade-plan-2027q2.md, S3; laundry
+      list #27), from sampled rated replays (pipelines/extract/
+      showdown_replays.py). One row per regulation, variant (bo1, bo3, or
+      'all' for both) and Pokémon. Shown and led read every sampled battle;
+      brought, benched and their win rates read complete battles only (both
+      sides revealed all the Pokémon they brought), since a Pokémon brought
+      but never sent in looks benched. The Showdown ladder population, never
+      tournament data: official events aren't played on Showdown. A Mega
+      counts with its base Pokémon (team preview hides the stone). Written
+      to data/marts/ladder_bring_rate.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: ladder_bring_rate}
+    columns:
+      - name: battles
+        description: Sampled battles in the regulation and variant.
+      - name: complete_battles
+        description: Of those, the battles where both sides revealed all the Pokémon they brought.
+      - name: shown
+        description: Sides that showed this Pokémon at team preview.
+      - name: shown_share
+        description: shown over every sampled side.
+      - name: led
+        description: Sides that led with it.
+      - name: lead_rate
+        description: led over shown.
+      - name: complete_shown
+        description: Sides in complete battles that showed it.
+      - name: brought
+        description: Of those, sides that brought it (it entered the battle).
+      - name: bring_rate
+        description: brought over complete_shown.
+      - name: win_rate_brought
+        description: The side's win rate when it was brought, in decided complete battles.
+      - name: win_rate_benched
+        description: The side's win rate when it stayed home, in decided complete battles.
+      - name: mega_evolved
+        description: Sides on which it Mega Evolved.
+      - name: shown_rank
+        description: Rank by shown, ties broken on pokemon_key.
+  - name: ladder_lead_pairs
+    description: >
+      The 50 pairs Showdown ladder players most often lead with per
+      regulation and variant (bo1, bo3, 'all'), from sampled rated replays
+      (docs/upgrade-plan-2027q2.md, S3; laundry list #27): how often each
+      opens a battle and that side's win rate in decided battles. The Showdown
+      ladder population, never tournament data. A Mega counts with its base
+      Pokémon. Written to data/marts/ladder_lead_pairs.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'pokemon_key_1', 'pokemon_key_2']
+          config:
+            meta: {category: mart_quality, table_name: ladder_lead_pairs}
+    columns:
+      - name: pokemon_key_1
+        description: The pair's first Pokémon (the lower key).
+      - name: pokemon_key_2
+        description: The pair's second Pokémon.
+      - name: sides_led
+        description: Sides that opened with the pair.
+      - name: lead_share
+        description: sides_led over every sampled side that led with two Pokémon.
+      - name: win_rate
+        description: Those sides' win rate in decided battles.
+      - name: pair_rank
+        description: Rank by sides_led, ties broken on the keys.
+  - name: online_upcoming_events
+    description: >
+      Upcoming Limitless online tournaments of the regulation in force (and
+      one registered to start within 30 days), from the newest
+      limitless_play_upcoming snapshot (docs/upgrade-plan-2027q2.md, list
+      #31): one row per tournament, from three hours before the snapshot
+      was read on. Organiser-run online events, never official ones; no
+      player appears. Feeds the Events tab's "Upcoming online tournaments"
+      list, which shows local times and drops tournaments that have
+      started. Written to data/marts/online_upcoming_events.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['tournament_id']
+          config:
+            meta: {category: mart_quality, table_name: online_upcoming_events}
+    columns:
+      - name: starts_at_utc
+        description: "Scheduled start, ISO-8601 UTC (\"2026-10-23T12:00:00Z\")."
+      - name: platform
+        description: "'Switch' (the game) or 'Showdown' (Pokémon Showdown)."
+      - name: registrations
+        description: Players registered when the page was read.
+      - name: player_cap
+        description: The registration cap, empty when the organiser set none.
+      - name: registration_open
+        description: Whether registration was open when the page was read.
+  - name: archetype_matchups
+    description: >
+      Detected archetype vs detected archetype records from decided official
+      matches (docs/upgrade-plan-2027q2.md, list #30): one row per
+      archetype and opponent archetype, both directions present, mirrors
+      left out. Team vs team: no source says which four Pokémon were
+      brought. Feeds the Archetypes tab's matchup heatmap. Written to
+      data/marts/archetype_matchups.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['archetype_key', 'opponent_archetype_key']
+          config:
+            meta: {category: mart_quality, table_name: archetype_matchups}
+    columns:
+      - name: matches
+        description: "Decided matches between the two archetypes' primary teams."
+      - name: wins
+        description: "Matches archetype_key's team won."
+      - name: win_rate
+        description: "wins / matches."
+  - name: pokemon_localised_names
+    description: >
+      Each Pokémon's name in Japanese, Spanish, French and German
+      (docs/upgrade-plan-2027q2.md, Q4): one row per pokemon_key and
+      language, for the dashboard's name-language switch. Names only;
+      Portuguese uses the English names. Written to
+      data/marts/pokemon_localised_names.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['pokemon_key', 'language']
+          config:
+            meta: {category: mart_quality, table_name: pokemon_localised_names}
+    columns:
+      - name: language
+        description: "ja, es, fr or de."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['ja', 'es', 'fr', 'de']
+              config:
+                meta: {category: mart_quality, table_name: pokemon_localised_names}
+      - name: localised_name
+        description: "The Pokémon's name in the language."
+      - name: name_rule
+        description: "species, pokeapi_form, mega, form_label, regional, gender or fallback: whether PokéAPI published the name or it was composed (data/staging/pokeapi_names.schema.json)."
+  - name: ladder_pokemon_usage
+    description: >
+      Showdown ladder usage per Pokémon (docs/upgrade-plan-2027q2.md, S2,
+      decision D2), from Smogon's monthly statistics: one row per
+      regulation, ladder (variant), rating cutoff and Pokémon, beside the
+      official tournament team share for the same regulation. A separate
+      population, never blended into tournament figures. Feeds the Usage
+      tab's Ladder vs tournament view. Written to
+      data/marts/ladder_pokemon_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'cutoff', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: ladder_pokemon_usage}
+    columns:
+      - name: month
+        description: "The month the statistics cover (YYYY-MM): the newest one the regulation was in force for at least half of."
+      - name: variant
+        description: "'bo1' or 'bo3': the Showdown ladder."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['bo1', 'bo3']
+              config:
+                meta: {category: mart_quality, table_name: ladder_pokemon_usage}
+      - name: cutoff
+        description: "Rating cutoff: 1760 weights battles toward players rated above 1760; 0 counts every battle."
+      - name: battles
+        description: "Battles in the month's file: the n behind every share."
+      - name: ladder_name
+        description: "Showdown's display name for the Pokémon."
+      - name: raw_count
+        description: "Teams it appeared on, unweighted."
+      - name: ladder_usage
+        description: "Weighted share of ladder teams it appeared on, 0 to 1."
+      - name: ladder_rank
+        description: "1 for the most-used Pokémon on that ladder and cutoff."
+      - name: tournament_team_share
+        description: "Share of the regulation's official tournament teams that brought it (pokemon_usage_by_regulation); null when it was not legal in the latest snapshot."
+      - name: tournament_rank
+        description: "Its usage rank in the regulation's official events."
+      - name: ladder_gap
+        description: "ladder_usage minus tournament_team_share: positive where the ladder plays it more."
+  - name: ladder_checks_counters
+    description: >
+      Showdown ladder checks and counters (docs/upgrade-plan-2027q2.md,
+      S2): for each Pokémon, the opponents that most often KO it or force
+      it out, from the battle logs of the regulation's month, all ratings
+      (cutoff 0, the only files that carry them). Pokémon vs Pokémon on the
+      ladder, the only battle-level matchup signal any source publishes;
+      tournament data is team vs team and this is never presented as
+      tournament data. Mirror matches are dropped. Feeds the Pokémon
+      profile's Checks and counters panel. Written to
+      data/marts/ladder_checks_counters.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'pokemon_key', 'counter_pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: ladder_checks_counters}
+    columns:
+      - name: counter_pokemon_key
+        description: "The opponent that checks or counters pokemon_key."
+      - name: encounters
+        description: "Times the pair met and one was KO'd or switched out (Smogon's n). At least 100."
+      - name: ko_or_switch_rate
+        description: "Share of those encounters in which pokemon_key was KO'd or switched out, 0 to 1."
+      - name: std_dev
+        description: "Standard deviation of ko_or_switch_rate."
+      - name: score
+        description: "ko_or_switch_rate minus four standard deviations: Smogon's own ranking."
+      - name: counter_rank
+        description: "1 for pokemon_key's strongest check or counter on that ladder."
+  - name: ladder_stat_point_spreads
+    description: >
+      The Stat Point spreads Showdown ladder players ran
+      (docs/upgrade-plan-2027q2.md, S2, decision D3): per regulation,
+      ladder, rating cutoff and Pokémon, its ten most-run nature and spread
+      combinations. Ladder only: official team sheets publish no spreads,
+      so these never enter a tournament entity, a team sheet or the
+      Builder's sets, and every consumer labels them "Showdown ladder;
+      tournament sheets don't publish spreads". Written to
+      data/marts/ladder_stat_point_spreads.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'cutoff', 'pokemon_key', 'spread_rank']
+          config:
+            meta: {category: mart_quality, table_name: ladder_stat_point_spreads}
+    columns:
+      - name: nature
+        description: "The spread's nature."
+      - name: sp_hp
+        description: "Stat Points in HP (sp_atk, sp_def, sp_spa, sp_spd and sp_spe likewise): 66 per Pokémon, at most 32 in one stat."
+      - name: share
+        description: "The spread's share of all the Pokémon's spreads in the file, 0 to 1."
+      - name: spread_rank
+        description: "1 for the most-run spread."
+  - name: online_event_summary
+    description: >
+      One row per Limitless online tournament (docs/upgrade-plan-2027q2.md,
+      S1): name, date, regulation, the platform's entrant count, how many
+      published team sheets it contributes, decided pairings and the
+      winning team. Online events are their own population and never
+      appear in tournament_event_summary. Feeds the Events tab's online
+      list, which links out to play.limitlesstcg.com. Written to
+      data/marts/online_event_summary.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['event_id']
+          config:
+            meta: {category: mart_quality, table_name: online_event_summary}
+    columns:
+      - name: event_id
+        description: "The event's tournament_event.event_id (\"LP-<tournament id>\")."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: online_event_summary}
+      - name: regulation_code
+        description: "The Champions regulation the tournament was played under."
+        data_tests:
+          - not_null:
+              config:
+                meta: {category: mart_quality, table_name: online_event_summary}
+      - name: registered_player_count
+        description: "Entrants as the platform reports them, published list or not."
+      - name: team_count
+        description: "Players whose team sheet was published; online usage rests on these."
+      - name: match_count
+        description: "Decided pairings, Swiss and top cut."
+      - name: winner_count
+        description: "Teams holding placing 1. Above 1 the platform shared first place, and the winner_* columns are null rather than a guess."
+      - name: source_url
+        description: "The tournament's standings page on play.limitlesstcg.com."
+      - name: recency_rank
+        description: "1 for the regulation's newest online tournament, counting back."
   - name: tournament_team_results
     description: >
       One row per Champions team: event, player (as the source spells the
@@ -937,6 +1382,17 @@ models:
           config:
             meta: {category: mart_quality, table_name: pokemon_event_usage_vs_regulation}
     columns:
+      - name: event_team_share
+        description: >
+          Share of the event's teams that brought the Pokémon, usage_count
+          over event_team_count.
+      - name: regulation_team_share
+        description: >
+          The Pokémon's team share across the whole regulation.
+      - name: team_share_delta
+        description: >
+          event_team_share minus regulation_team_share: how much more (or
+          less) the field brought it than usual.
       - name: event_id
         description: "The event."
         data_tests:
@@ -1066,3 +1522,58 @@ models:
 # dashboard-facing output and aren't part of the release package (see
 # CLAUDE.md's "Repository structure"), so a mart-quality failure should be
 # visible and actionable without blocking `pipelines.cli release`.
+  - name: mega_stone_usage
+    description: >
+      Which Mega Stones teams carry (docs/upgrade-plan-2027q2.md, E3): one
+      row per Mega form per regulation scope (scope_kind 'regulation',
+      event_id null) and per event (scope_kind 'event'), with its share of
+      the scope's teams. A Mega holder is recorded as its Mega form, so the
+      roster holds this directly. Written to data/marts/mega_stone_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['scope_kind', 'scope_code', 'event_id', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: mega_stone_usage}
+    columns:
+      - name: scope_kind
+        description: >
+          'regulation' (the whole regulation scope, event_id null) or 'event'
+          (one event's teams).
+      - name: scope_code
+        description: >
+          The regulation ("m-c", ..., or 'all') for a 'regulation' row; the
+          event's regulation for an 'event' row.
+      - name: item_name
+        description: >
+          The Mega Stone that form holds (its most common held item).
+      - name: team_count
+        description: >
+          Teams in the scope carrying this Mega form.
+      - name: scope_team_count
+        description: >
+          Teams in the scope: the regulation's (or 'all') or the event's.
+      - name: team_share
+        description: >
+          team_count over scope_team_count: the share of teams carrying
+          this Mega.
+  - name: team_mega_count
+    description: >
+      The share of teams carrying zero, one, two (or, rarely, more) Mega
+      forms, per regulation scope and per event, the second half of the
+      Mega usage panel (docs/upgrade-plan-2027q2.md, E3). Written to
+      data/marts/team_mega_count.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['scope_kind', 'scope_code', 'event_id', 'mega_count']
+          config:
+            meta: {category: mart_quality, table_name: team_mega_count}
+    columns:
+      - name: mega_count
+        description: >
+          How many Mega forms a team's sheet lists.
+      - name: team_share
+        description: >
+          The share of the scope's teams with exactly mega_count Megas; the
+          rows of one scope sum to 1.

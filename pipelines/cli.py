@@ -6,6 +6,7 @@ Subcommands:
     release            Publish a versioned release package (gated on validate)
     render-card        Render a team card PNG, from a team_id or an ad-hoc build spec
     build-dashboard    Build the static analytics dashboard site from data/marts/*.csv
+    build-artifact-site  Build the lighter copy of the dashboard for its claude.ai artifact
 
 Staging snapshots (see `_run_extract` below) are written date-partitioned,
 one CSV per source per UTC calendar day, under a per-source subdirectory of
@@ -29,15 +30,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pipelines import versioning
+from pipelines.dashboard import artifact as dashboard_artifact
 from pipelines.dashboard import build as dashboard_build
 from pipelines.extract import (
     bulbagarden,
     limitless,
+    limitless_play,
     munchstats,
     opgg,
     pokeapi,
     pokebase,
     rk9,
+    showdown_replays,
+    smogon_ladder,
 )
 from pipelines.extract import http as extract_http
 from pipelines.extract import summary as extraction_summary
@@ -57,6 +62,16 @@ _EXTRACTORS = {
     "munchstats": (munchstats, "munchstats"),
     "rk9": (rk9, "rk9_pairings"),
     "limitless": (limitless, "limitless"),
+    # Online tournaments (docs/upgrade-plan-2027q2.md, S1): writes its
+    # pairings to limitless_play_pairings too, see _run_limitless_play.
+    "limitless_play": (limitless_play, "limitless_play"),
+    # Showdown ladder statistics (docs/upgrade-plan-2027q2.md, S2): also
+    # writes smogon_ladder_counters and smogon_ladder_spreads, see
+    # _run_smogon_ladder.
+    "smogon_ladder": (smogon_ladder, "smogon_ladder"),
+    # Showdown ladder replays (docs/upgrade-plan-2027q2.md, S3): a capped,
+    # paced sample of rated battles, reusing every battle already held.
+    "showdown_replays": (showdown_replays, "showdown_replays"),
     "opgg": (opgg, "opgg_champions"),
     "pokebase": (pokebase, "pokebase"),
     "bulbagarden": (bulbagarden, "bulbagarden"),
@@ -77,10 +92,23 @@ _RETENTION_COUNTS = {
     # render never changes), so it keeps the same history as the sprite
     # manifest it sits beside rather than the weekly sources' 12.
     "pokeapi_artwork": 10,
+    # Localised names (Q4) refresh with the weekly pokeapi run.
+    "pokeapi_names": 12,
     "opgg_champions": 14,
     "munchstats": 7,
     "rk9_pairings": 7,
     "limitless": 14,
+    "limitless_play": 14,
+    "limitless_play_pairings": 14,
+    "limitless_play_upcoming": 14,
+    # Smogon publishes monthly and a held month is reused, so a daily run
+    # only re-stamps it; three snapshots (~14MB each) cover a missed run.
+    "smogon_ladder": 3,
+    "smogon_ladder_counters": 3,
+    "smogon_ladder_spreads": 3,
+    # Each snapshot holds every battle kept (up to 5,000 per format), so a
+    # few cover a missed run.
+    "showdown_replays": 3,
     "pokebase": 14,
     "bulbagarden": 10,
 }
@@ -98,6 +126,8 @@ _ENDPOINTS = {
     "pokeapi_move": "https://pokeapi.co/api/v2/move/{move_name}",
     "pokeapi_ability": "https://pokeapi.co/api/v2/ability/{ability_name}",
     "pokeapi_item": "https://pokeapi.co/api/v2/item/{item_name}",
+    "pokeapi_names": "https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/"
+    "{languages,pokemon,pokemon_forms,pokemon_species_names,pokemon_form_names}.csv",
     "pokeapi_artwork": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/"
     "pokemon/other/home/{pokeapi_resource_id}.png",
     "opgg_champions": "https://op.gg/pokemon-champions/pokedex",
@@ -105,7 +135,15 @@ _ENDPOINTS = {
     "stats/tournaments/",
     "rk9_pairings": "https://rk9.gg/pairings/{event_id}?pod={pod}&rnd={round}",
     "limitless": "https://limitlessvgc.com/tournaments, /tournaments/{id}, /teams/{id}",
+    "limitless_play": "https://play.limitlesstcg.com/api/tournaments?game=VGC, "
+    "/api/tournaments/{id}/standings",
+    "limitless_play_pairings": "https://play.limitlesstcg.com/api/tournaments/{id}/pairings",
+    "limitless_play_upcoming": "https://play.limitlesstcg.com/tournaments/upcoming"
+    "?game=VGC&format={limitless_play_format}",
     "pokebase": "https://pokebase.app/pokemon-champions/pokemon",
+    "smogon_ladder": "https://www.smogon.com/stats/{month}/chaos/{metagame}[bo3]-{cutoff}.json",
+    "showdown_replays": "https://replay.pokemonshowdown.com/search.json?format={format_id}"
+    "&before={uploadtime}, /{replay_id}.json",
     "bulbagarden": "https://archives.bulbagarden.net/w/api.php (Category:Champions_menu_sprites)",
 }
 
@@ -114,6 +152,9 @@ _SOURCE_NAME_SUFFIXES = {
     "pokeapi_ability": " (ability detail)",
     "pokeapi_item": " (item detail)",
     "pokeapi_artwork": " (artwork)",
+    "pokeapi_names": " (localised names)",
+    "limitless_play_pairings": " (pairings)",
+    "limitless_play_upcoming": " (upcoming)",
 }
 
 
@@ -255,6 +296,117 @@ def _run_tracked_extract(
     return True
 
 
+def live_event_ids(today=None) -> list[str]:
+    """Events running now or just over (munchstats.is_live), from the
+    newest MunchStats snapshot: run `extract munchstats` first and a new
+    event's date is already in it. Used to re-fetch live RK9 pairings (E4)
+    and by `live-events`, which the event-weekend workflow asks before it
+    spends a rebuild."""
+    path = _latest_snapshot_path("munchstats")
+    if path is None:
+        return []
+    live: dict[str, None] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("event_id") and munchstats.is_live(row.get("event_date"), today):
+                live[row["event_id"]] = None
+    return list(live)
+
+
+def _run_limitless_play(dataset_version: str) -> int:
+    """Online tournaments in three tracked passes sharing one rate limiter:
+    team sheets (limitless_play), then the pairings of the same tournaments
+    (limitless_play_pairings), each reusing its previous snapshot for
+    settled tournaments, then the upcoming tournaments list
+    (limitless_play_upcoming, list #31). The passes carry one extraction
+    time, so a run that crosses midnight UTC still lands them under the
+    same snapshot date (staging reads snapshot_date from extracted_at_utc)."""
+    extracted_at = datetime.now(UTC)
+    extracted_at_utc = extracted_at.isoformat()
+    date_str = extracted_at.strftime("%Y-%m-%d")
+    output_path = _dated_snapshot_path("limitless_play", date_str)
+    pairings_path = _dated_snapshot_path("limitless_play_pairings", date_str)
+    upcoming_path = _dated_snapshot_path("limitless_play_upcoming", date_str)
+    covered: list[dict] = []
+
+    def roster() -> None:
+        covered.extend(
+            limitless_play.extract(
+                output_path,
+                dataset_version=dataset_version,
+                previous_snapshot_path=_latest_snapshot_path("limitless_play"),
+                extracted_at_utc=extracted_at_utc,
+            )
+        )
+
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(limitless_play, "limitless_play"),
+        staging_subdir="limitless_play",
+        output_path=output_path,
+        dataset_version=dataset_version,
+        call=roster,
+    )
+    if not ok:
+        return 1
+    _prune_old_snapshots("limitless_play")
+    previous_pairings = _latest_snapshot_path("limitless_play_pairings")
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(limitless_play, "limitless_play_pairings"),
+        staging_subdir="limitless_play_pairings",
+        output_path=pairings_path,
+        dataset_version=dataset_version,
+        call=lambda: limitless_play.extract_pairings(
+            pairings_path,
+            covered,
+            dataset_version=dataset_version,
+            previous_snapshot_path=previous_pairings,
+            extracted_at_utc=extracted_at_utc,
+        ),
+    )
+    if not ok:
+        return 1
+    _prune_old_snapshots("limitless_play_pairings")
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(limitless_play, "limitless_play_upcoming"),
+        staging_subdir="limitless_play_upcoming",
+        output_path=upcoming_path,
+        dataset_version=dataset_version,
+        call=lambda: limitless_play.extract_upcoming(
+            upcoming_path, dataset_version=dataset_version, extracted_at_utc=extracted_at_utc
+        ),
+    )
+    if not ok:
+        return 1
+    _prune_old_snapshots("limitless_play_upcoming")
+    return 0
+
+
+def _run_smogon_ladder(dataset_version: str) -> int:
+    """Smogon's ladder statistics: one tracked pass writing usage
+    (smogon_ladder), checks and counters (smogon_ladder_counters) and Stat
+    Point spreads (smogon_ladder_spreads) from the same files, each reusing
+    the previous snapshot's rows for a month it already holds. The
+    extraction summary counts the usage table's rows."""
+    date_str = _snapshot_date()
+    subdirs = ("smogon_ladder", "smogon_ladder_counters", "smogon_ladder_spreads")
+    paths = [_dated_snapshot_path(subdir, date_str) for subdir in subdirs]
+    previous = tuple(_latest_snapshot_path(subdir) for subdir in subdirs)
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(smogon_ladder, "smogon_ladder"),
+        staging_subdir="smogon_ladder",
+        output_path=paths[0],
+        dataset_version=dataset_version,
+        call=lambda: smogon_ladder.extract(
+            *paths, dataset_version=dataset_version, previous_paths=previous
+        ),
+    )
+    if not ok:
+        return 1
+    for subdir in subdirs:
+        _prune_old_snapshots(subdir)
+    return 0
+
+
 def _run_extract(source: str, dataset_version: str) -> int:
     if source == "all":
         for one_source in _EXTRACTORS:
@@ -263,17 +415,27 @@ def _run_extract(source: str, dataset_version: str) -> int:
                 return exit_code
         return 0
 
+    if source == "limitless_play":
+        return _run_limitless_play(dataset_version)
+    if source == "smogon_ladder":
+        return _run_smogon_ladder(dataset_version)
+
     module, staging_subdir = _EXTRACTORS[source]
     date_str = _snapshot_date()
     output_path = _dated_snapshot_path(staging_subdir, date_str)
     extract_kwargs = {}
-    if source in ("munchstats", "rk9"):
+    if source in ("munchstats", "rk9", "showdown_replays"):
         # backlog.md #44: reuse cached rows for an event that hasn't changed
         # since the previous snapshot, instead of re-fetching everything on
         # every scheduled run. For munchstats that's ~106k roster rows
         # behind a metadata signature check; for rk9 it's every round of a
-        # concluded event, whose pairings are immutable once uploaded.
+        # concluded event, whose pairings are immutable once uploaded; for
+        # showdown_replays every battle already sampled.
         extract_kwargs["previous_snapshot_path"] = _latest_snapshot_path(staging_subdir)
+    if source == "rk9":
+        # An event still running is fetched again (E4): its cached pairings
+        # stop at whichever round was live when they were cached.
+        extract_kwargs["refresh_event_ids"] = live_event_ids()
     ok = _run_tracked_extract(
         source_name=_source_display_name(module, staging_subdir),
         staging_subdir=staging_subdir,
@@ -310,6 +472,24 @@ def _run_extract(source: str, dataset_version: str) -> int:
             if not ok:
                 return 1
             _prune_old_snapshots("pokeapi_artwork")
+
+        # Localised names (docs/upgrade-plan-2027q2.md, Q4) for every form
+        # this run just wrote, from PokéAPI's source CSVs: five requests.
+        names_output_path = _dated_snapshot_path("pokeapi_names", date_str)
+        with output_path.open(newline="", encoding="utf-8") as fh:
+            form_names = [row["form_name"] for row in csv.DictReader(fh) if row.get("form_name")]
+        ok = _run_tracked_extract(
+            source_name=_source_display_name(pokeapi, "pokeapi_names"),
+            staging_subdir="pokeapi_names",
+            output_path=names_output_path,
+            dataset_version=dataset_version,
+            call=lambda: pokeapi.extract_names(
+                names_output_path, form_names, dataset_version=dataset_version
+            ),
+        )
+        if not ok:
+            return 1
+        _prune_old_snapshots("pokeapi_names")
 
         moves, abilities, items = _referenced_move_ability_item_names()
         if not moves and not abilities and not items:
@@ -448,6 +628,22 @@ def _run_build_dashboard(
     return 0
 
 
+def _run_build_artifact_site(output_dir: Path) -> int:
+    """The dashboard's claude.ai artifact copy and its publish plan
+    (pipelines/dashboard/artifact.py), beside the site as <dir>.plan.json."""
+    if output_dir.exists() and any(output_dir.iterdir()):
+        print(f"{output_dir} is not empty: build into a fresh directory", file=sys.stderr)
+        return 1
+    dashboard_artifact.build_artifact_site(output_dir)
+    plan_path = output_dir.with_name(output_dir.name + ".plan.json")
+    plan = dashboard_artifact.write_plan(output_dir, plan_path)
+    print(
+        f"Artifact site: {plan['file_count']} files in {len(plan['batches'])} batches; "
+        f"plan written to {plan_path}"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pokemon-champions-cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -465,6 +661,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     subparsers.add_parser("validate", help="Run dbt build and write the validation report")
+
+    subparsers.add_parser(
+        "live-events",
+        help="Print the RK9 ids of events running now or just over, one per line "
+        "(from the newest MunchStats snapshot); exit 1 when there are none",
+    )
 
     release_parser = subparsers.add_parser(
         "release", help="Publish a versioned release package (gated on validate)"
@@ -516,6 +718,13 @@ def main(argv: list[str] | None = None) -> int:
         "move-type icons are always local, offline copies)",
     )
 
+    artifact_parser = subparsers.add_parser(
+        "build-artifact-site",
+        help="Build the lighter copy of the dashboard for its claude.ai artifact, and a "
+        "publish plan beside it",
+    )
+    artifact_parser.add_argument("--output-dir", dest="output_dir", type=Path, required=True)
+
     share_parser = subparsers.add_parser(
         "render-share-cards",
         help="Render the dashboard's share images (newest event's top 8, What changed cards, "
@@ -530,6 +739,11 @@ def main(argv: list[str] | None = None) -> int:
         if dataset_version is None:
             dataset_version = versioning.latest_published_version()
         return _run_extract(args.source, dataset_version)
+    if args.command == "live-events":
+        live = live_event_ids()
+        for event_id in live:
+            print(event_id)
+        return 0 if live else 1
     if args.command == "validate":
         return _run_validate()
     if args.command == "release":
@@ -540,6 +754,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_build_dashboard(
             args.marts_dir, args.normalized_dir, args.output_dir, args.fetch_icons
         )
+    if args.command == "build-artifact-site":
+        return _run_build_artifact_site(args.output_dir)
     if args.command == "render-share-cards":
         return _run_render_share_cards(args.output_dir)
     parser.error(f"Unknown command: {args.command}")

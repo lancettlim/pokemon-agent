@@ -1,4 +1,4 @@
-regulation_code,regulation_name,munchstats_format,limitless_format,start_date,end_date
-m-a,Regulation Set M-A,gen9championsvgc2026regma,m-a,2026-04-08,2026-06-17
-m-b,Regulation Set M-B,gen9championsvgc2026regmb,m-b,2026-06-17,2026-09-09
-m-c,Regulation Set M-C,gen9championsvgc2026regmc,m-c,2026-09-09,2026-12-02
+regulation_code,regulation_name,munchstats_format,limitless_format,start_date,end_date,limitless_play_format
+m-a,Regulation Set M-A,gen9championsvgc2026regma,m-a,2026-04-08,2026-06-17,M-A
+m-b,Regulation Set M-B,gen9championsvgc2026regmb,m-b,2026-06-17,2026-09-09,M-B
+m-c,Regulation Set M-C,gen9championsvgc2026regmc,m-c,2026-09-09,2026-12-02,M-C

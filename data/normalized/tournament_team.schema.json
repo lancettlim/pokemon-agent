@@ -7,14 +7,14 @@
     {"name": "team_id", "type": "string", "required": true, "description": "Primary key; upstream team identifier"},
     {"name": "event_id", "type": "string", "required": true, "description": "Foreign key to tournament_event.event_id"},
     {"name": "player_id", "type": "string", "required": true, "description": "Upstream player identifier"},
-    {"name": "player_name", "type": "string", "required": true, "description": "Player's display name as reported by MunchStats"},
+    {"name": "player_name", "type": "string", "required": true, "description": "Player's display name as the source reports it (an online player's is their Limitless display name, not a legal name)"},
     {"name": "player_country", "type": "string", "required": false, "description": "Player's two-letter country code (e.g. \"IT\"), if reported"},
     {"name": "placement", "type": "integer", "required": true, "description": "Final placement for the team in the event"},
     {"name": "record_wins", "type": "integer", "required": false, "description": "Player's win count for the event, if reported"},
     {"name": "record_losses", "type": "integer", "required": false, "description": "Player's loss count for the event, if reported"},
-    {"name": "source_name", "type": "string", "required": true, "description": "Constant: MunchStats"},
+    {"name": "source_name", "type": "string", "required": true, "description": "\"MunchStats\" for official events, \"Limitless Online\" for online tournaments"},
     {"name": "source_url", "type": "string", "required": true, "description": "Source URL or endpoint the record was resolved from"},
-    {"name": "source_record_id", "type": "string", "required": true, "description": "Upstream MunchStats team identifier"},
+    {"name": "source_record_id", "type": "string", "required": true, "description": "Upstream MunchStats team identifier, or the online team id (\"LP-<tournament>-<handle>\")"},
     {"name": "extracted_at_utc", "type": "string", "required": true, "description": "ISO-8601 UTC extraction timestamp"},
     {"name": "dataset_version", "type": "string", "required": true, "description": "Dataset version this row was published under"}
   ]

@@ -113,6 +113,11 @@ EVENTS = {
 }
 TEAMS_PER_EVENT = 12
 SCOPES = ("m-b", "m-c", "all")
+# Limitless online events (docs/upgrade-plan-2027q2.md, S1): their own
+# scopes, with the usage order reversed so a test can tell them from the
+# official figures, and two tournaments of ONLINE_EVENT_TEAMS teams each.
+ONLINE_SCOPES = ("m-c:online", "all:online")
+ONLINE_EVENT_TEAMS = 200
 
 
 def _write(path: Path, rows: list[dict]) -> None:
@@ -147,7 +152,9 @@ def _rosters() -> list[dict]:
     return teams
 
 
-def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
+def write_fixture_marts(
+    marts_dir: Path, normalized_dir: Path, online_scopes: tuple[str, ...] = ONLINE_SCOPES
+) -> None:
     teams = _rosters()
     _write(
         normalized_dir / "pokemon.csv",
@@ -155,10 +162,18 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
     )
 
     def scoped(fn):
-        return [row for scope in SCOPES for row in fn(scope)]
+        return [row for scope in SCOPES + tuple(online_scopes) for row in fn(scope)]
+
+    def keys_for(scope):
+        return KEYS[::-1] if scope.endswith(":online") else KEYS
 
     def share(i):
         return round(0.1 - i * 0.008, 4)
+
+    # Team share (docs/upgrade-plan-2027q2.md, V1) reads about six times the
+    # roster-slot share: a team has six slots.
+    def tshare(i):
+        return round(share(i) * 6, 4)
 
     _write(
         marts_dir / "pokemon_usage_summary.csv",
@@ -170,10 +185,12 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                     "event_tier": tier,
                     "usage_count": 60 - i * 5,
                     "usage_share": share(i),
+                    "team_share": tshare(i),
+                    "scope_team_count": 100,
                     "usage_rank": i + 1,
                 }
                 for tier in ("", "Regional")
-                for i, key in enumerate(KEYS)
+                for i, key in enumerate(keys_for(scope))
             ]
         ),
     )
@@ -383,6 +400,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 {
                     "usage_count": 60 - i * 5,
                     "usage_share": share(i),
+                    "team_share": tshare(i),
                     "win_rate": round(0.56 - i * 0.015, 4),
                     "record_count": 60 - i * 5,
                 }
@@ -423,6 +441,8 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                     "top_cut_usage_share": round(0.12 - i * 0.01, 4),
                     "placement_weighted_score": 3.2 - i * 0.2,
                     "weighted_usage_share": round(0.11 - i * 0.009, 4),
+                    "top_cut_team_share": round(0.7 - i * 0.06, 4),
+                    "weighted_team_share": round(0.66 - i * 0.054, 4),
                     "weighted_usage_rank": i + 1,
                 }
                 for i, key in enumerate(KEYS)
@@ -484,6 +504,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "pokemon_key": key,
                 "usage_count": 50 - i * 4,
                 "usage_share": share(i) + (0.01 if code == "m-b" else 0),
+                "team_share": round((share(i) + (0.01 if code == "m-b" else 0)) * 6, 4),
                 "usage_rank": i + 1,
                 "win_rate": round(0.55 - i * 0.01, 4),
                 "record_count": 50 - i * 4,
@@ -506,6 +527,11 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "previous_usage_share": 0 if key == "pelipper" else round(0.09 - (i % 3) * 0.02, 4),
                 "previous_usage_rank": "" if key == "pelipper" else 8 - i,
                 "usage_share_delta": round(share(i) - (0.09 - (i % 3) * 0.02), 4),
+                "team_share": tshare(i),
+                "previous_team_share": 0
+                if key == "pelipper"
+                else round((0.09 - (i % 3) * 0.02) * 6, 4),
+                "team_share_delta": round((share(i) - (0.09 - (i % 3) * 0.02)) * 6, 4),
                 "rank_change": i - 3,
                 "win_rate": 0.53,
                 "previous_win_rate": 0.5,
@@ -527,6 +553,7 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "event_date": event[1],
                 "usage_count": 30 - i * 2,
                 "usage_share": share(i),
+                "team_share": tshare(i),
                 "usage_rank": i + 1,
             }
             for event in EVENTS.values()
@@ -616,6 +643,8 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "player_country": country,
                 "usage_count": 20 - i,
                 "usage_share": share(i),
+                "team_share": tshare(i),
+                "country_team_count": 40,
                 "country_usage_rank": i + 1,
             }
             for country in ("US", "JP", "GB")
@@ -762,6 +791,31 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
             for event_id, (name, date, tier, regulation, team_count) in EVENTS.items()
         ],
     )
+    online_regulations = sorted({scope.split(":")[0] for scope in online_scopes} - {"all"})
+    online_events = [
+        {
+            "event_id": f"LP-{regulation}-{n}",
+            "event_name": f"Online Cup {regulation.upper()} #{n}",
+            "event_date": f"2026-10-1{n}" if regulation == "m-c" else f"2026-12-0{n + 3}",
+            "regulation_code": regulation,
+            "registered_player_count": ONLINE_EVENT_TEAMS + 20,
+            "team_count": ONLINE_EVENT_TEAMS,
+            "match_count": ONLINE_EVENT_TEAMS * 3,
+            "winner_player_name": f"handle_{n}",
+            "winner_player_country": "US",
+            "winner_record_wins": 7,
+            "winner_record_losses": 1,
+            "winner_pokemon_keys": "|".join(KEYS[::-1][:6]),
+            "source_name": "Limitless Online",
+            "source_url": f"https://play.limitlesstcg.com/tournament/{regulation}-{n}/standings",
+            "recency_rank": 3 - n,
+        }
+        for regulation in online_regulations
+        for n in (1, 2)
+    ]
+    if online_events:
+        _write(marts_dir / "online_event_summary.csv", online_events)
+    _write(marts_dir / "online_upcoming_events.csv", UPCOMING_EVENTS)
     _write(
         marts_dir / "tournament_team_results.csv",
         [
@@ -844,6 +898,9 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
                 "event_usage_share": round(share(i) + (0.02 if i % 2 else -0.02), 4),
                 "regulation_usage_share": share(i),
                 "usage_share_delta": 0.02 if i % 2 else -0.02,
+                "event_team_share": round((share(i) + (0.02 if i % 2 else -0.02)) * 6, 4),
+                "regulation_team_share": tshare(i),
+                "team_share_delta": 0.12 if i % 2 else -0.12,
                 "total_wins": 100,
                 "total_losses": 90,
             }
@@ -891,6 +948,292 @@ def write_fixture_marts(marts_dir: Path, normalized_dir: Path) -> None:
     )
 
 
+# docs/upgrade-plan-2027q2.md, E3: two Megas stand in for the format's (the
+# fixture's Pokémon have no Mega forms; the panel doesn't check).
+MEGAS = (("garchomp", "Garchompite"), ("kingambit", "Kingambitite"))
+
+
+def write_fixture_mega_marts(marts_dir: Path) -> None:
+    stones = []
+    counts = []
+    scopes = [("regulation", scope, "", 100) for scope in SCOPES]
+    scopes += [
+        ("event", regulation, event_id, n) for event_id, (_, _, _, regulation, n) in EVENTS.items()
+    ]
+    for kind, scope, event_id, teams in scopes:
+        for rank, (key, stone) in enumerate(MEGAS, start=1):
+            team_count = teams // (rank + 1)
+            stones.append(
+                {
+                    "scope_kind": kind,
+                    "scope_code": scope,
+                    "event_id": event_id,
+                    "pokemon_key": key,
+                    "item_name": stone,
+                    "team_count": team_count,
+                    "scope_team_count": teams,
+                    "team_share": round(team_count / teams, 4),
+                    "usage_rank": rank,
+                }
+            )
+        for mega_count, share in ((0, 0.1), (1, 0.3), (2, 0.6)):
+            counts.append(
+                {
+                    "scope_kind": kind,
+                    "scope_code": scope,
+                    "event_id": event_id,
+                    "mega_count": mega_count,
+                    "team_count": round(teams * share),
+                    "team_share": share,
+                }
+            )
+    _write(marts_dir / "mega_stone_usage.csv", stones)
+    _write(marts_dir / "team_mega_count.csv", counts)
+
+
+# docs/upgrade-plan-2027q2.md, S2: Smogon ladder statistics for M-C only,
+# so M-B shows the views' "not published" states. (ladder, tournament)
+# team shares per Pokémon on the 1760+ Bo1 ladder: Garchomp plays most
+# above its tournament share, Gholdengo most below, Pelipper within 2 pts.
+LADDER_SHARES = {
+    "rillaboom": (0.46, 0.52),
+    "sneasler": (0.37, 0.40),
+    "incineroar": (0.32, 0.32),
+    "garchomp": (0.28, 0.20),
+    "kingambit": (0.25, 0.23),
+    "gholdengo": (0.19, 0.27),
+    "whimsicott": (0.10, 0.05),
+    "pelipper": (0.015, 0.03),
+}
+LADDER_COUNTER_KEYS = (
+    "garchomp",
+    "incineroar",
+    "sneasler",
+    "rillaboom",
+    "gholdengo",
+    "whimsicott",
+    "pelipper",
+)
+
+
+def write_fixture_ladder_marts(marts_dir: Path) -> None:
+    base = {"regulation_code": "m-c", "month": "2026-09", "battles": 1631943}
+    source = {
+        "source_name": "Smogon usage statistics",
+        "source_url": "https://www.smogon.com/stats/2026-09/chaos/gen9championsvgc2026regmc-1760.json",
+    }
+    usage = []
+    # Bo3 at 1760+ carries the top five; Bo3 at all ratings isn't published.
+    for variant, cutoff, keys in (
+        ("bo1", 1760, KEYS),
+        ("bo1", 0, KEYS),
+        ("bo3", 1760, KEYS[:5]),
+    ):
+        ranked = sorted(keys, key=lambda k: -LADDER_SHARES[k][0])
+        for rank, key in enumerate(ranked, start=1):
+            ladder, tournament = LADDER_SHARES[key]
+            usage.append(
+                {
+                    **base,
+                    "variant": variant,
+                    "cutoff": cutoff,
+                    "pokemon_key": key,
+                    "ladder_name": POKEMON[key][0],
+                    "raw_count": int(ladder * 1000000),
+                    "ladder_usage": ladder,
+                    "ladder_rank": rank,
+                    "tournament_team_share": tournament,
+                    "tournament_rank": rank,
+                    "ladder_gap": round(ladder - tournament, 4),
+                    **source,
+                }
+            )
+    _write(marts_dir / "ladder_pokemon_usage.csv", usage)
+    counters = []
+    for key, opponents in (
+        ("kingambit", LADDER_COUNTER_KEYS),
+        ("rillaboom", ("incineroar", "pelipper")),
+    ):
+        for rank, opponent in enumerate(opponents, start=1):
+            rate = round(0.62 - rank * 0.02, 4)
+            counters.append(
+                {
+                    **base,
+                    "variant": "bo1",
+                    "cutoff": 0,
+                    "pokemon_key": key,
+                    "counter_pokemon_key": opponent,
+                    "encounters": 1000 * rank,
+                    "ko_or_switch_rate": rate,
+                    "std_dev": 0.005,
+                    "score": round(rate - 0.02, 4),
+                    "counter_rank": rank,
+                    **source,
+                }
+            )
+    _write(marts_dir / "ladder_checks_counters.csv", counters)
+    spreads = []
+    for rank, (nature, points, share) in enumerate(
+        (
+            ("Adamant", (32, 32, 0, 0, 2, 0), 0.1577),
+            ("Adamant", (2, 32, 0, 0, 0, 32), 0.0962),
+            ("Brave", (32, 32, 0, 0, 2, 0), 0.0679),
+        ),
+        start=1,
+    ):
+        spreads.append(
+            {
+                **base,
+                "variant": "bo1",
+                "cutoff": 1760,
+                "pokemon_key": "kingambit",
+                "nature": nature,
+                **dict(
+                    zip(
+                        ("sp_hp", "sp_atk", "sp_def", "sp_spa", "sp_spd", "sp_spe"),
+                        points,
+                        strict=True,
+                    )
+                ),
+                "share": share,
+                "spread_rank": rank,
+                **source,
+            }
+        )
+    _write(marts_dir / "ladder_stat_point_spreads.csv", spreads)
+    write_fixture_replay_marts(marts_dir)
+
+
+# docs/upgrade-plan-2027q2.md, S3: replay bring rates for the fixture's
+# Pokémon (Kingambit brought 90% of the time, winning more when brought),
+# one below the 30-side floor, and three lead pairs.
+def write_fixture_replay_marts(marts_dir: Path) -> None:
+    source = {
+        "source_name": "Pokémon Showdown replays",
+        "source_url": "https://replay.pokemonshowdown.com",
+    }
+    bring = []
+    for rank, key in enumerate(KEYS, start=1):
+        shown = 400 - rank * 30 if key != KEYS[-1] else 20
+        complete = shown // 2
+        brought = round(complete * (0.9 if key == "kingambit" else 0.7))
+        for variant in ("bo1", "all"):
+            bring.append(
+                {
+                    "regulation_code": "m-c",
+                    "variant": variant,
+                    "pokemon_key": key,
+                    "battles": 1000,
+                    "complete_battles": 600,
+                    "shown": shown,
+                    "shown_share": round(shown / 2000, 4),
+                    "led": shown // 3,
+                    "lead_rate": round((shown // 3) / shown, 4),
+                    "complete_shown": complete,
+                    "brought": brought,
+                    "bring_rate": round(brought / complete, 4),
+                    "brought_decided": brought,
+                    "wins_brought": round(brought * 0.56),
+                    "win_rate_brought": round(round(brought * 0.56) / brought, 4),
+                    "benched_decided": complete - brought,
+                    "wins_benched": round((complete - brought) * 0.4),
+                    "win_rate_benched": round(
+                        round((complete - brought) * 0.4) / (complete - brought), 4
+                    ),
+                    "mega_evolved": 0,
+                    "shown_rank": rank,
+                    **source,
+                }
+            )
+    _write(marts_dir / "ladder_bring_rate.csv", bring)
+    pairs = []
+    for rank, (one, two, led, wins) in enumerate(
+        (
+            ("incineroar", "rillaboom", 120, 66),
+            ("kingambit", "pelipper", 80, 40),
+            ("garchomp", "kingambit", 50, 20),
+        ),
+        start=1,
+    ):
+        pairs.append(
+            {
+                "regulation_code": "m-c",
+                "variant": "all",
+                "pokemon_key_1": one,
+                "pokemon_key_2": two,
+                "sides_led": led,
+                "lead_share": round(led / 2000, 4),
+                "decided": led,
+                "wins": wins,
+                "win_rate": round(wins / led, 4),
+                "pair_rank": rank,
+                **source,
+            }
+        )
+    _write(marts_dir / "ladder_lead_pairs.csv", pairs)
+
+
+# docs/upgrade-plan-2027q2.md, Q4: the fixture's Pokémon in Japanese and
+# German (Spanish and French omitted: a missing language falls back to
+# English).
+LOCALISED_NAMES = {
+    "ja": {
+        "rillaboom": "ゴリランダー",
+        "sneasler": "オオニューラ",
+        "incineroar": "ガオガエン",
+        "garchomp": "ガブリアス",
+        "kingambit": "ドドゲザン",
+        "gholdengo": "サーフゴー",
+        "whimsicott": "エルフーン",
+        "pelipper": "ペリッパー",
+    },
+    "de": {"incineroar": "Fuegro", "kingambit": "Gladimperio"},
+}
+
+
+def write_fixture_name_marts(marts_dir: Path) -> None:
+    _write(
+        marts_dir / "pokemon_localised_names.csv",
+        [
+            {
+                "pokemon_key": key,
+                "language": language,
+                "localised_name": name,
+                "name_rule": "species",
+            }
+            for language, names in LOCALISED_NAMES.items()
+            for key, name in names.items()
+        ],
+    )
+
+
+# docs/upgrade-plan-2027q2.md, list #30: the fixture's three archetypes
+# against each other. arch-0 beats arch-1 30-10; arch-2 has 8 matches with
+# arch-0, under the 20-match floor; arch-9 isn't listed and is dropped.
+ARCHETYPE_RECORDS = (
+    ("arch-0", "arch-1", 30, 10),
+    ("arch-0", "arch-2", 5, 3),
+    ("arch-1", "arch-9", 12, 12),
+)
+
+
+def write_fixture_archetype_matchups(marts_dir: Path) -> None:
+    rows = []
+    for a, b, wins, losses in ARCHETYPE_RECORDS:
+        for key, opponent, won, lost in ((a, b, wins, losses), (b, a, losses, wins)):
+            rows.append(
+                {
+                    "archetype_key": key,
+                    "opponent_archetype_key": opponent,
+                    "matches": won + lost,
+                    "wins": won,
+                    "losses": lost,
+                    "win_rate": round(won / (won + lost), 4),
+                }
+            )
+    _write(marts_dir / "archetype_matchups.csv", rows)
+
+
 def write_fixture_manifest(manifests_dir: Path) -> None:
     """A 0.4.0-style manifest, distributed as a Release asset (its
     `package` block), for the Data section's table cards (D1/D2)."""
@@ -921,3 +1264,193 @@ def write_fixture_manifest(manifests_dir: Path) -> None:
         },
     }
     (manifests_dir / "manifest-9.9.0.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+# Sprint 13 (docs/upgrade-plan-2027q2.md, E1 and E2): Day 2 conversion and
+# EVT-LOU's top-8 bracket. Day 2 is the event's first six teams; the top
+# cut its first eight, seeded 1v8, 4v5, 3v6, 2v7, the better seed winning.
+DAY2_TEAMS = 6
+CUT_EVENT = "EVT-LOU"
+
+
+def write_fixture_event_phase_marts(marts_dir: Path) -> None:
+    teams = _rosters()
+    by_id = {t["team_id"]: t for t in teams}
+    phase_rows = []
+
+    def grain(kind, scope, event_id, field):
+        day2 = [t for t in field if t["placement"] <= DAY2_TEAMS]
+        cut = [t for t in field if t["placement"] <= 8]
+        for phase, members in (("day2", day2), ("top_cut", cut)):
+            usage = sorted(
+                KEYS,
+                key=lambda k: (-sum(k in t["keys"] for t in members), KEYS.index(k)),
+            )
+            for rank, key in enumerate(usage, start=1):
+                in_phase = sum(key in t["keys"] for t in members)
+                in_field = sum(key in t["keys"] for t in field)
+                if not in_field:
+                    continue
+                share = in_phase / len(members)
+                field_share = in_field / len(field)
+                phase_rows.append(
+                    {
+                        "scope_kind": kind,
+                        "scope_code": scope,
+                        "event_id": event_id,
+                        "phase": phase,
+                        "pokemon_key": key,
+                        "team_count": in_phase,
+                        "phase_team_count": len(members),
+                        "team_share": round(share, 4),
+                        "field_usage_count": in_field,
+                        "field_team_count": len(field),
+                        "field_team_share": round(field_share, 4),
+                        "conversion": round(share / field_share, 3),
+                        # The fixture's fields are tiny: mark M-C's regulation
+                        # grain reliable so the board and table show ratios.
+                        "is_reliable": "true" if kind == "regulation" else "false",
+                        "usage_rank": rank,
+                    }
+                )
+
+    for event_id, (_, _, _, regulation, _) in EVENTS.items():
+        grain("event", regulation, event_id, [t for t in teams if t["event_id"] == event_id])
+    for scope in SCOPES:
+        field = [t for t in teams if scope == "all" or EVENTS[t["event_id"]][3] == scope]
+        grain("regulation", scope, "", field)
+    _write(marts_dir / "pokemon_event_phase_usage.csv", phase_rows)
+
+    def side(team_id):
+        team = by_id[team_id]
+        return {
+            "team_id": team_id,
+            "player_id": team["player_id"],
+            "player_name": team["player_name"],
+            "player_country": team["player_country"],
+            "placement": team["placement"],
+            "pokemon_keys": "|".join(team["keys"]),
+        }
+
+    seeds = [f"{CUT_EVENT}-T{i:02d}" for i in range(1, 9)]
+    rounds = [
+        (13, "Quarterfinals", [(1, 8), (4, 5), (3, 6), (2, 7)]),
+        (14, "Semifinals", [(1, 4), (2, 3)]),
+        (15, "Final", [(1, 2)]),
+    ]
+    matches = []
+    paths = []
+    for bracket_round, (round_number, label, pairs) in enumerate(rounds, start=1):
+        for table, (a, b) in enumerate(pairs, start=1):
+            one, two = side(seeds[a - 1]), side(seeds[b - 1])
+            row = {
+                "match_id": f"M-{round_number}-{table}",
+                "event_id": CUT_EVENT,
+                "regulation_code": "m-c",
+                "round_number": round_number,
+                "bracket_round": bracket_round,
+                "top_cut_size": 8,
+                "bracket_size": 8,
+                "round_label": label,
+                "table_number": table,
+                "winner_team_id": one["team_id"],
+                "outcome": "player1_win",
+                "is_complete": "true",
+                # A curated video for the final only (S5).
+                "vod_url": FIXTURE_VOD_URL if label == "Final" else "",
+            }
+            for n, s in ((1, one), (2, two)):
+                row.update({f"{field}_{n}": value for field, value in s.items()})
+            matches.append(row)
+            for me, them, result in ((one, two, "W"), (two, one, "L")):
+                paths.append(
+                    {
+                        "event_id": CUT_EVENT,
+                        "team_id": me["team_id"],
+                        "round_number": round_number,
+                        "phase": "Top cut",
+                        "table_number": table,
+                        "result": result,
+                        "opponent_team_id": them["team_id"],
+                        "opponent_player_name": them["player_name"],
+                        "opponent_player_country": them["player_country"],
+                        "opponent_placement": them["placement"],
+                        "opponent_pokemon_keys": them["pokemon_keys"],
+                        "match_id": row["match_id"],
+                    }
+                )
+    # The champion's Swiss rounds, so a path spans phases.
+    for round_number, phase in ((1, "Day 1"), (9, "Day 2")):
+        them = side(seeds[7 if round_number == 1 else 5])
+        paths.append(
+            {
+                "event_id": CUT_EVENT,
+                "team_id": seeds[0],
+                "round_number": round_number,
+                "phase": phase,
+                "table_number": 1,
+                "result": "W",
+                "opponent_team_id": them["team_id"],
+                "opponent_player_name": them["player_name"],
+                "opponent_player_country": them["player_country"],
+                "opponent_placement": them["placement"],
+                "opponent_pokemon_keys": them["pokemon_keys"],
+                "match_id": f"S-{round_number}",
+            }
+        )
+    _write(marts_dir / "tournament_top_cut_matches.csv", matches)
+    _write(marts_dir / "tournament_top_cut_paths.csv", paths)
+
+
+FIXTURE_VOD_URL = "https://www.youtube.com/watch?v=GHNLQjVj1Xc"
+
+# Upcoming online tournaments (list #31), against the browser tests' usual
+# clock of 2026-10-20T12:00Z: one already started, two ahead (today and
+# tomorrow in UTC), one past the 14-day horizon, and one in another
+# regulation.
+UPCOMING_EVENTS = [
+    {
+        "tournament_id": tournament_id,
+        "tournament_name": name,
+        "regulation_code": regulation,
+        "starts_at_utc": starts,
+        "platform": platform,
+        "organizer_name": "Fixture League",
+        "registrations": registrations,
+        "player_cap": cap,
+        "registration_open": "true" if open_ else "false",
+        "source_url": f"https://play.limitlesstcg.com/tournament/{tournament_id}/details",
+        "extracted_at_utc": "2026-10-20T06:00:00Z",
+    }
+    for tournament_id, name, regulation, starts, platform, registrations, cap, open_ in (
+        ("up-started", "Started Cup", "m-c", "2026-10-20T11:00:00Z", "Switch", 40, None, True),
+        ("up-today", "Evening Cup", "m-c", "2026-10-20T18:00:00Z", "Switch", 22, 32, True),
+        ("up-tomorrow", "Showdown Open", "m-c", "2026-10-21T09:30:00Z", "Showdown", 0, None, False),
+        ("up-far", "Winter Classic", "m-c", "2026-11-20T18:00:00Z", "Switch", 5, None, True),
+        ("up-mb", "Old Format Cup", "m-b", "2026-10-22T18:00:00Z", "Switch", 8, None, True),
+    )
+]
+
+# A one-pixel PNG: the share-card manifest only has to point at real files.
+_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360f8cf000002010101d3b8a1d20000000049454e44ae426082"
+)
+
+
+def write_fixture_share_cards(output_dir: Path) -> None:
+    """A stand-in for render-share-cards' output (V8): Top 12 cards for M-C
+    and EVT-LOU in every format, so the share controls render."""
+    cards_dir = output_dir / "images" / "cards"
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    top12 = {"regulation": {}, "event": {}}
+    for kind, key in (("regulation", "m-c"), ("event", CUT_EVENT)):
+        for phase in ("all", "day2"):
+            for layout in ("landscape", "portrait", "story"):
+                name = f"top12-{kind}-{key}-{phase}-{layout}.png"
+                (cards_dir / name).write_bytes(_PIXEL_PNG)
+                top12[kind].setdefault(key, {}).setdefault(phase, {})[layout] = (
+                    f"images/cards/{name}"
+                )
+    manifest = {"event": None, "teams": {}, "whats_changed": {}, "top12": top12, "og_image": None}
+    (cards_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

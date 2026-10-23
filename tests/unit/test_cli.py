@@ -152,22 +152,149 @@ def test_run_extract_munchstats_passes_previous_snapshot_path(tmp_path, monkeypa
     assert fake.calls == [(tmp_path / "munchstats" / "2026-07-30.csv", "1.2.3", previous_path)]
 
 
+def test_run_extract_showdown_replays_passes_previous_snapshot_path(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, S3: every battle already sampled is kept
+    # and never fetched again.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    previous_path = tmp_path / "showdown_replays" / "2026-07-29.csv"
+    _write_csv(previous_path, [], ["a"])
+    fake = _RecordingMunchstatsExtractor()
+    monkeypatch.setattr(cli, "_EXTRACTORS", {"showdown_replays": (fake, "showdown_replays")})
+    monkeypatch.setattr(cli, "_RETENTION_COUNTS", {"showdown_replays": 3})
+    monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+
+    assert cli._run_extract("showdown_replays", "1.2.3") == 0
+    assert fake.calls == [
+        (tmp_path / "showdown_replays" / "2026-07-30.csv", "1.2.3", previous_path)
+    ]
+
+
 def test_run_extract_rk9_passes_previous_snapshot_path(tmp_path, monkeypatch):
     # rk9 shares munchstats' incremental path: a concluded event's pairings
     # never change, so the previous snapshot is reused rather than re-fetched.
+    # It also re-fetches events still running (docs/upgrade-plan-2027q2.md,
+    # E4), read off the newest MunchStats snapshot.
     monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
     _stub_extraction_summary(monkeypatch)
     previous_path = tmp_path / "rk9_pairings" / "2026-07-29.csv"
     _write_csv(previous_path, [], ["a"])
-    fake = _RecordingMunchstatsExtractor()
+
+    class _RecordingRk9Extractor(_RecordingMunchstatsExtractor):
+        def extract(self, output_path, *, refresh_event_ids=(), **kwargs):
+            self.refresh = list(refresh_event_ids)
+            super().extract(output_path, **kwargs)
+
+    fake = _RecordingRk9Extractor()
     monkeypatch.setattr(cli, "_EXTRACTORS", {"rk9": (fake, "rk9_pairings")})
     monkeypatch.setattr(cli, "_RETENTION_COUNTS", {"rk9_pairings": 7})
     monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+    monkeypatch.setattr(cli, "live_event_ids", lambda: ["LIVE"])
 
     exit_code = cli._run_extract("rk9", "1.2.3")
 
     assert exit_code == 0
     assert fake.calls == [(tmp_path / "rk9_pairings" / "2026-07-30.csv", "1.2.3", previous_path)]
+    assert fake.refresh == ["LIVE"]
+
+
+def test_run_extract_smogon_ladder_writes_three_tables_from_one_pass(tmp_path, monkeypatch):
+    # Usage, checks and counters and spreads come out of the same files, so
+    # one call writes all three, each reusing its own previous snapshot
+    # (docs/upgrade-plan-2027q2.md, S2); each is pruned to its retention.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    for subdir in ("smogon_ladder", "smogon_ladder_counters", "smogon_ladder_spreads"):
+        for day in ("2026-07-27", "2026-07-28", "2026-07-29"):
+            _write_csv(tmp_path / subdir / f"{day}.csv", [], ["a"])
+    calls = []
+
+    def fake_extract(usage, counters, spreads, *, dataset_version, previous_paths):
+        calls.append(((usage, counters, spreads), dataset_version, previous_paths))
+        for path in (usage, counters, spreads):
+            _write_csv(path, [], ["a"])
+
+    monkeypatch.setattr(cli.smogon_ladder, "extract", fake_extract)
+    monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+
+    exit_code = cli._run_extract("smogon_ladder", "1.2.3")
+
+    assert exit_code == 0
+    subdirs = ("smogon_ladder", "smogon_ladder_counters", "smogon_ladder_spreads")
+    assert calls == [
+        (
+            tuple(tmp_path / subdir / "2026-07-30.csv" for subdir in subdirs),
+            "1.2.3",
+            tuple(tmp_path / subdir / "2026-07-29.csv" for subdir in subdirs),
+        )
+    ]
+    for subdir in subdirs:
+        kept = sorted(path.name for path in (tmp_path / subdir).glob("*.csv"))
+        assert kept == ["2026-07-28.csv", "2026-07-29.csv", "2026-07-30.csv"]
+
+
+def test_run_extract_limitless_play_lists_upcoming_tournaments_last(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, list #31: the upcoming list is a third
+    # pass of the online run, under the same snapshot date.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    order = []
+
+    def fake_extract(output_path, *, dataset_version, previous_snapshot_path, extracted_at_utc):
+        order.append("roster")
+        _write_csv(output_path, [], ["a"])
+        return []
+
+    def fake_pairings(output_path, covered, **kwargs):
+        order.append("pairings")
+        _write_csv(output_path, [], ["a"])
+
+    def fake_upcoming(output_path, *, dataset_version, extracted_at_utc):
+        order.append(
+            ("upcoming", output_path.parent.name, output_path.stem == extracted_at_utc[:10])
+        )
+        _write_csv(output_path, [], ["a"])
+        return 0
+
+    monkeypatch.setattr(cli.limitless_play, "extract", fake_extract)
+    monkeypatch.setattr(cli.limitless_play, "extract_pairings", fake_pairings)
+    monkeypatch.setattr(cli.limitless_play, "extract_upcoming", fake_upcoming)
+
+    assert cli._run_extract("limitless_play", "1.2.3") == 0
+    assert order == ["roster", "pairings", ("upcoming", "limitless_play_upcoming", True)]
+
+
+def test_run_extract_pokeapi_extracts_names_for_the_forms_it_wrote(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, Q4: localised names come with the weekly
+    # pokeapi run, for every form its own snapshot holds.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+    monkeypatch.setattr(cli, "_champions_form_resource_ids", lambda: [])
+    monkeypatch.setattr(cli, "_referenced_move_ability_item_names", lambda: (set(), set(), set()))
+
+    def fake_extract(output_path, *, dataset_version):
+        _write_csv(
+            output_path,
+            [{"form_name": "charizard"}, {"form_name": "charizard-mega-y"}],
+            ["form_name"],
+        )
+
+    named = []
+
+    def fake_extract_names(output_path, form_names, *, dataset_version):
+        named.append((output_path, list(form_names), dataset_version))
+        _write_csv(output_path, [], ["form_name"])
+
+    monkeypatch.setattr(cli.pokeapi, "extract", fake_extract)
+    monkeypatch.setattr(cli.pokeapi, "extract_names", fake_extract_names)
+
+    exit_code = cli._run_extract("pokeapi", "1.2.3")
+
+    assert exit_code == 0
+    assert named == [
+        (tmp_path / "pokeapi_names" / "2026-07-30.csv", ["charizard", "charizard-mega-y"], "1.2.3")
+    ]
 
 
 def test_run_extract_other_sources_do_not_receive_previous_snapshot_path(tmp_path, monkeypatch):
@@ -638,3 +765,23 @@ def test_main_build_dashboard_dispatches_with_overrides_and_no_fetch_icons(monke
         "output_dir": cli.Path("custom/out"),
         "fetch_icons": False,
     }
+
+
+def test_live_event_ids_reads_the_newest_munchstats_snapshot(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, E4: the event-weekend workflow asks this
+    # before it spends a rebuild, and rk9 re-fetches these events.
+    from datetime import date
+
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    fields = ["event_id", "event_date"]
+    _write_csv(
+        tmp_path / "munchstats" / "2026-12-06.csv",
+        [
+            {"event_id": "LIVE", "event_date": "2026-12-05"},
+            {"event_id": "LIVE", "event_date": "2026-12-05"},
+            {"event_id": "OLD", "event_date": "2026-10-09"},
+        ],
+        fields,
+    )
+    assert cli.live_event_ids(date(2026, 12, 6)) == ["LIVE"]
+    assert cli.live_event_ids(date(2026, 12, 20)) == []

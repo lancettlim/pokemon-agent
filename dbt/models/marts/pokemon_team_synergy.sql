@@ -81,6 +81,6 @@ select
   round(lift_raw, 4) as lift,
   round(expected_raw, 4) as expected_pair_team_count,
   round((pair_team_count - expected_raw) / sqrt(expected_raw), 4) as synergy_z,
-  row_number() over (partition by regulation_scope, pokemon_key order by lift_raw desc) as lift_rank
+  row_number() over (partition by regulation_scope, pokemon_key order by lift_raw desc, partner_pokemon_key) as lift_rank
 from scored
 order by regulation_scope, pokemon_key, lift desc

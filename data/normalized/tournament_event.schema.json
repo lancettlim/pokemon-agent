@@ -1,6 +1,6 @@
 {
   "table_name": "tournament_event",
-  "purpose": "normalized tournament metadata from MunchStats",
+  "purpose": "normalized tournament metadata: official events from MunchStats, and Limitless online tournaments as their own population (event_tier \"Online\", ids prefixed \"LP-\")",
   "primary_key": "event_id",
   "join_keys": [
     "event_id"
@@ -28,13 +28,13 @@
       "name": "event_tier",
       "type": "string",
       "required": false,
-      "description": "Tournament tier as reported by MunchStats (e.g. International, Regional, Special), if known"
+      "description": "Tournament tier: as reported by MunchStats for official events (e.g. Worlds, International, Regional, Special), if known; \"Online\" for every Limitless online tournament, a separate population never blended into official figures by default"
     },
     {
       "name": "event_format",
       "type": "string",
       "required": false,
-      "description": "Competitive format the event was played under, e.g. \"gen9championsvgc2026regmc\" (Champions, Reg M-C) or \"gen9vgc2026regi\" (standard VGC). MunchStats indexes both; this dimension is what scopes Champions-only analysis (see dbt/models/intermediate/int_champions_roster.sql). Optional: a few indexed events report no format"
+      "description": "Competitive format the event was played under: MunchStats' format string, e.g. \"gen9championsvgc2026regmc\" (Champions, Reg M-C) or \"gen9vgc2026regi\" (standard VGC), or Limitless' online label, e.g. \"M-C\". MunchStats indexes both games; this dimension is what scopes Champions-only analysis (see dbt/models/intermediate/int_champions_roster.sql). Optional: a few indexed events report no format"
     },
     {
       "name": "regulation_code",
@@ -46,7 +46,7 @@
       "name": "source_name",
       "type": "string",
       "required": true,
-      "description": "Constant: MunchStats"
+      "description": "\"MunchStats\" for official events, \"Limitless Online\" for online tournaments"
     },
     {
       "name": "source_url",
@@ -58,7 +58,7 @@
       "name": "source_record_id",
       "type": "string",
       "required": true,
-      "description": "Upstream MunchStats event identifier"
+      "description": "Upstream MunchStats event identifier, or the Limitless tournament id"
     },
     {
       "name": "extracted_at_utc",

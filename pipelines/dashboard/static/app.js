@@ -42,16 +42,34 @@
   //   2. The viewer's last choice, but only if it was made while the same
   //      regulation was in force as today. A choice of M-C made in October
   //      must not keep someone on M-C after M-D starts.
-  //   3. The regulation in force, once it has MIN_DEFAULT_SCOPE_TEAMS teams.
-  //      Before that (the first week of a new set), the previous regulation,
-  //      with a banner saying so (renderRolloverBanner).
+  //   3. The regulation in force, once it has MIN_DEFAULT_SCOPE_TEAMS
+  //      official teams. Before that (the first weeks of a new set), its
+  //      online events when they have that many (docs/upgrade-plan-2027q2.md,
+  //      S1), else the previous regulation, with a banner saying which
+  //      (renderRolloverBanner).
   //   4. The newest regulation with data, then the build's default.
+  //
+  // A scope is a regulation ("m-c", or "all") plus an optional population
+  // (S1): "m-c" is official events, "m-c:online" Limitless online events,
+  // "m-c:combined" both. Official is always the default.
   var SCOPE_PARAM = "reg";
   var SCOPE_STORAGE_KEY = "dashboard-regulation";
   var ALL_SCOPE = "all";
+  var OFFICIAL = "official";
+  var POPULATION_LABELS = { official: "Official", online: "Online", combined: "Official + online" };
   var MIN_DEFAULT_SCOPE_TEAMS = DATA.min_default_scope_teams || 300;
   var TODAY_ISO = new Date().toISOString().slice(0, 10);
   var rolloverNotice = null;
+
+  function scopeRegulation(scope) {
+    return String(scope || "").split(":")[0];
+  }
+  function scopePopulation(scope) {
+    return String(scope || "").split(":")[1] || OFFICIAL;
+  }
+  function populationScope(code, population) {
+    return population === OFFICIAL ? code : code + ":" + population;
+  }
 
   function regulationsWithData() {
     var byScope = DATA.kpis_by_scope || {};
@@ -59,6 +77,32 @@
       return byScope[r.regulation_code];
     });
   }
+
+  // Remembered with the regulation in force when it was made, so the next
+  // set's arrival overrides it (resolveRegulationScope, step 2).
+  function rememberScope(code) {
+    var inForce = regulationInForce(DATA.regulations, TODAY_ISO);
+    try {
+      localStorage.setItem(
+        SCOPE_STORAGE_KEY,
+        JSON.stringify({
+          code: code,
+          in_force: inForce ? inForce.regulation_code : null,
+          chosen_on: TODAY_ISO,
+        })
+      );
+    } catch (e) {
+      // Storage blocked: the ?reg= link still carries the choice.
+    }
+  }
+
+  // A banner link that changes scope ("Official events only →") records
+  // the choice the way the selects do, so a host that drops the query
+  // string (an artifact frame) still follows it.
+  document.addEventListener("click", function (e) {
+    var link = e.target.closest && e.target.closest("a[data-set-scope]");
+    if (link) rememberScope(link.getAttribute("data-set-scope"));
+  });
 
   function readRememberedScope() {
     try {
@@ -94,6 +138,18 @@
     if (inForce) {
       var kpis = byScope[inForce.regulation_code];
       if (kpis && (kpis.team_count || 0) >= MIN_DEFAULT_SCOPE_TEAMS) return inForce.regulation_code;
+      var onlineScope = populationScope(inForce.regulation_code, "online");
+      var online = byScope[onlineScope];
+      if (online && (online.team_count || 0) >= MIN_DEFAULT_SCOPE_TEAMS) {
+        rolloverNotice = {
+          in_force: inForce,
+          shown: inForce,
+          online: online,
+          team_count: kpis ? kpis.team_count || 0 : 0,
+          has_data: !!kpis,
+        };
+        return onlineScope;
+      }
       var earlier = withData.filter(function (r) {
         return r.start_date < inForce.start_date;
       });
@@ -117,22 +173,52 @@
   if (DATA.kpis_by_scope && DATA.kpis_by_scope[regulationScope]) {
     DATA.kpis = DATA.kpis_by_scope[regulationScope];
   }
+  // The regulation and population parts of the page's scope. Views built
+  // on official-only data (events, players, head-to-head, Top Teams) read
+  // regulationCode; isOfficialScope says whether they need to say so.
+  var regulationCode = scopeRegulation(regulationScope);
+  var regulationPopulation = scopePopulation(regulationScope);
+  var isOfficialScope = regulationPopulation === OFFICIAL;
+  // "Reg M-C", or "Reg M-C official events" on a population scope: how an
+  // official-only view names what it covers.
+  var officialScopeName = (regulationCode === ALL_SCOPE ? "All regulations" : "Reg " + regulationCode.toUpperCase()) +
+    (isOfficialScope ? "" : " official events");
+
+  // Marts a population scope has no rows of (player records are official-
+  // only) arrive with the official scope's rows instead (build.py's
+  // official_fallback); officialFallback records which, for their notes.
+  var officialFallback = {};
+  var fallbackNames = ((DATA.mart_files || {}).official_fallback || {})[regulationScope] || [];
 
   // Rows of a scoped mart narrowed to the page's scope; unscoped marts
   // (no regulation_scope column) pass through untouched.
-  function applyRegulationScope(rows) {
+  function applyRegulationScope(rows, name) {
     if (!rows || !rows.length || !("regulation_scope" in rows[0])) return rows;
+    var scope = regulationScope;
+    if (!isOfficialScope && name && fallbackNames.indexOf(name) !== -1) {
+      scope = regulationCode;
+      officialFallback[name] = true;
+    }
     return rows.filter(function (r) {
-      return r.regulation_scope === regulationScope;
+      return r.regulation_scope === scope;
     });
   }
 
   function scopeLabel(scope) {
-    if (scope === ALL_SCOPE) return "All Champions regulations";
-    var match = (DATA.regulations || []).filter(function (r) {
-      return r.regulation_code === scope;
-    })[0];
-    return match ? match.regulation_name : scope;
+    var code = scopeRegulation(scope);
+    var population = scopePopulation(scope);
+    var name;
+    if (code === ALL_SCOPE) {
+      name = "All Champions regulations";
+    } else {
+      var match = (DATA.regulations || []).filter(function (r) {
+        return r.regulation_code === code;
+      })[0];
+      name = match ? match.regulation_name : code;
+    }
+    if (population === "online") return name + ", online events";
+    if (population === "combined") return name + ", official and online events";
+    return name;
   }
 
   var marts = DATA.marts || {};
@@ -142,6 +228,63 @@
   var typeColors = DATA.type_colors || {};
   var itemIcons = DATA.item_icons || {};
   var pokemonNames = DATA.pokemon_names || {};
+
+  // Pokémon names in the viewer's language (docs/upgrade-plan-2027q2.md,
+  // Q4): Japanese, Spanish, French or German from DATA.localised_names,
+  // English otherwise, Portuguese included (the Brazilian games use the
+  // English names). Names only: numbers and copy stay in English. Applied
+  // here, before any view renders, to the name map and to every name the
+  // inline KPIs carry; shard rows take their names from the map as they
+  // load. Changing the language reloads the page, like the scope.
+  var NAME_LANGUAGE_KEY = "dashboard-name-language";
+  var NAME_LANGUAGES = [
+    { id: "en", label: "English" },
+    { id: "ja", label: "日本語" },
+    { id: "es", label: "Español" },
+    { id: "pt", label: "Português" },
+    { id: "fr", label: "Français" },
+    { id: "de", label: "Deutsch" },
+  ];
+  var englishNames = {};
+  Object.keys(pokemonNames).forEach(function (key) {
+    englishNames[key] = pokemonNames[key];
+  });
+  function readNameLanguage() {
+    try {
+      var saved = localStorage.getItem(NAME_LANGUAGE_KEY);
+      if (NAME_LANGUAGES.some(function (l) { return l.id === saved; })) return saved;
+    } catch (e) {
+      // Storage blocked: English.
+    }
+    return "en";
+  }
+  var nameLanguage = readNameLanguage();
+  (function applyNameLanguage() {
+    var names = (DATA.localised_names || {})[nameLanguage];
+    if (!names) return;
+    Object.keys(names).forEach(function (key) {
+      pokemonNames[key] = names[key];
+    });
+    var pairs = (DATA.mart_files && DATA.mart_files.name_fields) || [["pokemon_key", "pokemon_name"]];
+    function relabel(node) {
+      if (Array.isArray(node)) {
+        node.forEach(relabel);
+        return;
+      }
+      if (!node || typeof node !== "object") return;
+      pairs.forEach(function (pair) {
+        var key = node[pair[0]];
+        if (key && typeof node[pair[1]] === "string" && names[key]) node[pair[1]] = names[key];
+      });
+      Object.keys(node).forEach(function (field) {
+        if (node[field] && typeof node[field] === "object") relabel(node[field]);
+      });
+    }
+    relabel(DATA.kpis_by_scope);
+    relabel(DATA.kpis);
+    relabel(DATA.reference_teams);
+    document.documentElement.setAttribute("data-name-language", nameLanguage);
+  })();
 
   // Icon-size tokens (docs/design-system.md's "Icon size scale") — mirrors
   // the --icon-sm/md/lg/xl CSS custom properties in index.html.jinja.
@@ -458,37 +601,190 @@
     );
   }
 
-  // A team drawn as the six Pokémon it actually is. `pokemonKeys` is the
-  // pipe-delimited, slot-ordered string the team marts publish
-  // (top_tournament_teams.pokemon_keys, team_list_convergence.pokemon_keys).
-  // Before this existed, a six-Pokémon team was rendered as its first
-  // slot's sprite alone, which misrepresented the team rather than merely
-  // under-illustrating it.
+  // ---------- team strip (docs/upgrade-plan-2027q2.md, V3) ----------
+  // Every team on the site is one component, after the game's own battle
+  // UI and the broadcast (R2): six square tiles, each with its held item
+  // in a white circle at the top-right corner and a Mega badge on the Mega
+  // holder, because the item is the team. A tile whose set is known opens
+  // it on tap or click (a popover with the item, ability, Stat Alignment,
+  // moves and a link to the profile); without a set it links straight to
+  // the profile. The strip stays one row of six, and wraps to 3x2 where a
+  // tile would fall under the 44px tap minimum (a container query).
+  //
+  // slots: [{pokemon_key, item_name?, ability?, nature?, moves?}] in slot
+  // order. opts.compact draws small inline sprites for a table cell, where
+  // the row is the tap target; opts.label names the team for a screen
+  // reader.
+  var stripSets = {};
+  var stripCount = 0;
+
+  function isMegaKey(key) {
+    return String(key || "").split("-").indexOf("mega") !== -1;
+  }
+
+  function teamStripHtml(slots, opts) {
+    opts = opts || {};
+    slots = (slots || []).filter(function (slot) { return slot && slot.pokemon_key; });
+    if (!slots.length) return "";
+    var names = slots.map(function (slot) { return pokemonNames[slot.pokemon_key] || slot.pokemon_key; });
+    var label = opts.label || "Team: " + names.join(", ");
+    var tiles = slots.map(function (slot, i) {
+      var key = slot.pokemon_key;
+      var sprite = sprites[key];
+      var img = sprite
+        ? '<img class="team-strip-art" src="' + sprite + '" alt="" loading="lazy" decoding="async">'
+        : '<span class="team-comp-blank"></span>';
+      var badges = "";
+      if (!opts.compact) {
+        var itemSrc = slot.item_name && itemIcons[slot.item_name];
+        if (slot.item_name) {
+          badges += '<span class="strip-item" title="' + escapeHtml(slot.item_name) + '">' +
+            (itemSrc ? '<img src="' + itemSrc + '" alt="">' : '<span class="strip-item-dot"></span>') + "</span>";
+        }
+        if (isMegaKey(key)) badges += '<span class="strip-mega" title="Mega Evolution">M</span>';
+      }
+      var title = names[i] + (slot.item_name ? " @ " + slot.item_name : "");
+      var hasSet = !opts.compact && (slot.ability || slot.nature || slot.moves || slot.item_name);
+      if (hasSet) {
+        stripCount += 1;
+        var id = "strip-" + stripCount;
+        stripSets[id] = slot;
+        return '<button type="button" class="team-strip-slot" data-strip-set="' + id + '" aria-label="' +
+          escapeHtml(title + ": show set") + '" aria-haspopup="dialog">' + img + badges + "</button>";
+      }
+      return '<a class="team-strip-slot" href="' + pokemonHref(key) + '" title="' + escapeHtml(title) + '"' +
+        (opts.compact ? ' tabindex="-1"' : "") + ">" + img + badges +
+        '<span class="visually-hidden">' + escapeHtml(names[i]) + "</span></a>";
+    }).join("");
+    // A strip shorter than six (a core) gets as many columns as it has tiles.
+    return '<div class="team-strip-host' + (opts.compact ? " is-compact" : "") + '"><div class="team-strip' + (opts.compact ? " is-compact" : "") +
+      '"' + (slots.length < 6 ? ' style="--strip-n:' + slots.length + '"' : "") +
+      ' role="group" aria-label="' + escapeHtml(label) + '">' + tiles + "</div></div>";
+  }
+
+  // The pipe-delimited, slot-ordered pokemon_keys the team marts publish,
+  // drawn as a strip with no sets (no item badges). Kept as the entry point
+  // for cores, archetypes and table cells; a 32px-or-smaller size draws
+  // the compact strip.
   function teamCompositionHtml(pokemonKeys, sizePx) {
-    var keys = String(pokemonKeys || "")
-      .split("|")
-      .filter(Boolean);
-    if (!keys.length) return "";
-    var size = sizePx || ICON_SIZES.sm;
-    return (
-      '<div class="team-comp">' +
-      keys
-        .map(function (key) {
-          var img = spriteImg(key, size);
-          // Keep the slot even when its sprite is unresolvable, so the
-          // composition still reads as six Pokémon rather than silently
-          // shrinking to five.
-          return (
-            '<a class="team-comp-slot" href="' + pokemonHref(key) + '" title="' +
-            escapeHtml(pokemonNames[key] || key) +
-            '">' +
-            (img || '<span class="team-comp-blank"></span>') +
-            "</a>"
-          );
-        })
-        .join("") +
-      "</div>"
-    );
+    var keys = String(pokemonKeys || "").split("|").filter(Boolean);
+    return teamStripHtml(keys.map(function (key) { return { pokemon_key: key }; }), {
+      compact: (sizePx || ICON_SIZES.sm) <= 32,
+    });
+  }
+
+  // The set popover a strip tile opens. One element, reused; it closes on
+  // a click elsewhere, Escape, scroll or a route change.
+  var stripPop = null;
+  var stripPopOwner = null;
+  function closeStripPop() {
+    if (stripPop) stripPop.hidden = true;
+    if (stripPopOwner) stripPopOwner.setAttribute("aria-expanded", "false");
+    stripPopOwner = null;
+  }
+  function openStripPop(owner) {
+    var slot = stripSets[owner.getAttribute("data-strip-set")];
+    if (!slot) return;
+    if (!stripPop) {
+      stripPop = document.createElement("div");
+      stripPop.className = "strip-pop";
+      stripPop.setAttribute("role", "dialog");
+      stripPop.hidden = true;
+      document.body.appendChild(stripPop);
+    }
+    var name = pokemonNames[slot.pokemon_key] || slot.pokemon_key;
+    var moves = splitMoves(slot.moves);
+    stripPop.innerHTML = '<p class="strip-pop-name"><a href="' + pokemonHref(slot.pokemon_key) + '">' +
+      escapeHtml(name) + " &rarr;</a></p><dl>" +
+      (slot.item_name ? "<dt>Item</dt><dd>" + itemCell(slot.item_name) + "</dd>" : "") +
+      (slot.ability ? "<dt>Ability</dt><dd>" + escapeHtml(slot.ability) + "</dd>" : "") +
+      (slot.nature ? "<dt>" + termHtml("alignment", "Stat Alignment") + "</dt><dd>" + escapeHtml(slot.nature) + "</dd>" : "") +
+      "</dl>" +
+      (moves.length ? '<ul class="strip-pop-moves">' + moves.map(function (m) { return "<li>" + escapeHtml(m) + "</li>"; }).join("") + "</ul>" : "");
+    stripPop.setAttribute("aria-label", name + "'s set");
+    stripPop.hidden = false;
+    stripPopOwner = owner;
+    owner.setAttribute("aria-expanded", "true");
+    var rect = owner.getBoundingClientRect();
+    var width = Math.min(280, window.innerWidth - 24);
+    stripPop.style.width = width + "px";
+    var left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
+    stripPop.style.left = left + window.scrollX + "px";
+    stripPop.style.top = rect.bottom + 8 + window.scrollY + "px";
+    var link = stripPop.querySelector("a");
+    if (link) link.focus({ preventScroll: true });
+  }
+  document.addEventListener("click", function (e) {
+    var owner = e.target.closest && e.target.closest("[data-strip-set]");
+    if (owner) {
+      e.preventDefault();
+      if (stripPopOwner === owner && stripPop && !stripPop.hidden) closeStripPop();
+      else openStripPop(owner);
+      return;
+    }
+    if (stripPop && !stripPop.hidden && !(e.target.closest && e.target.closest(".strip-pop"))) closeStripPop();
+    else if (e.target.closest && e.target.closest(".strip-pop a")) closeStripPop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && stripPop && !stripPop.hidden) {
+      var owner = stripPopOwner;
+      closeStripPop();
+      if (owner) owner.focus();
+    }
+  });
+  window.addEventListener("scroll", function () {
+    if (stripPop && !stripPop.hidden && !stripPop.contains(document.activeElement)) closeStripPop();
+  }, { passive: true });
+
+  // ---------- player lines, scoreboard rows and phase chips (V4, V5) ----------
+  // "A player is name · country · record, in chips and in that order"
+  // (docs/upgrade-plan-2027q2.md, rule 5). player: {player_id?,
+  // player_name, player_country?, record_wins?, record_losses?}.
+  function playerLineHtml(player, opts) {
+    opts = opts || {};
+    if (!player || !player.player_name) return "";
+    var name = player.player_id && !opts.noLink
+      ? '<a class="sb-name" href="' + routeHash("player", [player.player_id]) + '">' + escapeHtml(player.player_name) + "</a>"
+      : '<span class="sb-name">' + escapeHtml(player.player_name) + "</span>";
+    var flag = countryFlag(player.player_country);
+    var country = player.player_country
+      ? '<span class="sb-chip sb-cc" title="Country">' + (flag ? '<span aria-hidden="true">' + flag + "</span> " : "") +
+        escapeHtml(player.player_country) + "</span>"
+      : "";
+    var record = recordText(player.record_wins, player.record_losses);
+    return '<span class="sb-player">' + name + country +
+      (record ? '<span class="sb-chip sb-rec" title="Record (wins–losses)">' + record + "</span>" : "") + "</span>";
+  }
+
+  // A match as a scoreboard row: "NAME [CC] [W–L] [score]" for each side,
+  // the winner in bold (R2's scoreboard bar). On a phone the two sides
+  // stack. Match results are team vs team: callers label the view so.
+  // match: {a: player, b: player, winner: "a" | "b" | null, score_a?,
+  // score_b?, label?}.
+  function scoreboardRowHtml(match) {
+    function side(player, score, won, which) {
+      return '<span class="sb-side sb-' + which + (won ? " is-winner" : "") + '">' + playerLineHtml(player) +
+        '<span class="sb-score" aria-label="' + (won ? "won" : "lost") + '">' +
+        (score != null ? escapeHtml(score) : won ? "W" : "L") + "</span></span>";
+    }
+    return '<div class="scoreboard-row">' + (match.label ? '<span class="phase-chip">' + escapeHtml(match.label) + "</span>" : "") +
+      side(match.a, match.score_a, match.winner === "a", "a") +
+      '<span class="sb-vs" aria-hidden="true">vs</span>' +
+      side(match.b, match.score_b, match.winner === "b", "b") + "</div>";
+  }
+
+  // A small black italic chip saying what a view covers (rule 6).
+  function phaseChipHtml(label, cls) {
+    return label ? '<span class="phase-chip' + (cls ? " " + cls : "") + '">' + escapeHtml(label) + "</span>" : "";
+  }
+
+  // The phase a finish reached: top 8, top 16, or Swiss.
+  function placementPhase(placement) {
+    if (placement == null) return "";
+    if (placement === 1) return "Champion";
+    if (placement <= 8) return "Top 8";
+    if (placement <= 16) return "Top 16";
+    return "Swiss";
   }
 
   // A `typeFn` for renderGrid6xn that resolves a row's types through
@@ -552,12 +848,31 @@
   // the type-colour side bar). One role="img" with both types in its label,
   // so a screen reader hears "dragon / ground type" once; each emblem keeps
   // its title for a desktop hover. No type data -> "".
-  function typeIconsHtml(type1, type2, sizePx) {
+  // square: true draws V6's square badges, for broadcast components.
+  function typeIconsHtml(type1, type2, sizePx, square) {
     var types = [type1, type2].filter(Boolean).map(function (t) { return String(t).toLowerCase(); });
-    var icons = types.map(function (t) { return typeIconImg(t, sizePx || 20); }).filter(Boolean);
+    var icons = types.map(function (t) {
+      return square ? typeBadgeSquare(t, sizePx || 20) : typeIconImg(t, sizePx || 20);
+    }).filter(Boolean);
     if (!icons.length) return "";
     return '<span class="type-icons" role="img" aria-label="' + escapeHtml(types.join(" / ") + " type") + '">' +
       icons.join("") + "</span>";
+  }
+
+  // Square type badge (docs/upgrade-plan-2027q2.md, V6): the type's colour
+  // filled, our own white glyph on it (pipelines/render/type_glyphs.py, in
+  // the payload as type_glyphs), never the official icon. Broadcast
+  // components use it; dense tables keep the round emblems.
+  var typeGlyphs = DATA.type_glyphs || {};
+  function typeBadgeSquare(typeName, sizePx) {
+    var type = String(typeName || "").toLowerCase();
+    var glyph = typeGlyphs[type];
+    if (!glyph) return typeIconImg(type, sizePx);
+    var size = sizePx || 22;
+    var inner = Math.round(size * 0.72);
+    return '<span class="type-sq" title="' + escapeHtml(type) + '" style="width:' + size + "px;height:" + size +
+      "px;background:" + typeColor(type) + '"><svg viewBox="0 0 24 24" width="' + inner + '" height="' + inner +
+      '" fill="#fff" fill-rule="evenodd" aria-hidden="true">' + glyph + "</svg></span>";
   }
 
   // Renders a Pokémon's type_1/type_2 into `container` as a type-badge row
@@ -709,11 +1024,12 @@
   // and by the Data section's "How to read this page", so the two can't
   // disagree.
   var GLOSSARY = {
-    usage: ["Usage share", "A Pokémon's share of every roster slot in the selected events. Each team has six slots, so 8.7% means it was on about half of all teams."],
-    slot: ["Roster slot", "One of the six places on a team. Usage shares are counted over all of them."],
+    usage: ["Team share", "The share of teams in the selected events that brought a Pokémon: 51.9% means it was on about half of them. This is the unit the official usage card, Pikalytics and Smogon use. Hover a figure for its count and its share of roster slots."],
+    slot: ["Roster slot", "One of the six places on a team. A Pokémon's share of roster slots is about one sixth of its team share; the site led with it until 2026-10, and it still shows in tooltips."],
     wilson: ["Wilson bound", "The low end of a 95% confidence interval on a win rate. A 3–0 record and a 300–200 record both look strong; the Wilson bound tells them apart by sample size."],
     hhi: ["HHI", "How concentrated a Pokémon's item (or ability) choice is, from 0 to 1: 1 means everyone runs the same one, near 0 means the choice is spread out. The Herfindahl–Hirschman index."],
     locked: ["Locked in", "An HHI of 0.5 or more: one choice crowds out the rest."],
+    conversion: ["Day 2 conversion", "A Pokémon's share of the teams that reached Day 2 divided by its share of the whole field at the same events. ×1.00 means its teams made Day 2 at the field's rate; ×1.30 means 30% more often. Shown only when both sides have at least 100 teams."],
     lift: ["Synergy lift", "How much more often two (or three) Pokémon share a team than their popularity alone predicts. ×1.0 is chance; ×2.0 is twice as often."],
     pts: ["pts", "Percentage points: the plain difference between two percentages. 4.6% to 8.2% is +3.6 pts."],
     topcut: ["Top cut", "A finish in the top 8 (for usage) or top 16 (for team lists) of an event."],
@@ -721,6 +1037,10 @@
     realset: ["Real set", "An item, ability, nature and four moves that appeared together on actual team sheets. A core set groups item, ability and the three most common moves."],
     teamvsteam: ["Team vs team", "Head-to-head records credit the whole team that won. No source says which four Pokémon were brought to a game."],
     n: ["n", "The sample size behind a figure: teams, team sheets or matches, as labelled."],
+    statpoints: ["Stat Points", "Champions' replacement for EVs: 66 points per Pokémon, at most 32 in one stat, with IVs fixed at 31. At level 50 a stat is base + Stat Points + 20 before Stat Alignment. Tournament team sheets don't publish them, so anything here that needs a stat assumes 32 in it; the spreads a profile shows are what Showdown ladder players ran."],
+    ladder: ["Showdown ladder", "Rated battles on Pokémon Showdown's Champions ladder, from Smogon's monthly statistics: every battle in the month, weighted at 1760+ toward the strongest players. A different population from tournament players, so its figures are shown beside tournament ones and never added to them."],
+    counters: ["Checks and counters", "From the ladder's battle logs: when this Pokémon and the opponent met and one was KO'd or switched out, how often it was this Pokémon. 55% means the opponent came out on top 55% of the time. Pokémon vs Pokémon, unlike tournament records, which are team vs team. Ranked as Smogon ranks them, by the rate less four standard deviations, so a rate measured on few encounters ranks lower."],
+    alignment: ["Stat Alignment", "What Champions and the official team sheets call a nature: one stat ×1.1, another ×0.9, or neutral. Team sheets publish it for every Pokémon."],
   };
 
   function termHtml(id, label) {
@@ -745,8 +1065,8 @@
   }
 
   // One Pokémon's set as Showdown text. set: {pokemon_key, item_name,
-  // ability, nature, moves (array or pipe-delimited)}. No EV line: team
-  // sheets don't publish spreads.
+  // ability, nature, moves (array or pipe-delimited)}. No Stat Point line:
+  // team sheets don't publish spreads.
   function setToShowdown(set) {
     var lines = [showdownName(set.pokemon_key) + (set.item_name ? " @ " + set.item_name : "")];
     if (set.ability) lines.push("Ability: " + set.ability);
@@ -765,11 +1085,32 @@
   // Copies text, confirming on the button. Some hosts refuse clipboard
   // writes; then the text appears selected next to the button so the
   // reader can copy it by hand.
+  // A short confirmation at the foot of the screen (docs/upgrade-plan-
+  // 2027q2.md, M4). Touch screens have no hover feedback, so a copy there
+  // also says so out loud, not only on the button.
+  var toastTimer = null;
+  function showToast(message) {
+    var toast = document.getElementById("toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "toast";
+      toast.className = "toast";
+      toast.setAttribute("role", "status");
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("is-shown");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("is-shown"); }, 2600);
+  }
+  var TOUCH_ONLY = window.matchMedia ? window.matchMedia("(hover: none)").matches : false;
+
   function copyWithFallback(button, text, doneLabel) {
     var label = button.textContent;
     function done() {
       button.textContent = doneLabel || "Copied";
       setTimeout(function () { button.textContent = label; }, 1500);
+      if (TOUCH_ONLY) showToast(/showdown/i.test(label) ? "Copied for Showdown" : "Copied");
     }
     function fallback() {
       var box = button.parentNode.querySelector("textarea.copy-fallback");
@@ -852,7 +1193,7 @@
   // Events in the page's regulation (every event for "all").
   function eventsInScope() {
     return (marts.tournament_event_summary || []).filter(function (e) {
-      return regulationScope === ALL_SCOPE || e.regulation_code === regulationScope;
+      return regulationCode === ALL_SCOPE || e.regulation_code === regulationCode;
     });
   }
 
@@ -916,11 +1257,12 @@
       : "";
     var who = [];
     if (team.player_name && !opts.hidePlayer) {
-      who.push(
-        (team.player_id ? '<a href="' + routeHash("player", [team.player_id]) + '">' : "<span>") +
-        escapeHtml(team.player_name) + (team.player_id ? "</a>" : "</span>") +
-        (team.player_country ? " " + countryCell(team.player_country) : "")
-      );
+      // Name and country as chips (V4); the record is already the headline.
+      who.push(playerLineHtml({
+        player_id: team.player_id,
+        player_name: team.player_name,
+        player_country: team.player_country,
+      }));
     }
     if (team.event_id && !opts.hideEvent) {
       who.push('<a href="' + routeHash("event", [team.event_id]) + '" title="' + escapeHtml(team.event_name || "") + '">' +
@@ -940,10 +1282,20 @@
     if (card) {
       actions.push('<a class="btn btn-sm" href="' + escapeHtml(card) + '" download>Download card</a>');
     }
+    // The strip carries each slot's held item when the sheet is published
+    // (V3); otherwise it draws the six Pokémon alone.
+    var keys = String(team.pokemon_keys || "").split("|").filter(Boolean);
+    var slots = sets && sets.length && (!keys.length || sets.length === keys.length)
+      ? sets
+      : keys.map(function (key) { return { pokemon_key: key }; });
+    var phase = opts.phase !== undefined ? opts.phase : placementPhase(team.placement);
     return '<article class="team-card">' +
       '<header class="team-card-head"><span class="team-card-headline">' + headline + "</span>" + winRate + "</header>" +
-      (who.length ? '<div class="team-card-who">' + who.join(" · ") + "</div>" : "") +
-      teamCompositionHtml(team.pokemon_keys, 40) +
+      (phase || who.length
+        ? '<div class="team-card-who">' + phaseChipHtml(phase) + who.join(" · ") + "</div>"
+        : "") +
+      teamStripHtml(slots, { label: (team.player_name ? team.player_name + "'s team: " : "Team: ") +
+        keys.map(function (k) { return pokemonNames[k] || k; }).join(", ") }) +
       (sets && sets.length
         ? '<details class="team-card-sets"><summary>Sets</summary><ul>' + sets.map(compactSetHtml).join("") + "</ul></details>"
         : "") +
@@ -1100,7 +1452,13 @@
   // }]
   // opts.sort: {key, dir}; opts.rowHref(row): where a row click goes;
   // opts.limit: rows shown before "Show all"; opts.empty: empty-state text;
-  // opts.caption: accessible table caption.
+  // opts.caption: accessible table caption; opts.citation(): the "Copy with
+  // citation" sample ("n = ..."), or {scope, sample} to name its own scope;
+  // opts.officialOnly: the table reads official events only
+  // (docs/upgrade-plan-2027q2.md, S1), so on an Online or All scope it
+  // cites the official sample and, unless its panel already says so,
+  // carries an official-only note ("cite": the citation only, for a table
+  // whose control already says so).
   var NUMERIC_TYPES = { rank: 1, share: 1, percent: 1, int: 1 };
   // Table rows use a 32px sprite: dense enough for ~20 rows a screen.
   var TABLE_SPRITE_PX = 32;
@@ -1153,16 +1511,27 @@
     }
 
     container.classList.add("data-table-host");
+    if (opts.officialOnly === true && !isOfficialScope && !container.dataset.officialNote) {
+      var panel = container.closest(".tab-panel");
+      if (!panel || !panel.querySelector("[data-official-only]")) {
+        container.insertAdjacentHTML("beforebegin",
+          officialOnlyNoteHtml((opts.caption || "This table") + ": official events only."));
+      }
+      container.dataset.officialNote = "1";
+    }
     container.innerHTML =
       '<div class="data-table-tools">' +
       '<label class="data-table-sort">Sort <select aria-controls="' + tableId + '"></select></label>' +
       '<button type="button" class="btn btn-sm data-table-cite">Copy with citation</button></div>' +
-      '<table class="data-table" id="' + tableId + '">' +
+      '<div class="data-table-scroll"><table class="data-table" id="' + tableId + '">' +
       (opts.caption ? '<caption class="visually-hidden">' + escapeHtml(opts.caption) + "</caption>" : "") +
-      "<thead><tr></tr></thead><tbody></tbody></table>" +
+      "<thead><tr></tr></thead><tbody></tbody></table></div>" +
       '<p class="data-table-empty empty-state" hidden></p>' +
       '<button type="button" class="btn btn-sm data-table-more" hidden></button>';
     var table = container.querySelector("table");
+    // On a tablet a wide table scrolls inside this frame, never the page
+    // (docs/upgrade-plan-2027q2.md, M2), and fades at the edge it hides.
+    setupScrollCues(container.querySelector(".data-table-scroll"));
     var headRow = table.querySelector("thead tr");
     var tbody = table.querySelector("tbody");
     var sortSelect = container.querySelector(".data-table-sort select");
@@ -1284,7 +1653,14 @@
         lines.push(cols.map(function (c) { return text(cellHtml(c, row, maxByKey)); }).join("\t"));
       });
       lines.push("");
-      lines.push(citationLine(opts.citation ? opts.citation() : null));
+      var cited = opts.citation ? opts.citation() : null;
+      if (cited && typeof cited === "object") {
+        lines.push(citationLine(cited.sample, cited.scope));
+      } else if (opts.officialOnly && !isOfficialScope) {
+        lines.push(citationLine(cited || officialSample(), officialScopeName));
+      } else {
+        lines.push(citationLine(cited));
+      }
       copyWithFallback(citeBtn, lines.join("\n"));
     });
     // A row click anywhere but a link or button opens what the row is about.
@@ -1314,11 +1690,17 @@
   // "Source: Pokémon Champions Data Platform, dataset 0.3.0, Reg M-C,
   // n = 3,770 teams, <url>". sample overrides the n clause (an event
   // page's own team count).
-  function citationLine(sample) {
+  // The official sample on a population scope, for official-only tables.
+  function officialSample() {
+    var teams = DATA.kpis && DATA.kpis.official_team_count;
+    return teams ? "n = " + Number(teams).toLocaleString() + " teams" : null;
+  }
+
+  function citationLine(sample, scopeName) {
     var parts = ["Source: Pokémon Champions Data Platform"];
     var version = DATA.provenance && DATA.provenance.dataset_version;
     if (version) parts.push("dataset " + version);
-    parts.push(shortRegulation(regulationScope));
+    parts.push(scopeName || shortRegulation(regulationScope));
     var teams = DATA.kpis && DATA.kpis.team_count;
     parts.push(sample || (teams ? "n = " + Number(teams).toLocaleString() + " teams" : null));
     parts.push(window.location.href);
@@ -1327,6 +1709,20 @@
 
   function pokemonRowHref(row) {
     return row.pokemon_key ? pokemonHref(row.pokemon_key) : null;
+  }
+
+  // Views another file adds inside a tab (ladder.js): "usage" hooks run
+  // once the Usage tab is set up, "profile" hooks on every profile render
+  // with the profile's row. Scripts all load before routing starts, so a
+  // hook is registered before its tab can open.
+  var tabExtensions = { usage: [], profile: [] };
+  function extendTab(tabId, fn) {
+    tabExtensions[tabId].push(fn);
+  }
+  function runExtensions(tabId, arg) {
+    tabExtensions[tabId].forEach(function (fn) {
+      fn(arg);
+    });
   }
 
   // ---------- tab switching ----------
@@ -1395,7 +1791,7 @@
           // Mutated in place, never reassigned: matchup.js and teams.js hold
           // a reference to this same object via window.DashboardApp.marts.
           Object.keys(loaded || {}).forEach(function (name) {
-            marts[name] = restoreNames(applyRegulationScope(loaded[name]));
+            marts[name] = restoreNames(applyRegulationScope(loaded[name], name));
           });
           return marts;
         })
@@ -1421,7 +1817,29 @@
       if (byScope) paths.push(byScope[regulationScope] || byScope[ALL_SCOPE]);
     });
     return Promise.all(paths.filter(Boolean).map(fetchShard)).then(function () {
+      restoreDetails();
       return marts;
+    });
+  }
+
+  // Move, item and ability details ship once, in core.json, rather than on
+  // every Pokémon's row (build.py's DETAIL_SPLITS); once both halves are
+  // here, each row gets its details back, so every view keeps reading
+  // row.move_type or row.short_effect.
+  function restoreDetails() {
+    ((DATA.mart_files && DATA.mart_files.detail_joins) || []).forEach(function (join) {
+      var rows = marts[join[0]];
+      var details = marts[join[2]];
+      if (!rows || !details || !rows.length || rows[0][join[3][0]] !== undefined) return;
+      var byKey = {};
+      details.forEach(function (d) { byKey[d[join[1]]] = d; });
+      rows.forEach(function (row) {
+        var d = byKey[row[join[1]]];
+        if (!d) return;
+        join[3].forEach(function (field) {
+          if (row[field] === undefined) row[field] = d[field];
+        });
+      });
     });
   }
 
@@ -1662,6 +2080,7 @@
     var tabChanged = route.tab !== currentRoute.tab;
     // A tip opened by the tap that changed the view would outlive its owner.
     hideTip();
+    closeStripPop();
     // An event or player page titles the tab after itself; everything else
     // keeps the site's title.
     if (tabChanged) document.title = DEFAULT_TITLE;
@@ -1824,7 +2243,7 @@
   function moverListHtml(rows, showDelta) {
     if (!rows.length) return '<p class="empty-state">None.</p>';
     return "<ol class=\"mover-list\">" + rows.map(function (r) {
-      var delta = r.usage_share_delta;
+      var delta = r.team_share_delta;
       var deltaHtml = "";
       if (showDelta && delta != null) {
         var sign = delta > 0 ? "+" : "";
@@ -1834,7 +2253,8 @@
       return '<li><a class="mover-link" href="' + pokemonHref(r.pokemon_key) + '">' +
         spriteImg(r.pokemon_key, ICON_SIZES.sm) +
         '<span class="mover-name">' + escapeHtml(r.pokemon_name || r.pokemon_key) + "</span>" +
-        '<span class="mover-share">' + formatPercent(r.usage_share) + "</span>" + deltaHtml + "</a></li>";
+        '<span class="mover-share"' + (r.usage_share != null ? ' title="' + formatPercent(r.usage_share) + ' of roster slots"' : "") +
+        ">" + formatPercent(r.team_share) + "</span>" + deltaHtml + "</a></li>";
     }).join("") + "</ol>";
   }
 
@@ -1871,7 +2291,7 @@
     var title;
     var sample;
     if (moversMode === "window") {
-      title = "What changed within " + shortRegulation(regulationScope);
+      title = "What changed within " + shortRegulation(regulationCode);
       sample = windowed.recent_events.join(", ") + " (" + plural(windowed.team_count, "team") + ") against " +
         windowed.early_events.join(", ") + " (" + plural(windowed.previous_team_count, "team") + ").";
     } else {
@@ -1891,9 +2311,12 @@
     if (moversMode === "previous") {
       columns.push('<div><h4>New this regulation</h4>' + moverListHtml(movers.new_arrivals, false) + "</div>");
     }
-    var shareCard = ((DATA.share_cards || {}).whats_changed || {})[regulationScope];
+    // Official events only (S1): a population scope shows its regulation's
+    // official comparison, and says so.
+    var shareCard = ((DATA.share_cards || {}).whats_changed || {})[regulationCode];
     panel.innerHTML = '<div class="movers-head"><h3>' + escapeHtml(title) + "</h3>" + toggle + "</div>" +
-      '<p class="sub">' + escapeHtml(sample) + " Shares are of " + termHtml("slot", "roster slots") +
+      officialOnlyNoteHtml("What changed compares official events only, the headline figures.") +
+      '<p class="sub">' + escapeHtml(sample) + " Shares are of " + termHtml("usage", "teams") +
       "; changes are in " + termHtml("pts", "percentage points (pts)") + '.</p><div class="mover-columns">' +
       columns.join("") + "</div>" +
       (shareCard
@@ -1910,34 +2333,248 @@
     renderMovers();
   });
 
-  function setupOverview() {
-    var overviewSub = document.getElementById("overview-sub");
-    if (overviewSub) {
-      overviewSub.textContent = "Top 12 most-used Pokémon in " + scopeLabel(regulationScope) +
-        ", ranked by share of roster slots.";
+  // ---------- Top 12 board (docs/upgrade-plan-2027q2.md, V2) ----------
+  // The Overview's hero, after the official "Top 12 Pokémon" card (R1):
+  // the 12 most-used Pokémon by team share, one gold number a tile, the
+  // title band carrying the regulation, the sample and the scope. It
+  // renders from the inline KPIs (compute_kpis' top_12_boards), so it
+  // needs no fetch. The band's switches choose the player scope (each one
+  // the build produced: All players now, Day 2 and Online as their data
+  // arrives) and the grouping: Forms, or Species, which folds each Mega
+  // into the Pokémon holding its stone, as the official card does.
+  var BOARD_SCOPES = [
+    { id: "all", label: "All players" },
+    { id: "day2", label: "Day 2" },
+    { id: "online", label: "Online" },
+  ];
+  var BOARD_GROUPING_KEY = "dashboard-board-grouping";
+  var BOARD_EAGER_TILES = 6;
+  var boardState = { scope: "all", grouping: "forms" };
+  try {
+    if (localStorage.getItem(BOARD_GROUPING_KEY) === "species") boardState.grouping = "species";
+  } catch (e) {
+    // Storage blocked: Forms, the default, every visit.
+  }
+
+  // "Floette (Eternal Flower)": the form in parentheses shrinks, and moves
+  // to its own line on a phone, rather than being cut off. An ellipsis
+  // that hid it would make two Pokémon look the same.
+  function boardNameHtml(name) {
+    var match = /^(.+?)(\s\(.+\))$/.exec(String(name || ""));
+    if (!match) return escapeHtml(name || "");
+    return escapeHtml(match[1]) + '<span class="board-form">' + escapeHtml(match[2]) + "</span>";
+  }
+
+  function boardTileHtml(tile, index) {
+    var art = heroArt[tile.pokemon_key] || sprites[tile.pokemon_key];
+    var img = art
+      ? '<img class="board-art" src="' + art + '" alt="" width="112" height="112" loading="' +
+        (index < BOARD_EAGER_TILES ? "eager" : "lazy") + '" decoding="async">'
+      : '<span class="board-art-blank"></span>';
+    var teams = tile.team_total
+      ? Number(tile.usage_count || 0).toLocaleString() + " of " + Number(tile.team_total).toLocaleString() + " teams"
+      : "";
+    var forms = String(tile.form_keys || "").split("|").filter(Boolean);
+    var detail = [
+      teams,
+      tile.usage_share != null ? formatPercent(tile.usage_share) + " of roster slots" : "",
+      tile.conversion != null ? "×" + Number(tile.conversion).toFixed(2) + " Day 2 conversion" : "",
+    ]
+      .concat(forms.length > 1 ? ["includes " + forms.map(function (k) { return pokemonNames[k] || k; }).join(", ")] : [])
+      .filter(Boolean).join(" · ");
+    var label = (index + 1) + ". " + tile.pokemon_name + ", on " + formatPercent(tile.team_share) + " of teams" +
+      (teams ? " (" + teams + ")" : "");
+    return '<a class="board-tile" href="' + pokemonHref(tile.pokemon_key) + '" aria-label="' + escapeHtml(label) +
+      '" title="' + escapeHtml(detail) + '">' +
+      '<span class="board-rank" aria-hidden="true">' + (index + 1) + "</span>" + img +
+      '<span class="board-foot" aria-hidden="true"><span class="board-value-row">' +
+      '<span class="board-value">' + formatPercent(tile.team_share) + "</span>" +
+      '<span class="board-types">' + typeIconsHtml(tile.type_1, tile.type_2, 22, true) + "</span></span>" +
+      '<span class="board-name">' + boardNameHtml(tile.pokemon_name) + "</span></span></a>";
+  }
+
+  // ---------- share cards (V8, M4) ----------
+  // A Top 12 card's controls: "Share" hands the 4:5 and 9:16 PNGs to the
+  // system share sheet where the browser can share files (phones), and
+  // "Download card" saves the 16:9 one everywhere.
+  function canShareFiles() {
+    try {
+      return !!(navigator.share && navigator.canShare &&
+        navigator.canShare({ files: [new File([new Blob()], "card.png", { type: "image/png" })] }));
+    } catch (e) {
+      return false;
     }
-    renderMovers();
-    var top12 = (DATA.kpis && DATA.kpis.top_12_pokemon) || [];
-    renderGrid6xn(document.getElementById("overview-top-12"), top12, {
-      keyFn: function (r) {
-        return r.pokemon_key;
-      },
-      // Read off the row itself, not through pokemon_champions_profile:
-      // this tab renders before the marts are fetched, so the types are
-      // joined into the KPI rows server-side (see compute_kpis).
-      typeFn: function (r) {
-        return { type_1: r.type_1, type_2: r.type_2 };
-      },
-      labelFn: function (r) {
-        return r.pokemon_name;
-      },
-      displayFn: function (r) {
-        return formatPercent(r.usage_share);
-      },
-      subFn: function (r) {
-        return formatPercent(r.win_rate) + " win rate";
-      },
+  }
+  function shareCardControlsHtml(card, title) {
+    if (!card) return "";
+    var files = [card.portrait, card.story].filter(Boolean);
+    var share = files.length && canShareFiles()
+      ? '<button type="button" class="btn btn-sm" data-share-files="' + escapeHtml(files.join("|")) +
+        '" data-share-title="' + escapeHtml(title) + '">Share</button>'
+      : "";
+    var download = card.landscape
+      ? '<a class="btn btn-sm" href="' + escapeHtml(card.landscape) + '" download>Download card</a>'
+      : "";
+    return share || download ? '<span class="share-controls">' + share + download + "</span>" : "";
+  }
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("[data-share-files]");
+    if (!btn) return;
+    var paths = btn.getAttribute("data-share-files").split("|");
+    var title = btn.getAttribute("data-share-title") || document.title;
+    Promise.all(paths.map(function (path) {
+      return fetch(path).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.blob();
+      }).then(function (blob) {
+        return new File([blob], path.split("/").pop(), { type: "image/png" });
+      });
+    })).then(function (files) {
+      return navigator.share({ files: files, title: title, text: title + " · " + window.location.href });
+    }).catch(function (error) {
+      if (error && error.name === "AbortError") return;
+      showToast("Couldn't open the share sheet. Use Download card instead.");
     });
+  });
+
+  function segmentedHtml(label, attr, options, current) {
+    return '<div class="segmented" role="group" aria-label="' + escapeHtml(label) + '">' + options.map(function (o) {
+      return '<button type="button" ' + attr + '="' + escapeHtml(o.id) + '" aria-pressed="' + (o.id === current) + '">' +
+        escapeHtml(o.label) + "</button>";
+    }).join("") + "</div>";
+  }
+
+  // The board's card: official scopes' All players and Day 2 boards have
+  // one; an online board's figures aren't on any card.
+  function boardShareHtml() {
+    if (!isOfficialScope || (boardState.scope !== "all" && boardState.scope !== "day2")) return "";
+    var cards = (((DATA.share_cards || {}).top12 || {}).regulation || {})[regulationCode] || {};
+    return shareCardControlsHtml(cards[boardState.scope],
+      "Top 12 Pokémon · " + shortRegulation(regulationCode) + (boardState.scope === "day2" ? " · Day 2" : ""));
+  }
+
+  function renderBoard() {
+    var el = document.getElementById("top-board");
+    if (!el) return;
+    var boards = (DATA.kpis && DATA.kpis.top_12_boards) || {};
+    // Beside an Online board, the official one is "Official", not "All
+    // players": it covers official events only (S1).
+    var officialLabel = boards.online && isOfficialScope ? "Official" : null;
+    var scopes = BOARD_SCOPES.filter(function (s) { return boards[s.id]; }).map(function (s) {
+      return s.id === "all" && officialLabel ? { id: s.id, label: officialLabel } : s;
+    });
+    el.hidden = !scopes.length;
+    if (!scopes.length) return;
+    if (!boards[boardState.scope]) boardState.scope = scopes[0].id;
+    var board = boards[boardState.scope];
+    var boardLabel = boardState.scope === "all" && officialLabel ? officialLabel : board.label;
+    var tiles = board[boardState.grouping] || board.forms || [];
+    var controls = "";
+    if (scopes.length > 1) controls += segmentedHtml("Players", "data-board-scope", scopes, boardState.scope);
+    controls += segmentedHtml("Group by", "data-board-group", [
+      { id: "forms", label: "Forms" },
+      { id: "species", label: "Species" },
+    ], boardState.grouping);
+    var band = '<div class="board-band">' +
+      '<div class="board-band-block board-band-title broadcast-band"><h3 id="board-title">Top 12 Pokémon</h3>' +
+      "<p>By " + termHtml("usage", "share of teams") + "</p></div>" +
+      '<div class="board-band-block board-band-mark"><strong>' + escapeHtml(shortRegulation(regulationScope)) + "</strong>" +
+      "<span>" + escapeHtml(plural(board.team_count, "team") + " · " + plural(board.event_count, "event")) + "</span></div>" +
+      '<div class="board-band-block board-band-scope"><span class="phase-chip' +
+      (boardState.scope === "online" ? " is-online" : boardState.scope === "all" && !isOfficialScope ? " is-" + regulationPopulation : "") +
+      '">' + escapeHtml(boardLabel) + '</span><div class="board-controls">' + controls + "</div></div></div>";
+    el.innerHTML = '<div class="board-inner"><div class="board-grid">' + band +
+      (tiles.length
+        ? tiles.map(boardTileHtml).join("")
+        : '<p class="empty-state" style="grid-column: 1 / -1">No usage recorded for this scope yet.</p>') +
+      '</div><p class="board-more">' + boardShareHtml() +
+      '<button type="button" class="btn btn-sm" data-embed-toggle aria-expanded="' + boardEmbedOpen +
+      '" aria-controls="board-embed">Embed</button><a href="' + routeHash("usage", []) +
+      '">Every Pokémon in the Usage table &rarr;</a></p>' + boardEmbedHtml(tiles.length) + "</div>";
+  }
+
+  // The embeddable widget (docs/upgrade-plan-2027q2.md, list #33): an
+  // <iframe> of embed.html showing this board, for a creator's site. It
+  // carries its own citation and links back here.
+  var boardEmbedOpen = false;
+  function boardEmbedSnippet() {
+    var base = window.location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "");
+    var board = isOfficialScope ? boardState.scope : regulationPopulation === "online" ? "online" : "all";
+    var src = base + "embed.html?reg=" + encodeURIComponent(regulationCode) + "&board=" + board +
+      "&group=" + boardState.grouping + (nameLanguage !== "en" ? "&lang=" + nameLanguage : "");
+    return '<iframe src="' + src + '" title="Top 12 Pokémon, ' + shortRegulation(regulationCode) +
+      ' (Pokémon Champions Data)" width="100%" height="480" style="border:0;max-width:760px" loading="lazy"></iframe>';
+  }
+  function boardEmbedHtml(hasTiles) {
+    if (!hasTiles) return "";
+    var snippet = boardEmbedSnippet();
+    return '<div class="embed-panel" id="board-embed"' + (boardEmbedOpen ? "" : " hidden") + ">" +
+      '<p class="sub">Paste this into your site or post to show this board. It updates with the site, cites its ' +
+      "sample and links back here.</p>" +
+      '<textarea class="embed-code" readonly rows="3" aria-label="Embed code">' + escapeHtml(snippet) + "</textarea>" +
+      '<div class="embed-actions">' + copyButtonHtml(snippet, "Copy embed code") +
+      '<a class="btn btn-sm" href="' + escapeHtml(snippet.match(/src="([^"]+)"/)[1]) +
+      '" target="_blank" rel="noopener">Preview</a></div></div>';
+  }
+  document.addEventListener("click", function (e) {
+    var toggle = e.target.closest && e.target.closest("[data-embed-toggle]");
+    if (!toggle) return;
+    boardEmbedOpen = !boardEmbedOpen;
+    renderBoard();
+    var again = document.querySelector("[data-embed-toggle]");
+    if (again) again.focus();
+  });
+
+  document.addEventListener("click", function (e) {
+    var group = e.target.closest && e.target.closest("[data-board-group]");
+    var scope = e.target.closest && e.target.closest("[data-board-scope]");
+    if (!group && !scope) return;
+    if (group) {
+      boardState.grouping = group.getAttribute("data-board-group");
+      try {
+        localStorage.setItem(BOARD_GROUPING_KEY, boardState.grouping);
+      } catch (err) {
+        // Storage blocked: the choice lasts for this page only.
+      }
+    }
+    if (scope) boardState.scope = scope.getAttribute("data-board-scope");
+    renderBoard();
+    var again = document.querySelector(group
+      ? '[data-board-group="' + boardState.grouping + '"]'
+      : '[data-board-scope="' + boardState.scope + '"]');
+    if (again) again.focus();
+  });
+
+  // The change of unit is announced once (V1's risks): a reader who has
+  // seen it can dismiss it for good.
+  var TEAM_SHARE_NOTICE_KEY = "dashboard-team-share-notice";
+  function renderTeamShareNotice() {
+    var notice = document.getElementById("team-share-notice");
+    if (!notice) return;
+    var dismissed = false;
+    try {
+      dismissed = localStorage.getItem(TEAM_SHARE_NOTICE_KEY) === "dismissed";
+    } catch (e) {
+      dismissed = false;
+    }
+    notice.hidden = dismissed;
+    var button = document.getElementById("team-share-notice-dismiss");
+    if (button) {
+      button.addEventListener("click", function () {
+        notice.hidden = true;
+        try {
+          localStorage.setItem(TEAM_SHARE_NOTICE_KEY, "dismissed");
+        } catch (e) {
+          // Storage blocked: it returns on the next visit.
+        }
+      });
+    }
+  }
+
+  function setupOverview() {
+    renderTeamShareNotice();
+    renderBoard();
+    renderMovers();
   }
 
   // Tier List (docs/upgrade-plan-2026q4.md, B5). Bands by usage share in
@@ -1945,11 +2582,14 @@
   // coloured only when the 95% Wilson interval sits clearly above or below
   // 50%. Usage decides the band and win rate qualifies it, kept as two
   // signals rather than blended into one opaque score.
+  // Bands by team share (docs/upgrade-plan-2027q2.md, V1). They are the
+  // old roster-slot bands (4%, 2%, 1%, 0.5%) times six, so a Pokémon keeps
+  // its band through the change of unit.
   var TIERS = [
-    { id: "s", label: "S", min: 0.04 },
-    { id: "a", label: "A", min: 0.02 },
-    { id: "b", label: "B", min: 0.01 },
-    { id: "c", label: "C", min: 0.005 },
+    { id: "s", label: "S", min: 0.24 },
+    { id: "a", label: "A", min: 0.12 },
+    { id: "b", label: "B", min: 0.06 },
+    { id: "c", label: "C", min: 0.03 },
   ];
 
   function setupTiers() {
@@ -1964,16 +2604,16 @@
       .filter(function (r) { return !r.event_tier; })
       .sort(function (a, b) { return a.usage_rank - b.usage_rank; });
     if (method) {
-      method.innerHTML = "Bands by " + termHtml("usage", "share of roster slots") + " in " +
+      method.innerHTML = "Bands by " + termHtml("usage", "team share") + " in " +
         escapeHtml(scopeLabel(regulationScope)) +
-        ": S ≥ 4%, A 2–4%, B 1–2%, C 0.5–1%. The chip is win rate: green when its 95% " +
+        ": S ≥ 24%, A 12–24%, B 6–12%, C 3–6% of teams. The chip is win rate: green when its 95% " +
         termHtml("wilson", "Wilson lower bound") +
         " is above 50%, red when even its upper bound is below 50%, grey otherwise. Click a Pokémon for its profile.";
     }
     body.innerHTML = TIERS.map(function (tier, i) {
       var max = i === 0 ? Infinity : TIERS[i - 1].min;
       var members = rows.filter(function (r) {
-        return r.usage_share >= tier.min && r.usage_share < max;
+        return r.team_share >= tier.min && r.team_share < max;
       });
       if (!members.length) return "";
       var chips = members.map(function (r) {
@@ -1989,7 +2629,8 @@
         }
         return '<a class="tier-chip" href="' + pokemonHref(r.pokemon_key) + '">' +
           spriteImg(r.pokemon_key, ICON_SIZES.sm) + escapeHtml(r.pokemon_name) +
-          ' <span class="set-share">' + formatPercent(r.usage_share) + "</span>" + wrHtml + "</a>";
+          ' <span class="set-share" title="' + (r.usage_count || 0).toLocaleString() + " of " +
+          (r.scope_team_count || 0).toLocaleString() + ' teams">' + formatPercent(r.team_share) + "</span>" + wrHtml + "</a>";
       }).join("");
       return '<div class="tier-row"><div class="tier-label tier-' + tier.id + '">' + tier.label +
         "<small>" + members.length + "</small></div>" +
@@ -2008,6 +2649,14 @@
   function slotsTitle(count, total) {
     if (count == null || !total) return "";
     return Number(count).toLocaleString() + " of " + Number(total).toLocaleString() + " roster slots";
+  }
+
+  // "1,958 of 3,770 teams · 8.7% of roster slots": a team share's
+  // denominator, with the old slot share beside it (V1).
+  function teamsTitle(count, teams, slotShare) {
+    if (count == null || !teams) return "";
+    return Number(count).toLocaleString() + " of " + Number(teams).toLocaleString() + " teams" +
+      (slotShare != null ? " · " + formatPercent(slotShare) + " of roster slots" : "");
   }
 
   function recordTitle(row) {
@@ -2044,12 +2693,16 @@
         var profile = profileByKey[r.pokemon_key];
         if (!passesTypeFilter(selectedTypes, profile && profile.type_1, profile && profile.type_2)) return false;
         if (roleSelect && roleSelect.value && roles[r.pokemon_key] !== roleSelect.value) return false;
-        if (!inRange(r.usage_share != null ? r.usage_share * 100 : null, shareMin, shareMax)) return false;
+        if (!inRange(r.team_share != null ? r.team_share * 100 : null, shareMin, shareMax)) return false;
         if (!inRange(profile ? profile.speed : null, speedMin, speedMax)) return false;
         return true;
       });
     }
 
+    var teamTotals = {};
+    usageRows.forEach(function (r) {
+      if (r.scope_team_count) teamTotals[r.event_tier || ""] = r.scope_team_count;
+    });
     var slotTotals = {};
     usageRows.forEach(function (r) {
       var tier = r.event_tier || "";
@@ -2077,13 +2730,14 @@
           },
         },
         {
-          key: "usage_share",
+          key: "team_share",
           label: "Usage",
           term: "usage",
           type: "share",
           main: true,
-          title: function (r) { return slotsTitle(r.usage_count, slotTotals[r.event_tier || ""]); },
+          title: function (r) { return teamsTitle(r.usage_count, teamTotals[r.event_tier || ""], r.usage_share); },
         },
+        rankChangeColumn(),
         {
           key: "win_rate",
           label: "Win rate",
@@ -2094,29 +2748,83 @@
       ],
     });
 
+    // Rank change (docs/upgrade-plan-2027q2.md, list #19): a Pokémon's rank
+    // now against its rank over the events before -- before the newest
+    // event in the whole-regulation table, before the window in a window.
+    // Official events only, like the window itself.
+    function rankChangeColumn() {
+      return {
+        key: "rank_movement",
+        label: "Rank",
+        numeric: true,
+        sortable: true,
+        render: function (r) {
+          if (r.previous_rank === undefined) return "—";
+          if (r.previous_rank === null) return '<span class="badge badge-new">New</span>';
+          return rankMovementBadgeHtml(r);
+        },
+        title: function (r) {
+          if (r.previous_rank === undefined) return "";
+          return (r.previous_rank === null ? "Unranked" : "#" + r.previous_rank) + " " + rankBaseline + " → #" + r.rank + " now";
+        },
+      };
+    }
+    var rankBaseline = "";
+
+    // pokemon_key -> rank by teams over the given events (most first, ties
+    // by key, as the marts break them).
+    function ranksOver(eventIds) {
+      var counts = {};
+      var wanted = {};
+      eventIds.forEach(function (id) { wanted[id] = true; });
+      (marts.pokemon_event_usage_vs_regulation || []).forEach(function (r) {
+        if (wanted[r.event_id]) counts[r.pokemon_key] = (counts[r.pokemon_key] || 0) + (r.usage_count || 0);
+      });
+      var ranks = {};
+      Object.keys(counts).filter(function (k) { return counts[k] > 0; })
+        .sort(function (a, b) { return counts[b] - counts[a] || (a < b ? -1 : a > b ? 1 : 0); })
+        .forEach(function (key, i) { ranks[key] = i + 1; });
+      return ranks;
+    }
+
+    function withRankChange(row, rank, before) {
+      row.rank = rank;
+      row.previous_rank = before[row.pokemon_key] || null;
+      row.rank_movement = row.previous_rank ? row.previous_rank - rank : null;
+      return row;
+    }
+
     // Event window (C4): usage over a run of events -- the last N, or every
     // event since a given one -- from pokemon_event_usage_vs_regulation,
     // with each Pokémon's change against the events before the window.
-    // Shares are of roster slots, like everything else here. Tier doesn't
+    // Shares are of teams, like everything else here (V1). Tier doesn't
     // apply inside a window, so the tier filter is disabled while one is on.
     var windowSelect = document.getElementById("usage-window-filter");
     var windowEvents = eventsInScope().slice().sort(function (a, b) {
       return String(b.event_date).localeCompare(String(a.event_date)) || String(a.event_id).localeCompare(String(b.event_id));
     });
     if (windowSelect) {
+      // The window runs over official events (S1): on an Online or All
+      // scope its choices sit under an "Official events" heading.
+      var windowParent = windowSelect;
+      if (!isOfficialScope) {
+        windowParent = document.createElement("optgroup");
+        windowParent.label = "Official events";
+        windowSelect.appendChild(windowParent);
+      }
       [1, 2, 3].forEach(function (n) {
         if (windowEvents.length > n) {
           var opt = document.createElement("option");
           opt.value = "last-" + n;
           opt.textContent = n === 1 ? "Latest event" : "Last " + n + " events";
-          windowSelect.appendChild(opt);
+          windowParent.appendChild(opt);
         }
       });
       windowEvents.slice(1).forEach(function (e) {
         var opt = document.createElement("option");
         opt.value = "since-" + e.event_id;
         opt.textContent = "Since " + shortEventName(e.event_name);
-        windowSelect.appendChild(opt);
+        windowParent.appendChild(opt);
       });
       windowSelect.disabled = windowEvents.length < 2;
     }
@@ -2135,35 +2843,38 @@
     }
 
     var windowTable = createDataTable(document.getElementById("usage-window-table"), {
+      officialOnly: "cite",
       caption: "Usage in the selected events",
-      sort: { key: "usage_share", dir: "desc" },
+      sort: { key: "team_share", dir: "desc" },
       limit: 50,
       rowHref: pokemonRowHref,
       empty: "No Pokémon match these filters.",
       columns: [
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
         {
-          key: "usage_share",
+          key: "team_share",
           label: "Usage",
+          term: "usage",
           type: "share",
           main: true,
-          title: function (r) { return slotsTitle(r.usage_count, r.slot_total); },
+          title: function (r) { return teamsTitle(r.usage_count, r.team_total, r.usage_share); },
         },
         {
-          key: "usage_share_delta",
+          key: "team_share_delta",
           label: "vs before",
           numeric: true,
           sortable: true,
           render: function (r) {
-            if (r.usage_share_delta == null) return "—";
-            var pts = r.usage_share_delta * 100;
+            if (r.team_share_delta == null) return "—";
+            var pts = r.team_share_delta * 100;
             var cls = pts > 0.05 ? "badge-positive" : pts < -0.05 ? "badge-negative" : "badge-rank";
             return '<span class="badge ' + cls + '">' + (pts > 0 ? "+" : "") + pts.toFixed(1) + " pts</span>";
           },
           title: function (r) {
-            return r.previous_usage_share != null ? "Was " + formatPercent(r.previous_usage_share) + " before" : "";
+            return r.previous_team_share != null ? "Was " + formatPercent(r.previous_team_share) + " of teams before" : "";
           },
         },
+        rankChangeColumn(),
         { key: "win_rate", label: "Win rate", type: "percent", title: recordTitle },
         { key: "usage_count", label: "Teams", type: "int" },
       ],
@@ -2175,6 +2886,7 @@
       var current = {};
       var before = {};
       var slots = { now: {}, before: {} };
+      var teams = { now: {}, before: {} };
       var inScope = {};
       windowEvents.forEach(function (e) { inScope[e.event_id] = true; });
       (marts.pokemon_event_usage_vs_regulation || []).forEach(function (r) {
@@ -2186,32 +2898,40 @@
         b.wins += r.total_wins || 0;
         b.losses += r.total_losses || 0;
         slots[side][r.event_id] = r.event_slot_count || 0;
+        teams[side][r.event_id] = r.event_team_count || 0;
       });
       function total(map) {
         return Object.keys(map).reduce(function (sum, k) { return sum + map[k]; }, 0);
       }
       var nowSlots = total(slots.now);
-      var beforeSlots = total(slots.before);
+      var nowTeams = total(teams.now);
+      var beforeTeams = total(teams.before);
+      var nowRanks = ranksOver(ids);
+      var beforeRanks = beforeTeams ? ranksOver(windowEvents.map(function (e) { return e.event_id; })
+        .filter(function (id) { return !inWindow[id]; })) : null;
       return Object.keys(current).filter(function (key) {
         return current[key].usage > 0;
       }).map(function (key) {
         var c = current[key];
         var b = before[key];
-        var share = nowSlots ? c.usage / nowSlots : null;
-        var prev = beforeSlots ? (b ? b.usage : 0) / beforeSlots : null;
+        var share = nowTeams ? c.usage / nowTeams : null;
+        var prev = beforeTeams ? (b ? b.usage : 0) / beforeTeams : null;
         return {
           pokemon_key: key,
           pokemon_name: pokemonNames[key] || key,
-          usage_share: share,
+          team_share: share,
+          usage_share: nowSlots ? c.usage / nowSlots : null,
           usage_count: c.usage,
-          slot_total: nowSlots,
-          previous_usage_share: prev,
-          usage_share_delta: prev == null ? null : share - prev,
+          team_total: nowTeams,
+          previous_team_share: prev,
+          team_share_delta: prev == null ? null : share - prev,
           win_rate: c.wins + c.losses ? c.wins / (c.wins + c.losses) : null,
           total_wins: c.wins,
           total_losses: c.losses,
           record_count: null,
         };
+      }).map(function (row) {
+        return beforeRanks ? withRankChange(row, nowRanks[row.pokemon_key], beforeRanks) : row;
       });
     }
 
@@ -2227,17 +2947,19 @@
           var profile = profileByKey[r.pokemon_key];
           if (!passesTypeFilter(selectedTypes, profile && profile.type_1, profile && profile.type_2)) return false;
           if (roleSelect && roleSelect.value && roles[r.pokemon_key] !== roleSelect.value) return false;
-          if (!inRange(r.usage_share != null ? r.usage_share * 100 : null, shareMin, shareMax)) return false;
+          if (!inRange(r.team_share != null ? r.team_share * 100 : null, shareMin, shareMax)) return false;
           if (!inRange(profile ? profile.speed : null, speedMin, speedMax)) return false;
           return true;
         });
+        rankBaseline = "before these events";
         windowTable.setRows(wrows);
         if (noteEl) {
           var names = windowEvents.filter(function (e) { return ids.indexOf(e.event_id) !== -1; })
             .map(function (e) { return shortEventName(e.event_name); });
           var teams = windowEvents.filter(function (e) { return ids.indexOf(e.event_id) !== -1; })
             .reduce(function (sum, e) { return sum + (e.team_count || 0); }, 0);
-          noteEl.textContent = "Usage at " + names.join(", ") + " (" + teams.toLocaleString() +
+          noteEl.textContent = (isOfficialScope ? "Usage at " : "Official events: usage at ") +
+            names.join(", ") + " (" + teams.toLocaleString() +
             " teams), against the regulation's earlier events" +
             (ids.length === windowEvents.length ? " (none: this is every event)" : "") + ".";
         }
@@ -2252,6 +2974,7 @@
           event_tier: r.event_tier,
           usage_rank: r.usage_rank,
           usage_share: r.usage_share,
+          team_share: r.team_share,
           usage_count: r.usage_count,
           type_1: profile.type_1,
           type_2: profile.type_2,
@@ -2261,10 +2984,17 @@
           record_count: win.record_count,
         };
       });
+      // Against the regulation before its newest event; the official
+      // overall table only (a tier, or online rows, have no such baseline).
+      if (isOfficialScope && !tier && windowEvents.length >= 2) {
+        var before = ranksOver(windowEvents.slice(1).map(function (e) { return e.event_id; }));
+        rankBaseline = "before " + shortEventName(windowEvents[0].event_name);
+        rows.forEach(function (row) { withRankChange(row, row.usage_rank, before); });
+      }
       usageTable.setRows(rows);
       if (noteEl) {
         noteEl.textContent = rows.length.toLocaleString() + " Pokémon · shares are of " +
-          (slotTotals[tier] || 0).toLocaleString() + " roster slots in " + shortRegulation(regulationScope) +
+          (teamTotals[tier] || 0).toLocaleString() + " teams in " + shortRegulation(regulationScope) +
           (tier ? " " + tier + " events" : "") + ".";
       }
     }
@@ -2344,6 +3074,15 @@
 
     setupUsageSuccess();
     setupUsageTrends();
+    renderMegaPanel(
+      {
+        note: document.getElementById("usage-mega-note"),
+        count: document.getElementById("usage-mega-count"),
+        table: document.getElementById("usage-mega-table"),
+      },
+      { scope_kind: "regulation", scope_code: regulationScope },
+      "in " + shortRegulation(regulationScope)
+    );
 
     usageSubTabs = setupSubTabs(
       document.querySelectorAll('.tab-panel[data-panel="usage"] .subtab-btn'),
@@ -2351,9 +3090,74 @@
       null,
       { route: { tab: "usage", argIndex: 0 } }
     );
+    runExtensions("usage");
   }
   var usageSubTabs = null;
   var usageWindowRoute = function () {};
+
+  // ---------- Mega usage panel (docs/upgrade-plan-2027q2.md, E3) ----------
+  // "Which Mega Stones are teams carrying": each Mega's share of teams, and
+  // the share of teams carrying zero, one, two or more. Shared by the Usage
+  // tab's Megas view (a regulation scope) and event pages (one event).
+  // where: {scope_kind: "regulation" | "event", scope_code?, event_id?}.
+  var MEGA_COUNT_COLORS = ["var(--muted)", "var(--series-blue)", "var(--series-red)", "var(--series-green)"];
+  function megaRowsFor(martName, where) {
+    return (marts[martName] || []).filter(function (r) {
+      if (r.scope_kind !== where.scope_kind) return false;
+      return where.scope_kind === "event" ? r.event_id === where.event_id : r.scope_code === where.scope_code;
+    });
+  }
+
+  function renderMegaPanel(els, where, sampleLabel) {
+    var stones = megaRowsFor("mega_stone_usage", where);
+    var counts = megaRowsFor("team_mega_count", where).sort(function (a, b) { return a.mega_count - b.mega_count; });
+    if (els.note) {
+      var teams = counts.reduce(function (sum, r) { return sum + (r.team_count || 0); }, 0);
+      els.note.textContent = stones.length
+        ? "Share of the " + teams.toLocaleString() + " teams " + sampleLabel + " that carried each Mega Stone. " +
+          "A Mega holder is recorded as its Mega form on the team sheet."
+        : "No Mega Stones recorded " + sampleLabel + ".";
+    }
+    if (els.count) {
+      els.count.innerHTML = counts.length
+        ? '<p class="eyebrow">Mega Stones per team</p><div class="mega-count-bar" role="img" aria-label="' +
+          escapeHtml(counts.map(function (r) { return r.mega_count + ": " + formatPercent(r.team_share); }).join(", ")) + '">' +
+          counts.map(function (r) {
+            return '<span style="width:' + (r.team_share * 100).toFixed(2) + "%;background:" +
+              MEGA_COUNT_COLORS[Math.min(r.mega_count, 3)] + '">' + (r.team_share >= 0.08 ? formatPercent(r.team_share) : "") + "</span>";
+          }).join("") + '</div><ul class="mega-count-list">' + counts.map(function (r) {
+            return '<li><span class="mega-swatch" style="background:' + MEGA_COUNT_COLORS[Math.min(r.mega_count, 3)] + '"></span>' +
+              (r.mega_count === 0 ? "No Mega Stone" : r.mega_count === 1 ? "One Mega Stone" : r.mega_count + " Mega Stones") +
+              '<strong data-tip="' + escapeHtml(r.team_count.toLocaleString() + " teams") + '">' + formatPercent(r.team_share) + "</strong></li>";
+          }).join("") + "</ul>"
+        : "";
+    }
+    if (els.table) {
+      if (!els.table.megaTable) {
+        els.table.megaTable = createDataTable(els.table, {
+          caption: "Mega Stones carried",
+          sort: { key: "team_share", dir: "desc" },
+          limit: 12,
+          rowHref: pokemonRowHref,
+          empty: "No Mega Stones recorded.",
+          columns: [
+            { key: "usage_rank", label: "#", type: "rank", main: true },
+            { key: "pokemon_name", label: "Mega", type: "pokemon", main: true, sortable: true },
+            { key: "item_name", label: "Stone", sortable: true, render: function (r) { return itemCell(r.item_name); } },
+            {
+              key: "team_share",
+              label: "Teams",
+              term: "usage",
+              type: "share",
+              main: true,
+              title: function (r) { return r.team_count.toLocaleString() + " of " + r.scope_team_count.toLocaleString() + " teams"; },
+            },
+          ],
+        });
+      }
+      els.table.megaTable.setRows(stones);
+    }
+  }
 
   // Success subtab (backlog #8's pokemon_placement_weighted_usage): the
   // "popular vs. successful" split. rank_movement is computed here rather
@@ -2385,17 +3189,17 @@
       columns: [
         { key: "rank", label: "#", type: "rank", main: true },
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
-        { key: "weighted_usage_share", label: "Weighted", term: "weighted", type: "share", main: true },
+        { key: "weighted_team_share", label: "Weighted", term: "weighted", type: "share", main: true },
         {
-          key: "top_cut_usage_share",
+          key: "top_cut_team_share",
           label: "Top cut",
           term: "topcut",
           type: "percent",
           title: function (r) {
-            return r.top_cut_usage_count != null ? r.top_cut_usage_count + " top-8 roster slots" : "";
+            return r.top_cut_usage_count != null ? "On " + r.top_cut_usage_count + " top-8 teams" : "";
           },
         },
-        { key: "usage_share", label: "Raw usage", type: "percent" },
+        { key: "team_share", label: "Raw usage", term: "usage", type: "percent" },
         {
           key: "rank_movement",
           label: "Movement",
@@ -2408,7 +3212,7 @@
 
     function draw() {
       var byTopCut = metricSelect && metricSelect.value === "top_cut";
-      var shareField = byTopCut ? "top_cut_usage_share" : "weighted_usage_share";
+      var shareField = byTopCut ? "top_cut_team_share" : "weighted_team_share";
       var ranked = successRows
         .slice()
         .sort(function (a, b) {
@@ -2420,10 +3224,10 @@
             rank: i + 1,
             pokemon_key: r.pokemon_key,
             pokemon_name: r.pokemon_name,
-            weighted_usage_share: r[shareField],
-            top_cut_usage_share: r.top_cut_usage_share,
+            weighted_team_share: r[shareField],
+            top_cut_team_share: r.top_cut_team_share,
             top_cut_usage_count: r.top_cut_usage_count,
-            usage_share: usage ? usage.usage_share : null,
+            team_share: usage ? usage.team_share : null,
             rank_movement: usage ? usage.usage_rank - (i + 1) : null,
           };
         });
@@ -2442,8 +3246,8 @@
   // history.
   function trendDeltaLabel(row) {
     if (row.is_new) return "NEW";
-    if (row.usage_share_delta === null || row.usage_share_delta === undefined) return "";
-    var points = row.usage_share_delta * 100;
+    if (row.team_share_delta === null || row.team_share_delta === undefined) return "";
+    var points = row.team_share_delta * 100;
     var arrow = points > 0 ? "▲" : points < 0 ? "▼" : "";
     var sign = points > 0 ? "+" : "";
     return arrow + " " + sign + points.toFixed(1) + " pts";
@@ -2451,8 +3255,8 @@
 
   function trendDeltaBadgeHtml(row) {
     if (row.is_new) return '<span class="badge badge-new">NEW</span>';
-    if (row.usage_share_delta === null || row.usage_share_delta === undefined) return "—";
-    var points = row.usage_share_delta * 100;
+    if (row.team_share_delta === null || row.team_share_delta === undefined) return "—";
+    var points = row.team_share_delta * 100;
     var cls = points > 0 ? "badge-positive" : points < 0 ? "badge-negative" : "badge-rank";
     return '<span class="badge ' + cls + '">' + escapeHtml(trendDeltaLabel(row)) + "</span>";
   }
@@ -2463,6 +3267,7 @@
     var dates = distinctSorted(trendRows, "event_date").slice().reverse(); // most recent first
 
     var table = createDataTable(document.getElementById("usage-trend-table"), {
+      officialOnly: true,
       caption: "Usage by tournament date",
       sort: { key: "usage_rank", dir: "asc" },
       limit: 50,
@@ -2471,20 +3276,25 @@
         { key: "usage_rank", label: "#", type: "rank", main: true },
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
         {
-          key: "usage_share",
+          key: "team_share",
           label: "Usage",
+          term: "usage",
           type: "share",
           main: true,
-          title: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " roster slots on this date" : ""; },
+          title: function (r) {
+            return r.usage_count != null
+              ? "On " + r.usage_count.toLocaleString() + " teams this date · " + formatPercent(r.usage_share) + " of roster slots"
+              : "";
+          },
         },
         {
-          key: "usage_share_delta",
+          key: "team_share_delta",
           label: "Change",
           numeric: true,
           sortable: true,
           render: trendDeltaBadgeHtml,
           title: function (r) {
-            return r.previous_usage_share != null ? "Was " + formatPercent(r.previous_usage_share) : "";
+            return r.previous_team_share != null ? "Was " + formatPercent(r.previous_team_share) + " of teams" : "";
           },
         },
       ],
@@ -2514,9 +3324,10 @@
             pokemon_name: r.pokemon_name,
             usage_rank: r.usage_rank,
             usage_share: r.usage_share,
+            team_share: r.team_share,
             usage_count: r.usage_count,
-            previous_usage_share: prev ? prev.usage_share : null,
-            usage_share_delta: prev ? r.usage_share - prev.usage_share : null,
+            previous_team_share: prev ? prev.team_share : null,
+            team_share_delta: prev ? r.team_share - prev.team_share : null,
             is_new: !!prevDate && !prev,
           };
         });
@@ -2687,6 +3498,7 @@
       ],
     });
     var tripleTable = createDataTable(document.getElementById("profile-triple-table"), {
+      officialOnly: true,
       caption: "Three-Pokémon cores",
       sort: { key: "triple_lift", dir: "desc" },
       limit: 12,
@@ -2770,18 +3582,18 @@
       var width = 280;
       var height = 64;
       var pad = 22;
-      var max = points.reduce(function (m, p) { return Math.max(m, p.row ? p.row.usage_share || 0 : 0); }, 0) || 0.01;
+      var max = points.reduce(function (m, p) { return Math.max(m, p.row ? p.row.team_share || 0 : 0); }, 0) || 0.01;
       var step = (width - pad * 2) / (points.length - 1);
       var coords = points.map(function (p, i) {
-        var value = p.row ? p.row.usage_share || 0 : 0;
+        var value = p.row ? p.row.team_share || 0 : 0;
         return { x: pad + i * step, y: height - 14 - (value / max) * (height - 30), value: value, p: p };
       });
       var line = coords.map(function (c) { return c.x.toFixed(1) + "," + c.y.toFixed(1); }).join(" ");
-      var svg = '<svg class="trend-svg" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Usage share by regulation: ' +
+      var svg = '<svg class="trend-svg" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Team share by regulation: ' +
         coords.map(function (c) { return shortRegulation(c.p.code) + " " + formatPercent(c.value); }).join(", ") + '">' +
         '<polyline points="' + line + '" fill="none" stroke="var(--blue)" stroke-width="2"/>' +
         coords.map(function (c) {
-          var current = c.p.code === regulationScope;
+          var current = c.p.code === regulationCode;
           return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="' + (current ? 5 : 3.5) +
             '" fill="' + (current ? "var(--accent-red)" : "var(--blue)") + '"/>' +
             '<text x="' + c.x.toFixed(1) + '" y="' + (c.y - 8).toFixed(1) + '" text-anchor="middle" class="trend-label">' +
@@ -2790,7 +3602,7 @@
       var legend = '<div class="trend-legend" style="grid-template-columns: repeat(' + points.length + ', 1fr)">' +
         points.map(function (p) {
           var r = p.row;
-          return '<div' + (p.code === regulationScope ? ' class="is-current"' : "") + "><strong>" +
+          return '<div' + (p.code === regulationCode ? ' class="is-current"' : "") + "><strong>" +
             escapeHtml(shortRegulation(p.code).replace("Reg ", "")) + "</strong>" +
             (r && r.win_rate != null
               ? '<span title="' + escapeHtml(recordTitle(r)) + '">' + formatPercent(r.win_rate) + " WR</span>" +
@@ -2798,7 +3610,9 @@
               : "<span>" + (r && r.usage_count ? r.usage_count.toLocaleString() + " teams" : "not used") + "</span>") +
             "</div>";
         }).join("") + "</div>";
-      return '<div class="trend"><p class="trend-title">Usage across regulations</p>' + svg + legend + "</div>";
+      return '<div class="trend"><p class="trend-title">' +
+        (isOfficialScope ? "Usage across regulations" : "Official usage across regulations") + "</p>" +
+        svg + legend + "</div>";
     }
 
     // Recently viewed (P2): the last few profiles opened in this browser,
@@ -2862,13 +3676,13 @@
       });
       teamsEl.innerHTML = teams.length
         ? teams.slice(0, MAX_FEATURING).map(function (t) { return teamCardHtml(t); }).join("")
-        : '<p class="empty-state">No top-16 team in ' + escapeHtml(shortRegulation(regulationScope)) +
+        : '<p class="empty-state">No top-16 team in ' + escapeHtml(officialScopeName) +
           " brought " + escapeHtml(profile.pokemon_name) + ".</p>";
       var note = document.getElementById("profile-teams-note");
       if (note) {
         note.textContent = teams.length
           ? teams.length + " top-16 team" + (teams.length === 1 ? "" : "s") + " in " +
-            shortRegulation(regulationScope) + " brought " + profile.pokemon_name + "; the best-placed are below."
+            officialScopeName + " brought " + profile.pokemon_name + "; the best-placed are below."
           : "";
       }
     }
@@ -3126,7 +3940,7 @@
         '<p class="stat-legend">' + (setState.level === "full"
           ? "Each set appeared exactly like this on real team sheets."
           : "Core sets group by item, ability and the three most common moves; the fourth move varies.") +
-        " No EVs: team sheets don't publish them.</p></div>";
+        " No Stat Points: team sheets don't publish them.</p></div>";
     }
 
     var setEl = document.getElementById("pokemon-profile-set");
@@ -3166,7 +3980,8 @@
             "<div><strong>" + escapeHtml(profile.pokemon_name) + "</strong> " +
             speedTierBadge(profile.speed) +
             '<div class="type-badge-row type-badge-lg" id="profile-type-badge"></div>' +
-            '<div class="profile-usage-line">' + formatPercent(profile.usage_share) + " usage · " +
+            '<div class="profile-usage-line"><span data-tip="' + escapeHtml(teamsTitle(profile.usage_count, DATA.kpis && DATA.kpis.team_count, profile.usage_share)) +
+            '">On ' + formatPercent(profile.team_share) + " of teams</span> · " +
             formatPercent(profile.win_rate) + " win rate in " + escapeHtml(scopeLabel(regulationScope)) +
             "</div>" + statBarsHtml(profile) + trendHtml(profile.pokemon_key) + "</div></div>";
           renderTypeBadgeRow(document.getElementById("profile-type-badge"), profile.type_1, profile.type_2, true);
@@ -3226,6 +4041,7 @@
         drawFeaturing(profile);
         drawPressure(profile);
         drawRecent(profile.pokemon_key);
+        runExtensions("profile", profile);
       }
     }
 
@@ -3280,9 +4096,10 @@
       });
     renderGrid6xn(document.getElementById("detected-archetype-grid"), rows, {
       iconHtmlFn: function (r) {
+        // Compact: three tiles in a narrow card can't each reach 44px.
         return teamCompositionHtml(
           [r.pokemon_key_a, r.pokemon_key_b, r.pokemon_key_c].join("|"),
-          ICON_SIZES.sm
+          32
         );
       },
       labelFn: function (r) {
@@ -3301,6 +4118,84 @@
       showLeader: false,
       typeFn: false,
     });
+    renderArchetypeMatchups(rows);
+  }
+
+  // Archetype matchups (docs/upgrade-plan-2027q2.md, list #30): the top
+  // HEATMAP_ARCHETYPES archetypes against each other, from decided
+  // official matches between their primary teams. Team vs team. A cell
+  // under MATCHUP_FLOOR matches shows its record without a colour.
+  var HEATMAP_ARCHETYPES = 10;
+  var MATCHUP_FLOOR = 20;
+  function archetypeLabel(r) {
+    return [r.pokemon_name_a, r.pokemon_name_b, r.pokemon_name_c].join(" / ");
+  }
+  function matchupFill(rate, matches) {
+    if (matches < MATCHUP_FLOOR || rate == null) return "";
+    var lean = Math.min(Math.abs(rate - 0.5) / 0.15, 1);
+    if (lean < 0.15) return "";
+    var hue = rate > 0.5 ? "var(--series-blue)" : "var(--series-red)";
+    return "background:color-mix(in srgb, " + hue + " " + Math.round(12 + lean * 33) + "%, transparent)";
+  }
+  function renderArchetypeMatchups(archetypes) {
+    var table = document.getElementById("archetype-heatmap");
+    var note = document.getElementById("archetype-matchups-note");
+    var select = document.getElementById("archetype-matchup-select");
+    var list = document.getElementById("archetype-matchup-list");
+    if (!table || !list) return;
+    var records = {};
+    (marts.archetype_matchups || []).forEach(function (r) {
+      records[r.archetype_key + "|" + r.opponent_archetype_key] = r;
+    });
+    var byKey = {};
+    archetypes.forEach(function (a) { byKey[a.archetype_key] = a; });
+    var shown = archetypes.slice(0, HEATMAP_ARCHETYPES);
+    var total = (marts.archetype_matchups || []).reduce(function (sum, r) { return sum + (r.matches || 0); }, 0) / 2;
+    if (note) {
+      note.textContent = total
+        ? "Each cell is the row archetype's win rate against the column's, from " + Math.round(total).toLocaleString() +
+          " decided official matches between the archetypes' teams. Team vs team: no source says which four Pokémon were " +
+          "brought. Cells under " + MATCHUP_FLOOR + " matches are left uncoloured."
+        : "No matches between these archetypes' teams yet.";
+    }
+    function cell(row, col) {
+      if (row.archetype_key === col.archetype_key) return '<td class="is-self">—</td>';
+      var r = records[row.archetype_key + "|" + col.archetype_key];
+      if (!r) return '<td class="is-thin">·</td>';
+      var tip = archetypeLabel(row) + " vs " + archetypeLabel(col) + ": " + r.wins + "–" + r.losses +
+        " (" + formatPercent(r.win_rate) + ", " + r.matches + " matches)";
+      return '<td class="' + (r.matches < MATCHUP_FLOOR ? "is-thin" : "") + '" style="' + matchupFill(r.win_rate, r.matches) +
+        '" data-tip="' + escapeHtml(tip) + '">' + Math.round(r.win_rate * 100) + "</td>";
+    }
+    table.innerHTML = "<caption class=\"visually-hidden\">Archetype vs archetype win rates, row against column</caption>" +
+      "<thead><tr><th scope=\"col\"></th>" + shown.map(function (a) {
+        return '<th scope="col" title="' + escapeHtml(archetypeLabel(a)) + '">' +
+          teamCompositionHtml([a.pokemon_key_a, a.pokemon_key_b, a.pokemon_key_c].join("|"), 24) + "</th>";
+      }).join("") + "</tr></thead><tbody>" + shown.map(function (row) {
+        return '<tr><th scope="row">' + teamCompositionHtml([row.pokemon_key_a, row.pokemon_key_b, row.pokemon_key_c].join("|"), 24) +
+          " " + escapeHtml(row.pokemon_name_a) + "…</th>" + shown.map(function (col) { return cell(row, col); }).join("") + "</tr>";
+      }).join("") + "</tbody>";
+    if (select && !select.options.length) {
+      select.innerHTML = archetypes.map(function (a) {
+        return '<option value="' + escapeHtml(a.archetype_key) + '">' + escapeHtml(archetypeLabel(a)) + "</option>";
+      }).join("");
+      select.addEventListener("change", renderList);
+    }
+    function renderList() {
+      var key = select ? select.value : (archetypes[0] || {}).archetype_key;
+      var rows = (marts.archetype_matchups || []).filter(function (r) {
+        return r.archetype_key === key && byKey[r.opponent_archetype_key];
+      }).sort(function (a, b) { return b.matches - a.matches; });
+      list.innerHTML = rows.length ? rows.map(function (r) {
+        var opp = byKey[r.opponent_archetype_key];
+        return "<li><span>" + teamCompositionHtml([opp.pokemon_key_a, opp.pokemon_key_b, opp.pokemon_key_c].join("|"), 24) +
+          " vs " + escapeHtml(archetypeLabel(opp)) + "</span>" +
+          '<span class="matchup-rate">' + formatPercent(r.win_rate) + "</span>" +
+          '<span class="matchup-n">' + r.wins + "–" + r.losses + " in " + r.matches + " matches" +
+          (r.matches < MATCHUP_FLOOR ? " (small sample)" : "") + "</span></li>";
+      }).join("") : '<li class="empty-state">No matches against the listed archetypes.</li>';
+    }
+    renderList();
   }
 
   // Speed Tiers now reads pokemon_speed_tiers (backlog #16) rather than
@@ -3360,7 +4255,7 @@
           hideOnPhone: true,
           render: function (r) { return speedTierBadge(r.base_speed); },
         },
-        { key: "usage_share", label: "Usage", type: "percent" },
+        { key: "team_share", label: "Usage", term: "usage", type: "percent" },
         { key: "win_rate", label: "Win rate", type: "percent", hideOnPhone: true },
       ],
     });
@@ -3417,6 +4312,149 @@
     });
     if (scenarioSelect) scenarioSelect.addEventListener("change", draw);
     draw();
+    setupSpeedLine(speedRows);
+  }
+
+  // ---------- speed line (docs/upgrade-plan-2027q2.md, list #24) ----------
+  // Your Builder team over the regulation's SPEED_LINE_TOP most-used
+  // Pokémon, each at its max-investment Speed (the convention the tab
+  // states: sheets publish no Stat Points). Tailwind doubles your side;
+  // Trick Room flips which end moves first. From 768px a number line with
+  // sprites stacked into lanes where they would overlap; below, a list in
+  // move order with speed ties marked.
+  var SPEED_LINE_TOP = 16;
+  var BUILDER_TEAM_KEY = "pokemonChampionsTeamBuilder";
+  function setupSpeedLine(speedRows) {
+    var lineEl = document.getElementById("speed-line");
+    var listEl = document.getElementById("speed-line-list");
+    var noteEl = document.getElementById("speed-line-note");
+    var controls = document.getElementById("speed-line-controls");
+    if (!lineEl || !listEl || !controls) return;
+    var state = { tailwind: "off", trickRoom: "off" };
+    var byKey = {};
+    speedRows.forEach(function (r) { byKey[r.pokemon_key] = r; });
+    var yours = [];
+    try {
+      yours = (JSON.parse(localStorage.getItem(BUILDER_TEAM_KEY) || "[]") || []).map(function (slot) {
+        return typeof slot === "string" ? slot : slot && slot.key;
+      }).filter(function (key) { return key && byKey[key]; });
+    } catch (e) {
+      yours = [];
+    }
+    var top = speedRows.slice().sort(function (a, b) {
+      return (b.team_share || 0) - (a.team_share || 0);
+    }).slice(0, SPEED_LINE_TOP);
+
+    controls.innerHTML = segmentedHtml("Tailwind", "data-speed-tailwind", [
+      { id: "off", label: "No Tailwind" },
+      { id: "on", label: "Tailwind on your side" },
+    ], state.tailwind) + segmentedHtml("Trick Room", "data-speed-trick-room", [
+      { id: "off", label: "Normal" },
+      { id: "on", label: "Trick Room" },
+    ], state.trickRoom);
+    controls.addEventListener("click", function (e) {
+      var button = e.target.closest && e.target.closest("button");
+      if (!button) return;
+      if (button.hasAttribute("data-speed-tailwind")) state.tailwind = button.getAttribute("data-speed-tailwind");
+      else if (button.hasAttribute("data-speed-trick-room")) state.trickRoom = button.getAttribute("data-speed-trick-room");
+      else return;
+      Array.prototype.forEach.call(button.parentNode.querySelectorAll("button"), function (b) {
+        b.setAttribute("aria-pressed", String(b === button));
+      });
+      render();
+    });
+    if (!yours.length) {
+      var twButton = controls.querySelector('[data-speed-tailwind="on"]');
+      if (twButton) twButton.disabled = true;
+    }
+
+    function entries() {
+      var out = top.map(function (r) {
+        return { key: r.pokemon_key, speed: r.max_investment_speed, yours: false };
+      });
+      yours.forEach(function (key) {
+        var speed = byKey[key].max_investment_speed;
+        out.push({ key: key, speed: state.tailwind === "on" ? speed * 2 : speed, yours: true });
+      });
+      var trick = state.trickRoom === "on";
+      return out.sort(function (a, b) {
+        return trick ? a.speed - b.speed : b.speed - a.speed;
+      });
+    }
+
+    function render() {
+      var all = entries();
+      var trick = state.trickRoom === "on";
+      if (noteEl) {
+        noteEl.textContent = (yours.length
+          ? "Your Builder team (outlined) against "
+          : "Add a team in the Builder to see it here against ") +
+          "the " + top.length + " most-used Pokémon in " + shortRegulation(regulationScope) +
+          ", at max Speed investment" + (state.tailwind === "on" ? ", your side doubled by Tailwind" : "") +
+          (trick ? ". Trick Room: the slowest moves first." : ". The fastest moves first.");
+      }
+      // The list, in move order.
+      listEl.innerHTML = all.map(function (entry, i) {
+        var tie = all.some(function (other, j) { return j !== i && other.speed === entry.speed; });
+        return "<li><span class=\"rank\">" + (i + 1) + "</span>" + pokemonCell(entry.key, pokemonNames[entry.key]) +
+          '<span class="speed-value">' + entry.speed + "</span>" +
+          '<span class="speed-line-meta">' + (entry.yours ? '<span class="speed-side-chip">Your team</span>' : "") +
+          (tie ? '<span class="speed-tie">Speed tie</span>' : "") + "</span></li>";
+      }).join("");
+      // The number line.
+      var speeds = all.map(function (e) { return e.speed; });
+      if (!speeds.length) {
+        lineEl.innerHTML = "";
+        return;
+      }
+      var lo = Math.floor((Math.min.apply(null, speeds) - 5) / 10) * 10;
+      var hi = Math.ceil((Math.max.apply(null, speeds) + 5) / 10) * 10;
+      var width = lineEl.clientWidth || 900;
+      function pct(speed) {
+        var t = (speed - lo) / (hi - lo || 1);
+        return (trick ? 1 - t : t) * 100;
+      }
+      // Lanes: a sprite drops a lane where it would overlap one already
+      // placed (40px wide, so 42px apart).
+      function lanes(group) {
+        var placed = [];
+        return group.map(function (entry) {
+          var x = (pct(entry.speed) / 100) * width;
+          var lane = 0;
+          while (placed.some(function (p) { return p.lane === lane && Math.abs(p.x - x) < 42; })) lane++;
+          placed.push({ x: x, lane: lane });
+          return { entry: entry, lane: lane };
+        });
+      }
+      function sideHtml(group, label, above) {
+        var placed = lanes(group);
+        var depth = placed.reduce(function (m, p) { return Math.max(m, p.lane + 1); }, 1);
+        return '<div class="speed-line-side" style="height:' + (depth * 44 + 22) + 'px">' +
+          '<p class="speed-line-label"' + (above ? "" : ' style="position:absolute;bottom:0"') + ">" + escapeHtml(label) + "</p>" +
+          placed.map(function (p) {
+            var offset = 22 + p.lane * 44;
+            return '<a class="speed-line-dot' + (p.entry.yours ? " is-yours" : "") + '" href="' + pokemonHref(p.entry.key) +
+              '" style="left:' + pct(p.entry.speed).toFixed(2) + "%;" + (above ? "bottom:" : "top:") + (above ? p.lane * 44 : offset - 22) + 'px"' +
+              ' data-tip="' + escapeHtml((pokemonNames[p.entry.key] || p.entry.key) + ": " + p.entry.speed) + '">' +
+              spriteImg(p.entry.key, ICON_SIZES.sm) + "</a>";
+          }).join("") + "</div>";
+      }
+      var ticks = [];
+      for (var t = lo; t <= hi; t += hi - lo > 200 ? 50 : 20) ticks.push(t);
+      lineEl.innerHTML =
+        (yours.length ? sideHtml(all.filter(function (e) { return e.yours; }), "Your team", true) : "") +
+        '<div class="speed-line-axis">' + ticks.map(function (tick) {
+          return '<span style="left:' + pct(tick).toFixed(2) + '%">' + tick + "</span>";
+        }).join("") +
+        '<span class="speed-line-first" style="' + (trick ? "left:0" : "right:0") + '">' + (trick ? "← Moves first" : "Moves first →") + "</span></div>" +
+        sideHtml(all.filter(function (e) { return !e.yours; }), "Most used in " + shortRegulation(regulationScope), false);
+    }
+    render();
+    var resizeTimer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(render, 150);
+    });
   }
 
   // Players & Regions (backlog #7's two marts): "which regions favour
@@ -3446,17 +4484,16 @@
     var note = document.getElementById("players-country-note");
     if (!select) return;
 
-    // Countries ordered by how much recorded data each has, not
+    // Countries ordered by how many teams each has on record, not
     // alphabetically -- the ordering convention's "rank by the most
     // relevant metric" applied to a non-Pokémon dimension, where the
     // relevant metric is sample size.
-    var appearancesByCountry = {};
+    var teamsByCountry = {};
     countryRows.forEach(function (r) {
-      appearancesByCountry[r.player_country] =
-        (appearancesByCountry[r.player_country] || 0) + (r.usage_count || 0);
+      teamsByCountry[r.player_country] = r.country_team_count || teamsByCountry[r.player_country] || 0;
     });
-    var countries = Object.keys(appearancesByCountry).sort(function (a, b) {
-      return appearancesByCountry[b] - appearancesByCountry[a];
+    var countries = Object.keys(teamsByCountry).sort(function (a, b) {
+      return teamsByCountry[b] - teamsByCountry[a];
     });
 
     select.innerHTML = "";
@@ -3466,11 +4503,12 @@
       var countryFlagGlyph = countryFlag(country);
       opt.textContent =
         (countryFlagGlyph ? countryFlagGlyph + " " : "") + country +
-        " (" + appearancesByCountry[country].toLocaleString() + " picks)";
+        " (" + teamsByCountry[country].toLocaleString() + " teams)";
       select.appendChild(opt);
     });
 
     var table = createDataTable(document.getElementById("players-country-table"), {
+      officialOnly: true,
       caption: "Usage by country",
       sort: { key: "country_usage_rank", dir: "asc" },
       limit: 30,
@@ -3479,15 +4517,16 @@
         { key: "country_usage_rank", label: "#", type: "rank", main: true },
         { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
         {
-          key: "usage_share",
-          label: "Share of picks",
+          key: "team_share",
+          label: "Share of teams",
+          term: "usage",
           type: "share",
           main: true,
           title: function (r) {
-            return r.usage_count + " of " + (appearancesByCountry[r.player_country] || 0).toLocaleString() + " picks";
+            return teamsTitle(r.usage_count, r.country_team_count, r.usage_share);
           },
         },
-        { key: "usage_count", label: "Picks", type: "int" },
+        { key: "usage_count", label: "Teams", type: "int" },
       ],
     });
 
@@ -3498,9 +4537,9 @@
       });
       if (note) {
         note.textContent = rows.length
-          ? country + " has " + appearancesByCountry[country].toLocaleString() +
-            " recorded roster picks across " + rows.length + " distinct Pokémon."
-          : "No recorded picks for this country.";
+          ? country + " has " + teamsByCountry[country].toLocaleString() +
+            " teams on record, bringing " + rows.length + " distinct Pokémon."
+          : "No recorded teams for this country.";
       }
       table.setRows(rows);
     }
@@ -3572,6 +4611,7 @@
       .slice(0, 30);
 
     createDataTable(document.getElementById("players-specialists-table"), {
+      officialOnly: true,
       caption: "Most committed specialists",
       sort: { key: "team_share", dir: "desc" },
       limit: 30,
@@ -3600,6 +4640,7 @@
     }).setRows(specialists);
 
     var signatureTable = createDataTable(document.getElementById("players-signature-table"), {
+      officialOnly: true,
       caption: "A player's most-fielded Pokémon",
       sort: { key: "player_pokemon_rank", dir: "asc" },
       rowHref: pokemonRowHref,
@@ -3810,7 +4851,7 @@
           "<p>" + escapeHtml(t.description || "") + "</p>" +
           '<p class="data-card-meta">' + Number(t.row_count || 0).toLocaleString() + " rows" +
           (t.grain ? " · one per <code>" + escapeHtml(t.grain.split("|").join(", ")) + "</code>" : "") +
-          "</p><p class=\"data-card-meta\">" + shard + "</p></article>";
+          "</p><p class=\"data-card-meta\">" + (t.shard ? shard : "Summarised into the page at build time") + "</p></article>";
       }).join("");
     }
 
@@ -3849,9 +4890,11 @@
   var MAX_COMBO_RESULTS = 12;
   var comboCount = 0;
 
+  // Letters and digits of any script, so a name in Japanese (Q4) is as
+  // searchable as one in English; accents fold away.
   function normalizeSearch(text) {
     return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]/g, "");
+      .replace(/[^\p{L}\p{N}]/gu, "");
   }
 
   function attachPokemonCombobox(select) {
@@ -3878,6 +4921,10 @@
     wrap.appendChild(input);
     wrap.appendChild(list);
     select.parentNode.insertBefore(wrap, select);
+    // The hidden select is pinned to its host's corner (.combo-host): left
+    // at its static position it sat past a phone's right edge and made the
+    // whole profile scroll sideways (docs/upgrade-plan-2027q2.md, finding 1).
+    select.parentNode.classList.add("combo-host");
     select.classList.add("combo-source");
     select.setAttribute("tabindex", "-1");
     select.setAttribute("aria-hidden", "true");
@@ -3923,12 +4970,18 @@
       var inner = [];
       // A match at the start of any word counts as a prefix match, so
       // "salam" ranks Mega Salamence (by usage) alongside Salamence.
+      // With names in another language (Q4), the English name matches too.
       all.forEach(function (opt) {
-        var words = String(opt.textContent).split(/[\s-]+/).map(normalizeSearch);
-        var text = normalizeSearch(opt.textContent);
+        var labels = [opt.textContent];
+        if (englishNames[opt.value] && englishNames[opt.value] !== opt.textContent) labels.push(englishNames[opt.value]);
+        var words = [];
+        labels.forEach(function (label) {
+          words = words.concat(String(label).split(/[\s-]+/).map(normalizeSearch));
+        });
+        var texts = labels.map(normalizeSearch);
         var wordStart = words.some(function (w) { return w.indexOf(query) === 0; });
-        if (!query || wordStart || text.indexOf(query) === 0) prefix.push(opt);
-        else if (text.indexOf(query) > 0) inner.push(opt);
+        if (!query || wordStart || texts.some(function (t) { return t.indexOf(query) === 0; })) prefix.push(opt);
+        else if (texts.some(function (t) { return t.indexOf(query) > 0; })) inner.push(opt);
       });
       results = prefix.concat(inner).slice(0, MAX_COMBO_RESULTS);
       list.innerHTML = results.length
@@ -4011,18 +5064,7 @@
     attachPokemonCombobox(document.getElementById(id));
   });
 
-  // "/" jumps to the Pokémon search from anywhere on the page.
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
-    var tag = (document.activeElement && document.activeElement.tagName) || "";
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    e.preventDefault();
-    if (currentRoute.tab !== "pokemon-profile") openTab("pokemon-profile");
-    setTimeout(function () {
-      var input = document.querySelector('[data-panel="pokemon-profile"] .combo-input');
-      if (input) input.focus();
-    }, 50);
-  });
+  // "/" and Ctrl/⌘+K open the global search: static/search.js (Q3).
 
   // ---------- staleness banner ----------
   // Evaluated against the viewer's clock, not the build time: a site that
@@ -4043,8 +5085,15 @@
     return inForce || started;
   }
 
-  function shortRegulation(code) {
-    return code === ALL_SCOPE ? "All regulations" : "Reg " + String(code || "").toUpperCase();
+  // "Reg M-C", or for a population scope "Reg M-C online" / "Reg M-C
+  // official + online".
+  function shortRegulation(scope) {
+    var code = scopeRegulation(scope);
+    var name = code === ALL_SCOPE ? "All regulations" : "Reg " + code.toUpperCase();
+    var population = scopePopulation(scope);
+    if (population === "online") return name + " online";
+    if (population === "combined") return name + " official + online";
+    return name;
   }
 
   // "Reg M-D started 2026-12-02. Not enough results yet; showing M-C.
@@ -4053,14 +5102,33 @@
     var banner = document.getElementById("rollover-banner");
     if (!banner || !rolloverNotice) return;
     var inForce = rolloverNotice.in_force;
+    var params;
+    if (rolloverNotice.online) {
+      // "Reg M-D started 2026-12-03. Official results are thin so far (120
+      // teams); showing online events (640 teams). Switch to official →"
+      var html2 = escapeHtml(shortRegulation(inForce.regulation_code)) + " started " +
+        escapeHtml(inForce.start_date) + ". Official results are thin so far" +
+        (rolloverNotice.has_data ? " (" + rolloverNotice.team_count.toLocaleString() + " teams)" : "") +
+        "; showing online events (" + (rolloverNotice.online.team_count || 0).toLocaleString() + " teams).";
+      if (rolloverNotice.has_data) {
+        params = new URLSearchParams(window.location.search);
+        params.set(SCOPE_PARAM, inForce.regulation_code);
+        html2 += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) +
+          '" data-set-scope="' + escapeHtml(inForce.regulation_code) + '">Switch to official &rarr;</a>';
+      }
+      banner.innerHTML = html2;
+      banner.hidden = false;
+      return;
+    }
     var html = escapeHtml(shortRegulation(inForce.regulation_code)) + " started " +
       escapeHtml(inForce.start_date) + ". Not enough results yet" +
       (rolloverNotice.has_data ? " (" + rolloverNotice.team_count.toLocaleString() + " teams)" : "") +
       "; showing " + escapeHtml(shortRegulation(rolloverNotice.shown.regulation_code)) + ".";
     if (rolloverNotice.has_data) {
-      var params = new URLSearchParams(window.location.search);
+      params = new URLSearchParams(window.location.search);
       params.set(SCOPE_PARAM, inForce.regulation_code);
-      html += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) + '">Switch to ' +
+      html += ' <a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) +
+        '" data-set-scope="' + escapeHtml(inForce.regulation_code) + '">Switch to ' +
         escapeHtml(shortRegulation(inForce.regulation_code)) + " &rarr;</a>";
     }
     banner.innerHTML = html;
@@ -4095,8 +5163,74 @@
     banner.textContent = messages.join(" ");
     banner.hidden = false;
   }
+  // Online events are a different population (S1): whenever the page
+  // shows them, a banner says so, with the sample and the way back.
+  function renderPopulationBanner() {
+    var banner = document.getElementById("population-banner");
+    // The rollover banner already says why online events are showing.
+    if (!banner || isOfficialScope || (rolloverNotice && rolloverNotice.online)) return;
+    var kpis = DATA.kpis || {};
+    var params = new URLSearchParams(window.location.search);
+    params.set(SCOPE_PARAM, regulationCode);
+    var where = regulationCode === ALL_SCOPE ? "across every regulation" : "in " + shortRegulation(regulationCode);
+    var text = regulationPopulation === "online"
+      ? plural(kpis.team_count, "team") + " from " + plural(kpis.event_count, "Limitless online tournament") + " " + where +
+        ". Grassroots players, identified by handle: a different population from official events."
+      : plural(kpis.team_count, "team") + " " + where + ": " + (kpis.official_team_count || 0).toLocaleString() +
+        " from official events and " + Math.max(0, (kpis.team_count || 0) - (kpis.official_team_count || 0)).toLocaleString() +
+        " from Limitless online tournaments.";
+    // The way back exists only when the regulation has official results.
+    var back = (DATA.kpis_by_scope || {})[regulationCode]
+      ? '<a href="?' + escapeHtml(params.toString()) + escapeHtml(window.location.hash) +
+        '" data-set-scope="' + escapeHtml(regulationCode) + '">Official events only &rarr;</a>'
+      : "";
+    banner.innerHTML = phaseChipHtml(POPULATION_LABELS[regulationPopulation], "is-" + regulationPopulation) +
+      "<span>" + escapeHtml(text) + "</span>" + back;
+    banner.hidden = false;
+  }
+
+  // A view built on official events only says so on a population scope,
+  // with an Official chip and one sentence: officialOnlyNoteHtml("Player
+  // records cover official events only.").
+  function officialOnlyNoteHtml(sentence) {
+    if (isOfficialScope) return "";
+    return '<p class="official-only-note">' + phaseChipHtml("Official") + escapeHtml(sentence) + "</p>";
+  }
+
   renderStalenessBanner();
+
+  // ---------- offline at the venue (docs/upgrade-plan-2027q2.md, Q5) ----------
+  // sw.js keeps the page, its scripts and every data shard this browser
+  // has opened; offline, the banner says the figures are the saved ones
+  // and when they were built. Registered only where a service worker can
+  // run (https, or localhost while developing).
+  function renderOfflineBanner() {
+    var banner = document.getElementById("offline-banner");
+    if (!banner) return;
+    var offline = navigator.onLine === false;
+    banner.hidden = !offline;
+    if (offline) {
+      banner.textContent = "You're offline. Showing the data this browser saved, built " +
+        String(DATA.generated_at_utc || "").slice(0, 10) + ". Views you haven't opened before may be empty.";
+    }
+  }
+  window.addEventListener("online", renderOfflineBanner);
+  window.addEventListener("offline", renderOfflineBanner);
+  renderOfflineBanner();
+  var secureHost = window.location.protocol === "https:" ||
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if ("serviceWorker" in navigator && secureHost) {
+    navigator.serviceWorker.register("sw.js").catch(function () {
+      // No worker (a private window, a blocked scope): the page works online.
+    });
+  }
   renderRolloverBanner();
+  renderPopulationBanner();
+  document.querySelectorAll("[data-official-only]").forEach(function (el) {
+    if (isOfficialScope) return;
+    el.innerHTML = officialOnlyNoteHtml(el.getAttribute("data-official-only"));
+    el.hidden = false;
+  });
 
   // Header Regulation selector and the per-scope KPI rows the template
   // renders (one .kpi-row[data-scope] per scope; only the selected shows).
@@ -4106,33 +5240,64 @@
     });
     var select = document.getElementById("regulation-scope");
     if (!select) return;
-    select.value = regulationScope;
-    select.addEventListener("change", function () {
-      var inForce = regulationInForce(DATA.regulations, TODAY_ISO);
-      try {
-        // Remembered with the regulation in force when it was made, so the
-        // next set's arrival overrides it (resolveRegulationScope, step 2).
-        localStorage.setItem(
-          SCOPE_STORAGE_KEY,
-          JSON.stringify({
-            code: select.value,
-            in_force: inForce ? inForce.regulation_code : null,
-            chosen_on: TODAY_ISO,
-          })
-        );
-      } catch (e) {
-        // Storage blocked: the ?reg= link below still carries the choice.
+    // The Events select (S1) picks the population; a regulation without
+    // online data greys out Online and All rather than offering an empty
+    // page.
+    var population = document.getElementById("population-scope");
+    var byScope = DATA.kpis_by_scope || {};
+    function syncPopulationOptions() {
+      if (!population) return;
+      Array.prototype.forEach.call(population.options, function (option) {
+        option.disabled = !byScope[populationScope(select.value, option.value)];
+      });
+    }
+    select.value = regulationCode;
+    if (population) population.value = regulationPopulation;
+    syncPopulationOptions();
+    function navigate() {
+      var chosen = population ? populationScope(select.value, population.value) : select.value;
+      if (!byScope[chosen]) {
+        // This regulation lacks the chosen population: its first one with
+        // data, official first.
+        chosen = ["official", "online", "combined"].map(function (p) {
+          return populationScope(select.value, p);
+        }).filter(function (scope) { return byScope[scope]; })[0] || select.value;
       }
+      rememberScope(chosen);
       var params = new URLSearchParams(window.location.search);
-      params.set(SCOPE_PARAM, select.value);
+      params.set(SCOPE_PARAM, chosen);
       window.location.assign("?" + params.toString() + window.location.hash);
+    }
+    select.addEventListener("change", function () {
+      syncPopulationOptions();
+      navigate();
     });
+    if (population) population.addEventListener("change", navigate);
   }
   setupRegulationSelector();
 
   // Theme toggle: Auto (follow the OS) -> Light -> Dark. The choice is a
   // per-browser convenience in localStorage; the inline script in <head>
   // applies it before first paint.
+  // The more menu's name-language select (Q4).
+  function setupNameLanguage() {
+    var select = document.getElementById("name-language");
+    if (!select) return;
+    select.innerHTML = NAME_LANGUAGES.map(function (l) {
+      return '<option value="' + l.id + '"' + (l.id === nameLanguage ? " selected" : "") + ">" + escapeHtml(l.label) + "</option>";
+    }).join("");
+    select.addEventListener("change", function () {
+      try {
+        localStorage.setItem(NAME_LANGUAGE_KEY, select.value);
+      } catch (e) {
+        // Storage blocked: nothing to remember the choice in.
+        return;
+      }
+      window.location.reload();
+    });
+  }
+  setupNameLanguage();
+
   function setupThemeToggle() {
     var button = document.getElementById("theme-toggle");
     if (!button) return;
@@ -4196,22 +5361,31 @@
   });
   registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage, {
-    extraMarts: ["pokemon_event_usage_vs_regulation"],
+    extraMarts: [
+      "pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count", "ladder_pokemon_usage",
+      "ladder_bring_rate", "ladder_lead_pairs",
+    ],
     onRoute: function (route) {
       if (usageSubTabs) usageSubTabs.fromRoute(route);
       usageWindowRoute(route);
     },
   });
   registerTab("pokemon-profile", setupPokemonProfile, {
-    extraMarts: ["pokemon_team_core_triple_usage", "tournament_team_sheets"],
+    extraMarts: [
+      "pokemon_team_core_triple_usage",
+      "tournament_team_sheets",
+      "ladder_checks_counters",
+      "ladder_stat_point_spreads",
+      "ladder_bring_rate",
+    ],
     onRoute: function (route) {
       profileRoute(route);
     },
   });
-  registerTab("archetypes", setupDetectedArchetypes);
+  registerTab("archetypes", setupDetectedArchetypes, { extraMarts: ["archetype_matchups"] });
   registerTab("speed-tiers", setupSpeedTiers);
   registerTab("players", setupPlayers, {
-    extraMarts: ["player_signature_pokemon", "player_index"],
+    extraMarts: ["player_signature_pokemon", "player_index", "pokemon_usage_by_country"],
     onRoute: function (route) {
       if (playersSubTabs) playersSubTabs.fromRoute(route);
     },
@@ -4223,8 +5397,32 @@
     if (currentRoute.tab === tabId) dispatchRoute(currentRoute);
   }
 
+  // Views whose script loads only when first opened, so it stays out of
+  // the first view's 500KB budget (tests/browser). The script registers
+  // its tab, and registerTab initialises it if it is still the one open.
+  var LAZY_TAB_SCRIPTS = { graph: "graph.js" };
+  var lazyScriptLoading = {};
+  function loadTabScript(tabId) {
+    var src = LAZY_TAB_SCRIPTS[tabId];
+    if (!src || lazyScriptLoading[tabId]) return;
+    lazyScriptLoading[tabId] = true;
+    var script = document.createElement("script");
+    script.src = src;
+    script.onerror = function () {
+      // Forget the attempt so re-opening the tab retries.
+      lazyScriptLoading[tabId] = false;
+      script.remove();
+      renderDataLoadError(tabId, new Error("could not load " + src));
+    };
+    document.body.appendChild(script);
+  }
+
   function initTab(tabId) {
-    if (initialized[tabId] || !tabInitializers[tabId]) return;
+    if (!tabInitializers[tabId]) {
+      loadTabScript(tabId);
+      return;
+    }
+    if (initialized[tabId]) return;
     initialized[tabId] = true;
     if (!tabNeedsMarts[tabId]) {
       runInitializer(tabId);
@@ -4268,6 +5466,8 @@
     typeIcons: typeIcons,
     itemIcons: itemIcons,
     pokemonNames: pokemonNames,
+    englishNames: englishNames,
+    nameLanguage: nameLanguage,
     ICON_SIZES: ICON_SIZES,
     ALL_TYPES: ALL_TYPES,
     escapeHtml: escapeHtml,
@@ -4286,6 +5486,18 @@
     spriteImg: spriteImg,
     heroImg: heroImg,
     teamCompositionHtml: teamCompositionHtml,
+    teamStripHtml: teamStripHtml,
+    isMegaKey: isMegaKey,
+    playerLineHtml: playerLineHtml,
+    scoreboardRowHtml: scoreboardRowHtml,
+    segmentedHtml: segmentedHtml,
+    shareCardControlsHtml: shareCardControlsHtml,
+    showToast: showToast,
+    termHtml: termHtml,
+    phaseChipHtml: phaseChipHtml,
+    placementPhase: placementPhase,
+    typeBadgeSquare: typeBadgeSquare,
+    closeStripPop: closeStripPop,
     typeColor: typeColor,
     typeIconsHtml: typeIconsHtml,
     typeFnFromProfile: typeFnFromProfile,
@@ -4304,11 +5516,22 @@
     createDataTable: createDataTable,
     pokemonRowHref: pokemonRowHref,
     registerTab: registerTab,
+    extendTab: extendTab,
     setupSubTabs: setupSubTabs,
+    renderMegaPanel: renderMegaPanel,
     ensureData: ensureData,
     regulationScope: regulationScope,
+    regulationCode: regulationCode,
+    regulationPopulation: regulationPopulation,
+    isOfficialScope: isOfficialScope,
+    officialFallback: officialFallback,
+    officialOnlyNoteHtml: officialOnlyNoteHtml,
+    officialScopeName: officialScopeName,
+    scopeRegulation: scopeRegulation,
+    scopePopulation: scopePopulation,
     scopeLabel: scopeLabel,
     attachPokemonCombobox: attachPokemonCombobox,
+    normalizeSearch: normalizeSearch,
     openProfile: openProfile,
     fillSelectPairs: fillSelectPairs,
     showdownName: showdownName,

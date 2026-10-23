@@ -107,7 +107,6 @@ def test_build_payload_joins_pokemon_names_and_computes_kpis(tmp_path):
             "event_tier": "",
             "usage_count": 100,
             "usage_rank": 1,
-            "usage_share": None,
             "pokemon_name": "Pikachu",
         }
     ]
@@ -500,7 +499,8 @@ def test_compute_kpis_top_12_and_cumulative_legal_pool():
     }
     kpis = data.compute_kpis(marts)
 
-    assert [r["pokemon_key"] for r in kpis["top_12_pokemon"]] == [f"mon-{i}" for i in range(1, 13)]
+    board = kpis["top_12_boards"]["all"]["forms"]
+    assert [r["pokemon_key"] for r in board] == [f"mon-{i}" for i in range(1, 13)]
     assert kpis["legal_pool_by_regulation"] == [
         {
             "regulation_code": "m-a",
@@ -932,6 +932,11 @@ def _mover(key, delta, share, *, new=False, teams=500, prev_teams=400):
         "usage_share": share,
         "previous_usage_share": share - delta,
         "usage_share_delta": delta,
+        # Team share (docs/upgrade-plan-2027q2.md, V1) is what the summary
+        # ranks by; about six times the slot share.
+        "team_share": share * 6,
+        "previous_team_share": (share - delta) * 6,
+        "team_share_delta": delta * 6,
         "usage_rank": 1,
         "previous_usage_rank": 2,
         "win_rate": 0.5,
@@ -1213,6 +1218,7 @@ def test_window_movers_compare_recent_events_with_earlier_ones():
             "pokemon_name": key.title(),
             "usage_count": count,
             "event_slot_count": 1000,
+            "event_team_count": 200,
         }
 
     rows = [
@@ -1233,6 +1239,8 @@ def test_window_movers_compare_recent_events_with_earlier_ones():
     assert summary["reliable"] is True
     assert [r["pokemon_key"] for r in summary["risers"]] == ["sneasler"]
     assert summary["risers"][0]["usage_share_delta"] == 0.08
+    # Ranked and reported by team share: 180 of 400 teams against 20 of 400.
+    assert summary["risers"][0]["team_share_delta"] == 0.4
     assert [r["pokemon_key"] for r in summary["fallers"]] == ["garchomp"]
     assert data.summarize_event_window_movers(rows, events[:1]) is None
 
@@ -1301,3 +1309,400 @@ def test_player_index_has_one_row_per_player_with_their_record():
     assert zoe["best_by_regulation"] == "m-b:12|m-c:3"
     assert index[0]["best_placement"] is None
     assert index[0]["best_by_regulation"] == ""
+
+
+# docs/upgrade-plan-2027q2.md, V1/V2: team share and the Top 12 board.
+
+
+def test_species_group_key_folds_megas_into_the_stone_holder():
+    assert data.species_group_key("charizard-mega-y") == "charizard"
+    assert data.species_group_key("lucario-mega-z") == "lucario"
+    assert data.species_group_key("salamence-mega") == "salamence"
+    assert data.species_group_key("meowstic-male-mega") == "meowstic-male"
+    # Every other form keeps its own key, as on the official card.
+    assert data.species_group_key("basculegion-male") == "basculegion-male"
+    assert data.species_group_key("floette-eternal") == "floette-eternal"
+    assert data.species_group_key("meganium") == "meganium"
+
+
+def _usage(key, count, rank, teams=1000):
+    return {
+        "pokemon_key": key,
+        "pokemon_name": data.display_name(key),
+        "event_tier": None,
+        "usage_count": count,
+        "usage_rank": rank,
+        "usage_share": round(count / (teams * 6), 4),
+        "team_share": round(count / teams, 4),
+        "scope_team_count": teams,
+    }
+
+
+def test_top_board_ranks_forms_by_team_share_with_their_denominator():
+    rows = [_usage("raichu-mega-y", 300, 2), _usage("rillaboom", 500, 1), _usage("raichu", 50, 3)]
+    profiles = {"rillaboom": {"type_1": "grass", "pokemon_name": "Rillaboom"}}
+    tiles = data.top_board(rows, profiles, "forms")
+    assert [t["pokemon_key"] for t in tiles] == ["rillaboom", "raichu-mega-y", "raichu"]
+    assert tiles[0]["team_share"] == 0.5
+    assert tiles[0]["team_total"] == 1000
+    assert tiles[0]["type_1"] == "grass"
+
+
+def test_top_board_species_folds_megas_and_takes_the_base_forms_identity():
+    rows = [
+        _usage("rillaboom", 500, 1),
+        _usage("raichu-mega-y", 300, 2),
+        _usage("raichu-mega-x", 150, 3),
+        _usage("raichu", 100, 4),
+    ]
+    profiles = {
+        "raichu": {"type_1": "electric", "pokemon_name": "Raichu"},
+        "raichu-mega-y": {
+            "type_1": "electric",
+            "type_2": "psychic",
+            "pokemon_name": "Mega Raichu Y",
+        },
+    }
+    tiles = data.top_board(rows, profiles, "species")
+    assert [t["pokemon_key"] for t in tiles] == ["raichu", "rillaboom"]
+    raichu = tiles[0]
+    # 550 of 1,000 teams: one Mega Stone per species, so no team counts twice.
+    assert raichu["team_share"] == 0.55
+    assert raichu["usage_count"] == 550
+    assert raichu["pokemon_name"] == "Raichu"
+    assert (raichu["type_1"], raichu["type_2"]) == ("electric", None)
+    assert raichu["form_keys"] == "raichu-mega-y|raichu-mega-x|raichu"
+
+
+def test_kpis_carry_a_board_per_player_scope():
+    marts = {
+        "pokemon_usage_summary": [_usage("rillaboom", 500, 1), _usage("sneasler", 400, 2)],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "tournament_event_summary": [
+            {
+                "event_id": "e1",
+                "regulation_code": "m-c",
+                "team_count": 1000,
+                "event_date": "2026-10-09",
+            }
+        ],
+    }
+    kpis = data.compute_kpis(marts, scope="m-c", regulations=[])
+    board = kpis["top_12_boards"]["all"]
+    assert board["label"] == "All players"
+    assert (board["team_count"], board["event_count"]) == (1000, 1)
+    assert [t["pokemon_key"] for t in board["forms"]] == ["rillaboom", "sneasler"]
+    assert [t["pokemon_key"] for t in board["species"]] == ["rillaboom", "sneasler"]
+
+
+def test_latest_event_carries_the_winners_sheet_for_the_team_strip():
+    """docs/upgrade-plan-2027q2.md, V3: the Overview's winner strip shows held
+    items without fetching the sheets."""
+    events = [
+        {"event_id": "old", "event_date": "2026-09-01", "winner_team_id": "t0"},
+        {"event_id": "new", "event_date": "2026-10-09", "winner_team_id": "t1", "event_name": "X"},
+    ]
+    sheets = [
+        {"team_id": "t1", "slot_number": 2, "pokemon_key": "b", "item_name": "Focus Sash"},
+        {"team_id": "t1", "slot_number": 1, "pokemon_key": "a", "item_name": "Choice Scarf"},
+        {"team_id": "t0", "slot_number": 1, "pokemon_key": "z", "item_name": "Leftovers"},
+    ]
+    latest = data._latest_event(events, sheets)
+    assert latest["event_id"] == "new"
+    assert [s["pokemon_key"] for s in latest["winner_sets"]] == ["a", "b"]
+    assert latest["winner_sets"][0]["item_name"] == "Choice Scarf"
+    assert data._latest_event(events)["winner_sets"] == []
+
+
+# docs/upgrade-plan-2027q2.md, S1: official, online and combined scopes.
+def test_scope_helpers_split_regulation_and_population():
+    assert (data.scope_regulation("m-c"), data.scope_population("m-c")) == ("m-c", "official")
+    assert (data.scope_regulation("m-c:online"), data.scope_population("m-c:online")) == (
+        "m-c",
+        "online",
+    )
+    assert data.population_scope("all", "combined") == "all:combined"
+    assert data.population_scope("m-c", "official") == "m-c"
+
+
+def test_default_scope_rolls_over_to_online_while_official_is_thin():
+    from datetime import date
+
+    by_scope = {
+        "m-c": {"team_count": 3770},
+        "m-d": {"team_count": 120},
+        "m-d:online": {"team_count": data.MIN_DEFAULT_SCOPE_TEAMS},
+        "all": {},
+    }
+    # Official M-D is thin, its online events are not: show those rather
+    # than falling back to M-C.
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-d:online"
+    by_scope["m-d:online"]["team_count"] = data.MIN_DEFAULT_SCOPE_TEAMS - 1
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-c"
+    # Once official M-D has enough teams it leads again.
+    by_scope["m-d"]["team_count"] = data.MIN_DEFAULT_SCOPE_TEAMS
+    assert data.default_scope_for(by_scope, _FIXTURE_REGULATIONS, date(2026, 12, 8)) == "m-d"
+
+
+def test_compute_kpis_by_scope_adds_online_and_combined_scopes():
+    from datetime import date
+
+    def usage(scope, key, count, teams):
+        return {
+            "regulation_scope": scope,
+            "pokemon_key": key,
+            "event_tier": None,
+            "usage_count": count,
+            "usage_share": 0.1,
+            "usage_rank": 1,
+            "team_share": round(count / teams, 4),
+            "scope_team_count": teams,
+            "pokemon_name": key,
+        }
+
+    online_event = {
+        **_event("LP-cup", "m-c", "2026-10-18", 640, tier="Online"),
+        "source_url": "https://play.limitlesstcg.com/tournament/cup/standings",
+    }
+    marts = {
+        "pokemon_usage_summary": [
+            usage("m-c", "rillaboom", 500, 1013),
+            usage("all", "rillaboom", 500, 1013),
+            usage("m-c:online", "garchomp", 300, 640),
+            usage("all:online", "garchomp", 300, 640),
+            usage("m-c:combined", "rillaboom", 700, 1653),
+            usage("all:combined", "rillaboom", 700, 1653),
+        ],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "tournament_event_summary": [_event("louisville", "m-c", "2026-10-09", 1013)],
+        "online_event_summary": [online_event],
+    }
+    by_scope, default = data.compute_kpis_by_scope(
+        marts, today=date(2026, 10, 21), regulations=_FIXTURE_REGULATIONS
+    )
+    # Official first, so the regulation select lists it before the rest.
+    assert list(by_scope) == [
+        "m-c",
+        "all",
+        "m-c:online",
+        "all:online",
+        "m-c:combined",
+        "all:combined",
+    ]
+    assert default == "m-c"
+    online = by_scope["m-c:online"]
+    assert (online["population"], online["event_count"], online["team_count"]) == ("online", 1, 640)
+    assert online["top_used_pokemon"]["pokemon_key"] == "garchomp"
+    assert online["official_team_count"] == 1013
+    # Official-only panels come from the official scope, not online events.
+    assert online["latest_event"]["event_id"] == "louisville"
+    assert online["current_regulation"]["regulation_code"] == "m-c"
+    combined = by_scope["m-c:combined"]
+    assert (combined["event_count"], combined["team_count"]) == (2, 1653)
+    # The official board gets an Online switch; online figures never
+    # replace the official ones.
+    boards = by_scope["m-c"]["top_12_boards"]
+    assert boards["all"]["forms"][0]["pokemon_key"] == "rillaboom"
+    assert boards["online"]["label"] == "Online"
+    assert boards["online"]["forms"][0]["pokemon_key"] == "garchomp"
+    assert by_scope["m-c"]["team_count"] == 1013
+
+
+def test_an_online_scope_without_official_results_has_no_official_panels():
+    # S1's rollover: M-D is in force with online events but no official
+    # result yet. The page opens on m-d:online, and its "Latest event" card
+    # and starter teams must not be built from online events, which have
+    # no event pages.
+    from datetime import date
+
+    online_event = {**_event("LP-cup", "m-d", "2026-12-06", 640, tier="Online")}
+    marts = {
+        "pokemon_usage_summary": [
+            {
+                "regulation_scope": scope,
+                "pokemon_key": "garchomp",
+                "event_tier": None,
+                "usage_count": 300,
+                "usage_share": 0.1,
+                "usage_rank": 1,
+                "team_share": 0.47,
+                "scope_team_count": 640,
+                "pokemon_name": "Garchomp",
+            }
+            for scope in ("m-c", "all", "m-d:online", "all:online")
+        ],
+        "legality_summary_by_regulation": [],
+        "pokemon_win_rate_summary": [],
+        "pokemon_usage_by_event_date": [{"event_date": "2026-10-09"}],
+        "tournament_event_summary": [_event("louisville", "m-c", "2026-10-09", 1013)],
+        "online_event_summary": [online_event],
+    }
+    by_scope, default = data.compute_kpis_by_scope(
+        marts, today=date(2026, 12, 8), regulations=_FIXTURE_REGULATIONS
+    )
+    assert default == "m-d:online"
+    online = by_scope["m-d:online"]
+    assert online["latest_event"] is None
+    assert online["starter_teams"] == []
+    assert online["movers"] is None
+    assert online["official_team_count"] == 0
+    # The staleness banner reads the online events' own date.
+    assert online["latest_event_date"] == "2026-12-06"
+    assert by_scope["m-c"]["latest_event_date"] == "2026-10-09"
+
+
+def test_day2_board_ranks_day2_teams_and_carries_reliable_conversion():
+    # docs/upgrade-plan-2027q2.md, E1: the Top 12 board's Day 2 switch.
+    def row(key, rank, count, conversion, reliable="true", kind="regulation", event_id=""):
+        return {
+            "scope_kind": kind,
+            "scope_code": "m-c",
+            "event_id": event_id,
+            "phase": "day2",
+            "pokemon_key": key,
+            "pokemon_name": key.title(),
+            "team_count": count,
+            "phase_team_count": 500,
+            "team_share": round(count / 500, 4),
+            "conversion": conversion,
+            "is_reliable": reliable,
+            "usage_rank": rank,
+        }
+
+    rows = [
+        row("kingambit", 2, 150, 1.299),
+        row("rillaboom", 1, 250, 0.959),
+        row("rillaboom", 1, 40, 1.1, reliable="false", kind="event", event_id="E1"),
+        row("rillaboom", 1, 40, 1.1, reliable="false", kind="event", event_id="E2"),
+    ]
+    board = data.day2_board(rows, "m-c", {})
+    assert board["label"] == "Day 2"
+    assert (board["team_count"], board["event_count"]) == (500, 2)
+    assert [t["pokemon_key"] for t in board["forms"]] == ["rillaboom", "kingambit"]
+    assert board["forms"][1]["conversion"] == 1.299
+    assert data.day2_board(rows, "m-b", {}) is None
+
+
+def test_ladder_counters_ship_the_bo1_top_twelve_without_source_columns(tmp_path):
+    # docs/upgrade-plan-2027q2.md, S2: the profile panel reads the Bo1
+    # ladder's strongest checks only.
+    rows = [
+        {
+            "regulation_code": "m-c",
+            "month": "2026-09",
+            "variant": variant,
+            "cutoff": "0",
+            "battles": "1631943",
+            "pokemon_key": "kingambit",
+            "counter_pokemon_key": f"opponent-{rank}",
+            "encounters": "500",
+            "ko_or_switch_rate": "0.55",
+            "std_dev": "0.01",
+            "score": "0.51",
+            "counter_rank": str(rank),
+            "source_name": "Smogon usage statistics",
+            "source_url": "https://www.smogon.com/stats/2026-09/chaos/x-0.json",
+        }
+        for variant in ("bo1", "bo3")
+        for rank in range(1, 16)
+    ]
+    _write_csv(tmp_path / "ladder_checks_counters.csv", rows)
+
+    sliced = data.load_mart(tmp_path, "ladder_checks_counters")
+
+    assert len(sliced) == data.LADDER_COUNTERS
+    assert {row["counter_rank"] for row in sliced} == set(range(1, data.LADDER_COUNTERS + 1))
+    assert sliced[0]["ko_or_switch_rate"] == 0.55
+    assert "source_url" not in sliced[0] and "variant" not in sliced[0] and "score" not in sliced[0]
+
+
+def test_ladder_spreads_ship_top_rated_bo1_only(tmp_path):
+    rows = [
+        {
+            "regulation_code": "m-c",
+            "month": "2026-09",
+            "variant": variant,
+            "cutoff": cutoff,
+            "battles": "1631943",
+            "pokemon_key": "kingambit",
+            "nature": "Adamant",
+            "sp_hp": "32",
+            "sp_atk": "32",
+            "sp_def": "0",
+            "sp_spa": "0",
+            "sp_spd": "2",
+            "sp_spe": "0",
+            "share": "0.1577",
+            "spread_rank": str(rank),
+            "source_name": "Smogon usage statistics",
+            "source_url": "https://www.smogon.com/stats/2026-09/chaos/x-1760.json",
+        }
+        for variant in ("bo1", "bo3")
+        for cutoff in ("1760", "0")
+        for rank in range(1, 11)
+    ]
+    _write_csv(tmp_path / "ladder_stat_point_spreads.csv", rows)
+
+    sliced = data.load_mart(tmp_path, "ladder_stat_point_spreads")
+
+    assert len(sliced) == data.LADDER_SPREADS
+    assert sliced[0]["sp_hp"] == 32 and sliced[0]["share"] == 0.1577
+    assert "cutoff" not in sliced[0] and "source_name" not in sliced[0]
+
+
+def test_localised_names_cover_only_the_pokemon_the_marts_mention():
+    # docs/upgrade-plan-2027q2.md, Q4: the inline maps carry the Pokémon
+    # the site shows, not every PokéAPI form.
+    rows = [
+        {"pokemon_key": "incineroar", "language": "ja", "localised_name": "ガオガエン"},
+        {"pokemon_key": "incineroar", "language": "de", "localised_name": "Fuegro"},
+        {"pokemon_key": "garchomp", "language": "ja", "localised_name": "ガブリアス"},
+        {"pokemon_key": "bulbasaur", "language": "ja", "localised_name": "フシギダネ"},
+    ]
+    marts = {
+        "pokemon_usage_summary": [{"pokemon_key": "incineroar"}],
+        "top_tournament_teams": [{"pokemon_keys": "garchomp|incineroar"}],
+        "pokemon_localised_names": rows,
+    }
+
+    names = data.localised_names(rows, marts)
+
+    assert names == {
+        "ja": {"incineroar": "ガオガエン", "garchomp": "ガブリアス"},
+        "de": {"incineroar": "Fuegro"},
+    }
+
+
+def test_replay_bring_rates_ship_pooled_rows_above_the_floor(tmp_path):
+    # docs/upgrade-plan-2027q2.md, S3: the views read Bo1 and Bo3 pooled, and
+    # never show a rate on fewer than LADDER_REPLAY_MIN_SIDES complete sides.
+    rows = [
+        {
+            "regulation_code": "m-c",
+            "variant": variant,
+            "pokemon_key": key,
+            "battles": "522",
+            "complete_battles": "365",
+            "shown": str(shown * 2),
+            "shown_share": "0.3",
+            "led": "10",
+            "lead_rate": "0.2",
+            "complete_shown": str(shown),
+            "brought": str(shown // 2),
+            "bring_rate": "0.5",
+            "shown_rank": "1",
+            "source_name": "Pokémon Showdown replays",
+            "source_url": "https://replay.pokemonshowdown.com",
+        }
+        for variant in ("bo1", "bo3", "all")
+        for key, shown in (("rillaboom", 266), ("vivillon", data.LADDER_REPLAY_MIN_SIDES - 1))
+    ]
+    _write_csv(tmp_path / "ladder_bring_rate.csv", rows)
+
+    sliced = data.load_mart(tmp_path, "ladder_bring_rate")
+
+    assert [row["pokemon_key"] for row in sliced] == ["rillaboom"]
+    assert sliced[0]["complete_shown"] == 266 and sliced[0]["bring_rate"] == 0.5
+    assert "variant" not in sliced[0] and "source_url" not in sliced[0]

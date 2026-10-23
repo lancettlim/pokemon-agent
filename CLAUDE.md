@@ -65,11 +65,19 @@ source of truth for product-level goals/non-goals.
   usage), PokéBase (per-regulation legal-pool membership), Bulbagarden
   Archives (Champions-menu sprite images, added in Phase 4 — see below),
   RK9.gg (round-by-round pairings and match outcomes) and Limitless VGC
-  (canonical shared team-list identity), both added 2026-08-03
+  (canonical shared team-list identity), both added 2026-08-03, and
+  Limitless online tournaments (`play.limitlesstcg.com`'s JSON API: a
+  separate online population, added 2026-10-21 — see "Populations" below),
+  Smogon usage statistics (the Showdown ladder's monthly files: a
+  separate ladder population that feeds three marts and no release
+  entity, added 2026-10-23), and Showdown ladder replays (a daily sample of
+  rated battles: which four of six were brought and led, the same ladder
+  population, two more marts, added 2026-10-23)
 - **Deferred sources**: none. Limitless VGC was brought into scope and
-  Victory Road was closed as unbuildable — the EV data it was wanted for is
-  published by no source at all (see `docs/dataset-spec.md`'s "Formerly
-  deferred sources" and `docs/backlog.md` #25/#26)
+  Victory Road was closed as unbuildable — the tournament EV data it was
+  wanted for is published by no source at all (see `docs/dataset-spec.md`'s
+  "Formerly deferred sources" and `docs/backlog.md` #25/#26; the Showdown
+  ladder's spreads are a different population)
 - **Core entities**: `pokemon`, `pokemon_stat_canonical`,
   `pokemon_stat_champions`, `pokemon_stat_delta`, `legality_snapshot`,
   `tournament_event`, `tournament_team`, `tournament_team_member`,
@@ -100,7 +108,8 @@ docs/
 `data/staging/*.csv`, `data/normalized/*.csv`, and `data/marts/*.csv` are
 all gitignored build output — regenerate staging with `python -m
 pipelines.cli extract <source>` (`pokeapi` | `opgg` | `munchstats` |
-`pokebase` | `bulbagarden` | `all`) and normalized/marts with `make
+`rk9` | `limitless` | `limitless_play` | `smogon_ladder` |
+`showdown_replays` | `pokebase` | `bulbagarden` | `all`) and normalized/marts with `make
 dbt-build`. `make extract-all` / `make refresh` (extract-all → dbt-build →
 validate) / `make release VERSION=X.Y.Z` (refresh → release) chain these,
 mirroring `make dashboard`'s `dbt-build` → `build-dashboard` chain. Each
@@ -170,17 +179,71 @@ When a new regulation is announced, add its row to the seed.
 Regulation-sensitive marts read `int_champions_roster_scoped` and carry a
 `regulation_scope` column (each regulation plus `'all'`). A new mart of
 that kind should do the same, and any consumer must filter on it.
+The Limitless online extractor reads the seed's `limitless_play_format`.
+
+**Populations.** Limitless online tournaments are a different population
+from official events (grassroots players, identified by handle), so they
+are never blended into official figures by default
+(`docs/upgrade-plan-2027q2.md`, S1). `tournament_event.event_tier =
+'Online'` marks them and `int_champions_roster.population` says which is
+which. An unscoped roster-derived mart reads
+`int_champions_roster_official`, so its figures stay the official ones. In
+`int_champions_roster_scoped`, official rows keep their scopes (`m-c`,
+`all`), online rows get `m-c:online`/`all:online`, and `:combined` scopes
+hold both. A consumer filtering on `regulation_scope` gets the split for
+free, and must label any online or combined figure as such (the
+dashboard's population banner). Online handles are not legal names: never
+join them to RK9/MunchStats player identities, and keep player-level
+output official-only (`scope_population = 'official'`).
+
+The Showdown ladder (Smogon's statistics, S2, and sampled replays, S3) is
+a third population. It feeds only the `ladder_*` marts, never a release
+entity or `int_champions_roster`, and every view of it carries a "Showdown
+ladder" label beside, never added to, the tournament figure it compares
+with. Replay player names are read only to tell who won and are never
+stored or shown.
 
 **Team-vs-team grain.** `tournament_match` and the head-to-head marts
 report which *team* beat which, not which Pokémon beat which — no source
-publishes a per-battle log naming the four of six actually brought. Any new
-consumer of that data must say so where it's displayed.
+publishes a per-battle log naming the four of six actually brought to an
+official game. Any new consumer of that data must say so where it's
+displayed. Showdown replays do name the four for the ladder
+(`int_ladder_battle*`, `ladder_bring_rate`, `ladder_lead_pairs`); that is
+ladder data only, labelled so, and never stands in for tournament
+results.
 
-**EV/IV spreads do not exist.** Official tournament team sheets publish
-ability, held item, nature and moves and nothing more. Don't add an EV
-field, and don't reintroduce the retired "MunchStats nature coverage is
+**Tournament data has no spreads.** Official tournament team sheets
+publish ability, held item, nature and moves and nothing more. Don't add an
+EV or Stat Point field to a tournament entity, a team sheet or the
+Builder's sets. Ladder data may show them: `ladder_stat_point_spreads` is
+the Stat Point spreads Showdown ladder players ran (decision D3), and every
+consumer labels it "Showdown ladder; tournament sheets don't publish
+spreads". Don't reintroduce the retired "MunchStats nature coverage is
 ~17%" claim — that number was the Champions share of a format-mixed corpus,
 not a coverage gap (nature is 100% within Champions).
+
+## Dashboard artifact
+
+The dashboard is mirrored to a private claude.ai artifact,
+https://claude.ai/artifact/Lfb9NxbaAwRkshcGCQ11wR (`docs/dashboard.md`,
+"claude.ai artifact mirror"). Whenever you change anything under
+`pipelines/dashboard/`, republish it once the change is implemented and
+before you push:
+
+1. `python -m pipelines.cli build-artifact-site --output-dir <fresh dir>`
+   (in the scratchpad). It builds from `data/marts/`, so run `make
+   dbt-build` first if they're missing, and writes `<dir>.plan.json`.
+2. Publish with the Artifact tool, `url` set to the artifact: the plan's
+   `page` as `file_path`, its `root`, and `batches[0]` as `files`; then
+   each further batch the same way, one publish at a time.
+3. Files left out of a publish are kept, so list the artifact's files
+   (`scope: "files"`) and remove any the new site no longer has by mapping
+   them to `null`. A version holds at most 511 files.
+
+`.claude/hooks/artifact_republish.py` enforces this: a `git push` that
+carries `pipelines/dashboard/` changes is refused until the current code
+has been published to that artifact (it records each publish in the
+gitignored `.claude/state/`).
 
 ## Development workflow
 
@@ -198,7 +261,8 @@ all`), `make refresh` (extract-all → dbt-build → validate), `make release
 VERSION=X.Y.Z` (refresh → release).
 
 - `pipelines/extract/` — one module per source (PokéAPI, OP.GG,
-  MunchStats, PokéBase, Bulbagarden, RK9, Limitless) that writes
+  MunchStats, PokéBase, Bulbagarden, RK9, Limitless, Limitless online,
+  Smogon ladder, Showdown replays) that writes
   provenance-tagged rows into `data/staging/`. PokéAPI fetches every entry in its `/pokemon` list (base
   species plus Mega/regional/alternate forms); OP.GG and PokéBase each do a
   plain GET against their respective Champions pages (both server-rendered,
@@ -244,8 +308,10 @@ VERSION=X.Y.Z` (refresh → release).
   <id>|--spec <path.json> --output <path.png>`. `share_cards.py`
   (`python -m pipelines.cli render-share-cards`, run before
   `build-dashboard`) pre-renders the dashboard's share images: the newest
-  event's top 8 and a "What changed" card per regulation, the default one
-  doubling as the site's Open Graph image.
+  event's top 8, a "What changed" card per regulation, and the Top 12 board
+  as a card in 16:9, 4:5 and 9:16 per regulation and per event (All players
+  and Day 2), the default regulation's 16:9 one doubling as the site's Open
+  Graph image.
 - `pipelines/dashboard/` — the M6 static analytics dashboard, built on top
   of the Phase 3 marts (not part of `dbt/` or the release gates):
   `data.py` reads `data/marts/*.csv` (degrading gracefully to empty lists
@@ -259,9 +325,16 @@ VERSION=X.Y.Z` (refresh → release).
   the hash router (every view is a `#/...` route; `docs/dashboard.md`'s
   "Routes" lists them), the shared table and tooltip/glossary components
   and the core views; `matchup.js`, `teams.js`, `expansions.js`,
-  `events.js`, `players.js` and `graph.js` add the calculator, Top
-  Teams/Builder, Compare/Core Explorer, event pages, player pages and the
-  Meta Graph (its layouts precomputed at build time by `graph.py`). Marts ship as JSON
+  `events.js`, `players.js`, `ladder.js` and `graph.js` add the
+  calculator, Top Teams/Builder, Compare/Core Explorer, event pages, player
+  pages, the Showdown ladder views (hooked into the Usage tab and profile
+  through `App.extendTab`) and the Meta Graph (its layouts precomputed at
+  build time by `graph.py`); `search.js` is the global search (`/`,
+  Ctrl/⌘+K), and
+  `sw.js` the offline service worker, written by `build.py` with its
+  precache list. `templates/embed.html.jinja` becomes `embed.html`, the
+  embeddable Top 12 widget creators put in an `<iframe>`, with its own
+  small inline payload and a citation. Marts ship as JSON
   shards under `docs/dashboard/data/` (core, one per regulation, and
   on-demand files), with the core payload held under 500KB compressed by
   `tests/browser/`. `dictionary.py` generates the Data section's table

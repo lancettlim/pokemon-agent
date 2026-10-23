@@ -92,6 +92,9 @@ def load_schema_models(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def _shard_for(name: str, rows: list[dict[str, Any]], mart_files: dict[str, Any]) -> str | None:
+    if name in (mart_files.get("build_only") or []):
+        # Summarised into the page at build time; no shard carries it.
+        return None
     if name in (mart_files.get("on_demand") or {}):
         return mart_files["on_demand"][name]
     if name in (mart_files.get("on_demand_scoped") or {}):

@@ -66,7 +66,7 @@ from __future__ import annotations
 import csv
 import hashlib
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -141,6 +141,25 @@ def _load_cached_rows_by_tournament(previous_snapshot_path: Path | None) -> dict
     return cached
 
 
+# Days after an event's (start) date during which its rosters and pairings
+# are still re-fetched every run: a Regional runs Friday to Sunday, and the
+# sources finish publishing a day or so after.
+LIVE_DAYS = 3
+
+
+def is_live(event_date: str | None, today: date | None = None) -> bool:
+    """Whether an event dated `event_date` (ISO) is running or just over:
+    from the day before it to LIVE_DAYS after."""
+    if not event_date:
+        return False
+    try:
+        day = date.fromisoformat(str(event_date)[:10])
+    except ValueError:
+        return False
+    today = today or datetime.now(UTC).date()
+    return day - timedelta(days=1) <= today <= day + timedelta(days=LIVE_DAYS)
+
+
 def _metadata_signature(metadata: dict) -> tuple[str, str, str, str]:
     return (
         metadata["name"],
@@ -189,7 +208,14 @@ def _rows_for_tournament(
         return []
 
     cached_rows = cached_rows_by_tournament.get(tournament_id)
-    if cached_rows and _cached_metadata_signature(cached_rows) == _metadata_signature(metadata):
+    # A tournament still running (or just finished) keeps adding teams under
+    # the same metadata, so within LIVE_DAYS of its date it is fetched again
+    # every run (docs/upgrade-plan-2027q2.md, E4) rather than reused.
+    if (
+        cached_rows
+        and not is_live(metadata.get("date"))
+        and _cached_metadata_signature(cached_rows) == _metadata_signature(metadata)
+    ):
         return [
             {**row, "extracted_at_utc": extracted_at_utc, "dataset_version": dataset_version}
             for row in cached_rows

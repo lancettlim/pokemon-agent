@@ -37,6 +37,19 @@
   } catch (e) {}
 </script>
 <style>
+  @font-face {
+    font-family: "Board Display";
+    src: url("fonts/oswald-latin-wght.woff2") format("woff2");
+    font-weight: 200 700;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Board Display Fallback";
+    src: local("Arial Narrow"), local("Arial");
+    size-adjust: 82%;
+    ascent-override: 120%;
+    descent-override: 29%;
+  }
   /* ---------------------------------------------------------------
    * Design tokens — see docs/design-system.md for the full token
    * reference, component catalog, and Pokémon-representation/naming
@@ -69,6 +82,30 @@
     --accent-red-bg: #fce7e8;
     --accent-gold: #f4b942;
     --accent-gold-bg: #fdf3dd;
+
+    /* Broadcast tokens (docs/upgrade-plan-2027q2.md, V7), from the official
+       "Top 12 Pokémon" card's grammar (R1) and the 2026 Worlds key graphic
+       (R3): a red field with darker-red ink, a white board, maroon tiles
+       with a darker scrim under the label, and gold for the one number a
+       tile carries. The four series colours are a categorical palette only,
+       never the arc device they come from. */
+    --board-field: #ea0028;
+    --board-field-ink: #84010c;
+    --board-surface: #fff;
+    --board-tile: #7f2629;
+    --board-scrim: #572931;
+    --board-gold: #ffc549;
+    --series-red: #e3323c;
+    --series-blue: #2b6fd6;
+    --series-green: #2e9a4f;
+    --series-yellow: #f2c230;
+    --phase-chip: #111;
+
+    /* The one display face (docs/upgrade-plan-2027q2.md, D4): Oswald, an
+       OFL condensed variable font, self-hosted as a ~28KB Latin subset and
+       used only for board numerals and headlines. The fallback is size-
+       adjusted so the swap doesn't move the layout. */
+    --font-display: "Board Display", "Board Display Fallback", "Arial Narrow", sans-serif;
 
     /* Icon-size scale (docs/design-system.md's "Icon size scale") — every
        sprite/item/type icon must use one of these three tokens, no other
@@ -148,6 +185,12 @@
       --panel-dark: #07080c;
       --accent-red-bg: #3a1a1d;
       --accent-gold-bg: #3a2f12;
+      --board-field: #9e0019;
+      --board-field-ink: #5c0009;
+      --board-surface: #181c25;
+      --board-tile: #5a1b1e;
+      --board-scrim: #3b1b21;
+      --phase-chip: #000;
       --speed-blazing: #ef6b6b;
       --speed-blazing-bg: #3a1717;
       --speed-fast: #e0a94a;
@@ -176,6 +219,12 @@
     --panel-dark: #07080c;
     --accent-red-bg: #3a1a1d;
     --accent-gold-bg: #3a2f12;
+    --board-field: #9e0019;
+    --board-field-ink: #5c0009;
+    --board-surface: #181c25;
+    --board-tile: #5a1b1e;
+    --board-scrim: #3b1b21;
+    --phase-chip: #000;
     --speed-blazing: #ef6b6b;
     --speed-blazing-bg: #3a1717;
     --speed-fast: #e0a94a;
@@ -223,10 +272,40 @@
   }
   .brand-sub { color: var(--accent-gold); }
   .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+  /* Global search (Q3): the header button from 1024px (narrower headers
+     have no 52px to spare; it overflowed 481-807px), the ⋯ menu's item
+     below; a full-screen sheet on phones, a panel under the header from
+     768px. */
+  .search-btn { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: var(--radius-md); background: transparent; color: #fff; cursor: pointer; }
+  .search-btn:hover, .search-btn:focus-visible { border-color: #fff; }
+  @media (min-width: 1024px) {
+    .search-btn { display: inline-flex; }
+    .more-menu-panel .menu-search { display: none; }
+  }
+  .search-sheet { position: fixed; inset: 0; z-index: 60; background: rgba(10, 12, 20, 0.45); }
+  .search-sheet[hidden] { display: none; }
+  html.search-open { overflow: hidden; }
+  .search-panel { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--surface); color: var(--navy); }
+  .search-bar { display: flex; gap: var(--space-2); padding: var(--space-3); border-bottom: 1px solid color-mix(in srgb, var(--muted) 25%, transparent); }
+  .search-input { flex: 1 1 auto; min-width: 0; min-height: 44px; font-size: 16px; padding: 0 var(--space-3); border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--navy); }
+  .search-close { min-height: 44px; padding: 0 var(--space-3); border: 0; background: none; color: var(--blue); font: inherit; font-weight: 700; cursor: pointer; }
+  .search-status { margin: 0; padding: var(--space-2) var(--space-4) 0; font-size: var(--font-xs); color: var(--muted); }
+  .search-status:empty { display: none; }
+  .search-results { list-style: none; margin: 0; padding: var(--space-1) var(--space-2) var(--space-4); overflow-y: auto; flex: 1 1 auto; }
+  .search-group { padding: var(--space-3) var(--space-2) var(--space-1); font-size: var(--font-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .search-results [role="option"] a { display: flex; align-items: center; gap: var(--space-3); min-height: 48px; padding: 2px var(--space-2); border-radius: var(--radius-sm); color: inherit; text-decoration: none; }
+  .search-results [role="option"][aria-selected="true"] a { background: var(--light-blue); }
+  .search-text { display: flex; flex-direction: column; min-width: 0; }
+  .search-label { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-meta { font-size: var(--font-xs); color: var(--muted); }
+  .search-glyph { display: inline-flex; align-items: center; justify-content: center; width: var(--icon-sm); height: var(--icon-sm); font-size: 22px; flex: 0 0 auto; }
+  @media (min-width: 768px) {
+    .search-panel { inset: 64px auto auto 50%; transform: translateX(-50%); width: min(640px, calc(100vw - 48px)); max-height: min(70vh, 640px); border: 2px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3); }
+  }
   .more-menu { position: relative; }
   .more-menu-btn {
     min-width: 44px;
-    min-height: 40px;
+    min-height: 44px;
     font: inherit;
     font-size: 1.3rem;
     line-height: 1;
@@ -248,6 +327,8 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
   }
   .more-menu-panel[hidden] { display: none; }
+  .more-menu-panel .name-language { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) var(--space-3); font-size: var(--font-xs); font-weight: 700; color: var(--muted); }
+  .more-menu-panel .name-language select { min-height: 44px; font-size: 16px; }
   .more-menu-panel a, .more-menu-panel button {
     display: block;
     width: 100%;
@@ -267,7 +348,7 @@
   a { color: var(--blue); }
   /* Pokémon names and sprites are real links (U1), styled as the text they
      replace. */
-  a.pokemon-link, a.grid-6xn-tile, a.tier-chip, a.mover-link, a.team-comp-slot { color: inherit; text-decoration: none; }
+  a.pokemon-link, a.grid-6xn-tile, a.tier-chip, a.mover-link, a.team-strip-slot { color: inherit; text-decoration: none; }
   a.pokemon-link:hover span, a.mover-link:hover .mover-name { text-decoration: underline; }
   /* "How this is computed": the intro line stays one sentence; the method
      sits behind a disclosure (U2). */
@@ -312,10 +393,16 @@
   .share-bar { height: 8px; border-radius: 999px; background: var(--blue); justify-self: start; }
   .share-value { text-align: right; }
   .data-table th, .data-table td { padding: 4px 10px; }
-  .data-table .team-comp { justify-content: flex-start; }
   .core-names { display: block; font-size: var(--font-xs); margin-top: 2px; }
   .core-names a { color: inherit; }
-  @media (max-width: 600px) {
+  /* A table wider than its card scrolls inside its own frame on tablets
+     (docs/upgrade-plan-2027q2.md, M2: no page scroll at any width), with
+     U7's edge fades. Desktop has the room; phones use two-line rows. */
+  .data-table-scroll { position: relative; }
+  @media (min-width: 721px) and (max-width: 1023px) {
+    .data-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+  @media (max-width: 720px) {
     /* Two-line rows on phones: "main" columns on line one, the rest as
        labelled details on line two. */
     .data-table thead { display: none; }
@@ -420,7 +507,14 @@
   }
   /* Team cards (app.js teamCardHtml, C1/C2/P5): placement and record as
      the headline, then who and where, the six Pokémon, sets and actions. */
-  .team-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+  .team-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+  @media (max-width: 1023px) { .team-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) {
+    /* One column, bled into the panel's padding, so a card's team strip
+       keeps one row of six tiles of at least 44px at 360px (M3). */
+    .team-card-grid { grid-template-columns: minmax(0, 1fr); margin-left: -12px; margin-right: -12px; }
+    .team-card { padding: 10px; }
+  }
   .team-card { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--surface); display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
   .team-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
   .team-card-headline { font-size: var(--font-lg); font-weight: 800; }
@@ -428,7 +522,6 @@
   .team-card-wr { font-size: var(--font-xs); color: var(--muted); font-weight: 600; white-space: nowrap; }
   .team-card-who { font-size: var(--font-sm); color: var(--muted); }
   .team-card-who a { color: var(--navy); font-weight: 600; }
-  .team-card .team-comp { justify-content: flex-start; }
   .team-card-sets summary { cursor: pointer; font-size: var(--font-sm); font-weight: 600; color: var(--blue); }
   .team-card-sets ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--font-sm); }
   .team-card-sets a { font-weight: 700; color: var(--navy); }
@@ -442,17 +535,17 @@
   .performer-columns h4 { margin: 0 0 var(--space-2); }
   .performer-columns[hidden] { display: none; }
   .winner-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
-  .winner-cell .team-comp { flex-wrap: nowrap; gap: 0; }
   /* Overview: latest event + "Copy and play" (C1, P5). */
   .overview-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); margin-bottom: var(--space-5); }
   .overview-row[hidden] { display: none; }
   .latest-event { border: 2px solid var(--border); border-radius: var(--radius-md); padding: var(--space-4); height: 100%; }
   .latest-event h3 { margin: var(--space-1) 0; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--navy); }
   .latest-event h3 a { color: inherit; }
-  .latest-event .team-comp { justify-content: flex-start; margin: var(--space-2) 0; }
-  .starter-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-3); }
-  .starter-strip .team-comp-slot img { width: 32px; height: 32px; }
-  @media (max-width: 900px) {
+  .latest-event .team-strip-host { margin: var(--space-2) 0; }
+  .starter-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+  @media (max-width: 1023px) { .starter-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { .starter-strip { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 1023px) {
     .overview-row, .performer-columns { grid-template-columns: 1fr; }
   }
   /* Pokémon hub v2 (P2): recently viewed, per-regulation trend, pressure. */
@@ -478,7 +571,6 @@
   .saved-teams-list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; border: 1px solid var(--light-blue); border-radius: var(--radius-sm); padding: var(--space-2); }
   .saved-teams-list .saved-name { font-weight: 700; flex: 1 1 140px; min-width: 0; }
   .saved-teams-list .saved-meta { display: block; font-weight: 400; font-size: var(--font-xs); color: var(--muted); }
-  .saved-teams-list .team-comp { gap: 0; }
   /* Glossary terms (app.js termHtml, U4): a dotted underline marks a term
      with a tooltip. */
   .term { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
@@ -546,9 +638,16 @@
   .set-share { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 720px) { .profile-layout { grid-template-columns: 1fr; } }
-  /* Phones: the bar keeps the brand, the regulation select and the ⋯ menu. */
+  /* Phones: the stat bars need 260px, which doesn't fit beside the 128px
+     hero, so the header wraps and the bars take the full width. */
+  @media (max-width: 480px) { #pokemon-profile-stats > .cell-with-icon { flex-wrap: wrap; } }
+  /* Phones: the bar keeps the brand, the regulation and Events selects and
+     the ⋯ menu, packed tighter so the pair fits from 360px. */
   @media (max-width: 480px) {
     .brand-sub { display: none; }
+    .topbar { gap: var(--space-2); }
+    .topbar-actions { gap: 4px; }
+    .regulation-picker select { padding: 4px 2px 4px 4px; }
     .kpi-card .kpi-sprite { display: none; }
     .kpi-card .sub { display: none; }
     .kpi-card .value { font-size: 0.95rem; }
@@ -585,11 +684,13 @@
   .combo-list li[aria-selected="true"] { background: var(--light-blue); }
   .combo-list .combo-empty { color: var(--muted); cursor: default; }
   .combo-list[hidden] { display: none; }
-  .combo-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .combo-host { position: relative; }
+  .combo-source { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   .theme-toggle { font: inherit; cursor: pointer; background: transparent; color: inherit; }
-  .regulation-picker { display: inline-flex; align-items: center; }
+  .regulation-picker { display: inline-flex; align-items: center; gap: 6px; }
+  .regulation-picker .reg-prefix { font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #b8bdd1; }
   .regulation-picker select {
-    min-height: 40px;
+    min-height: 44px;
     font: inherit;
     font-weight: 700;
     color: var(--navy);
@@ -807,7 +908,8 @@
      more uniform grid), collapsing to 3 columns at 720px and 2 at 480px
      per the existing breakpoint convention. Each tile bolds its headline
      percentage (.grid-6xn-value) per the "bold the percentage" ask. */
-  .grid-6xn { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--space-3); }
+  .grid-6xn { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-3); }
+  @media (max-width: 1023px) { .grid-6xn { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .grid-6xn-tile {
     border: 2px solid var(--border);
     border-radius: var(--radius-md);
@@ -828,17 +930,7 @@
   .type-icons { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
   .type-icons .type-icon { width: 20px; height: 20px; }
 
-  /* A team drawn as its six Pokémon (app.js's teamCompositionHtml). Wraps
-     to two rows at narrow widths rather than overflowing its tile. */
-  .team-comp {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-1);
-  }
-  .team-comp-slot { display: inline-flex; align-items: center; }
-  .team-comp-slot img { display: block; }
-  /* Placeholder for a roster slot whose sprite didn't resolve, so a
+  /* Placeholder for a team-strip slot whose sprite didn't resolve, so a
      six-Pokémon team still reads as six. */
   .team-comp-blank {
     display: inline-block;
@@ -1203,7 +1295,7 @@
   .analysis-card { background: var(--light-blue); border-radius: var(--radius-md); padding: var(--space-3); }
   .analysis-card strong { display: block; color: var(--navy); font-size: var(--font-lg); }
   .analysis-card span { color: var(--muted); font-size: var(--font-xs); }
-  .team-analysis-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); margin-top: var(--space-5); }
+  .team-analysis-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: var(--space-6); margin-top: var(--space-5); }
   .team-analysis table { font-size: var(--font-sm); }
   .team-analysis .status-good { color: var(--positive); font-weight: 700; }
   .team-analysis .status-warn { color: var(--warning); font-weight: 700; }
@@ -1229,7 +1321,7 @@
     .team-builder-grid { grid-template-columns: minmax(0, 1fr); }
     .team-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .team-analysis-grid, .team-analysis-columns { grid-template-columns: 1fr; }
-    .grid-6xn { grid-template-columns: repeat(3, 1fr); }
+    .grid-6xn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .matchup-picker-grid { grid-template-columns: 1fr; }
   }
 
@@ -1243,6 +1335,7 @@
   @media (max-width:720px) { .compare-columns, .expansion-grid { grid-template-columns:1fr; } }
   .site-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; color: var(--muted); font-size: 0.8rem; padding: 24px; }
   .site-footer span + span::before { content: none; }
+  .site-footer .footer-unofficial { flex-basis: 100%; text-align: center; }
 
   @media (max-width: 720px) {
     main { padding: var(--space-3) 16px 16px; }
@@ -1251,11 +1344,533 @@
     .kpi-card { padding: 6px 10px; }
   }
 
+  /* ---------------------------------------------------------------
+   * 2027 Q2 broadcast components (docs/upgrade-plan-2027q2.md). See
+   * docs/design-system.md for the component reference.
+   * --------------------------------------------------------------- */
+  /* Phase chip (V5): says what a view covers, in the broadcast's black
+     italic caps. Chips wrap onto a second line on phones, never truncate. */
+  .phase-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 4px;
+    background: var(--phase-chip);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .phase-chip.is-online { background: var(--series-blue); }
+  .phase-chip.is-combined { background: linear-gradient(90deg, var(--phase-chip) 50%, var(--series-blue) 50%); }
+  /* Population banner (S1): online figures are never mistaken for
+     official ones. Blue, the Online chip's colour, not the warning amber:
+     it describes the data, it doesn't warn about it. */
+  .population-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    padding: var(--space-3) var(--space-5);
+    background: color-mix(in srgb, var(--series-blue) 10%, var(--surface));
+    border-bottom: 2px solid var(--series-blue);
+    color: var(--text);
+    font-size: var(--font-sm);
+    text-align: center;
+  }
+  .population-banner[hidden] { display: none; }
+  .population-banner a { font-weight: 700; }
+  .official-only-note { color: var(--muted); font-size: var(--font-sm); }
+  .official-only-note .phase-chip { margin-right: 6px; }
+  .phase-chip.is-ladder { background: var(--series-green); }
+  .phase-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  /* Top-cut bracket (E2): one column per round from 1024px, round tabs
+     below it. A match is two stacked sides, each a player button (it opens
+     the path) above the team's compact strip, the winner in bold. */
+  .bracket { margin-bottom: var(--space-4); }
+  .bracket-tabs { margin-bottom: var(--space-3); max-width: 100%; overflow-x: auto; }
+  .bracket-rounds { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .bracket-round { display: flex; flex-direction: column; min-width: 0; }
+  .bracket-matches { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: var(--space-2); }
+  .bracket-bye { display: block; color: var(--muted); font-style: italic; font-size: var(--font-sm); }
+  .bracket-round-title { margin: 0 0 var(--space-1); font-size: var(--font-xs); font-weight: 800; font-style: italic; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .bracket-match { border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+  .bracket-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); padding: 6px var(--space-2); }
+  .bracket-side + .bracket-side { border-top: 1px solid var(--light-blue); }
+  .bracket-side .team-strip-host { grid-column: 1 / -1; }
+  .bracket-side .sb-score { grid-row: 1; grid-column: 2; font-weight: 800; color: var(--muted); }
+  .bracket-side .sb-score:empty { display: none; }
+  .bracket-side.is-winner .sb-score { color: var(--positive); }
+  .bracket-side:not(.is-winner) .sb-name { font-weight: 600; }
+  .bracket-player { display: block; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .bracket-player[aria-expanded="true"] .sb-name { text-decoration: underline; }
+  .bracket-player.is-unknown { display: flex; align-items: center; color: var(--muted); font-style: italic; cursor: default; }
+  .bracket-vod { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 var(--space-2); border-top: 1px solid var(--light-blue); font-size: var(--font-sm); font-weight: 700; }
+  @media (max-width: 1023px) {
+    .bracket-rounds { display: block; }
+    .bracket-round:not(.is-active) { display: none; }
+    .bracket-round-title { display: none; }
+  }
+  @media (min-width: 1024px) { .bracket-tabs { display: none; } }
+  /* Day 2 conversion (E1): ×1.30 green, ×0.70 red, near ×1 plain. */
+  .conversion { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .conversion.is-up { color: var(--positive); }
+  .conversion.is-down { color: var(--danger); }
+  /* Upcoming online tournaments (list #31): local time, name and organiser,
+     registrations; the registrations drop under the name on phones. */
+  .upcoming { margin-bottom: var(--space-5); }
+  .upcoming-day { margin: var(--space-3) 0 var(--space-1); font-size: var(--font-sm); font-weight: 800; font-style: italic; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .upcoming-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
+  .upcoming-item { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-3); padding: 8px var(--space-3); min-height: 44px; }
+  .upcoming-item + .upcoming-item { border-top: 1px solid var(--light-blue); }
+  .upcoming-time { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .upcoming-main { display: flex; flex-direction: column; min-width: 0; }
+  .upcoming-main a { font-weight: 700; overflow-wrap: anywhere; }
+  .upcoming-seats { display: flex; flex-direction: column; align-items: flex-end; font-size: var(--font-sm); font-variant-numeric: tabular-nums; }
+  .upcoming-reg { font-size: var(--font-xs); color: var(--muted); }
+  .upcoming-reg.is-open { color: var(--positive); font-weight: 700; }
+  @media (max-width: 480px) {
+    .upcoming-item { grid-template-columns: 4.2em minmax(0, 1fr); }
+    .upcoming-seats { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+  }
+  /* A top-cut player's path (E2), opened from the bracket. */
+  .path-panel { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-5); }
+  .path-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .path-head h4 { margin: 0; }
+  .path-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+  .path-list li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+  .path-round { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 2.6em; }
+  .path-result { display: inline-flex; align-items: center; justify-content: center; justify-self: start; min-width: 2.4em; padding: 2px 6px; border-radius: 4px; font-weight: 800; background: var(--light-blue); }
+  .path-result.is-w { background: var(--positive); color: #fff; }
+  .path-result.is-l { background: var(--danger); color: #fff; }
+  .path-opponent { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); min-width: 0; }
+  @media (max-width: 480px) {
+    .path-list li { grid-template-columns: auto auto; }
+    .path-opponent { grid-column: 1 / -1; }
+  }
+  /* Segmented control: a small set of mutually exclusive choices, used in
+     a view's band (the board's scope and grouping, round tabs). */
+  .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; background: var(--surface); }
+  .segmented button { font: inherit; font-size: var(--font-xs); font-weight: 700; padding: 6px 12px; min-height: 36px; border: 0; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .segmented button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  .segmented button:disabled { opacity: 0.45; cursor: not-allowed; }
+  /* Broadcast band (V7): a diagonal slash and halftone drawn in CSS, our
+     own pattern rather than the official key graphic. */
+  .broadcast-band {
+    --slash-at: 62%;
+    background-color: var(--panel-dark);
+    background-image:
+      linear-gradient(115deg, transparent 0 var(--slash-at), var(--board-field) var(--slash-at) calc(var(--slash-at) + 4%), transparent calc(var(--slash-at) + 4%) calc(var(--slash-at) + 7%), var(--board-gold) calc(var(--slash-at) + 7%) calc(var(--slash-at) + 8.5%), transparent calc(var(--slash-at) + 8.5%)),
+      radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.4px);
+    background-size: auto, 8px 8px;
+    color: #fff;
+  }
+  /* On a page header the slash sits at the far right, clear of the title. */
+  .page-band.broadcast-band { --slash-at: 80%; }
+  @media (max-width: 720px) { .page-band.broadcast-band { --slash-at: 90%; } }
+  .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-gold-bg); color: var(--navy); font-size: var(--font-sm); }
+  .notice[hidden] { display: none; }
+
+  /* Square type badge (V6): the type's colour with our own white glyph. */
+  .type-sq { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14); vertical-align: middle; }
+  .type-sq svg { filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)); }
+  /* Team strip (V3): six square tiles, the held item in a white circle at
+     each tile's top-right and a Mega badge under it. One row of six;
+     3 x 2 where a tile would fall under 44px (6 x 44 + 5 gaps = 284px). */
+  .team-strip-host { container-type: inline-size; width: 100%; }
+  /* A compact strip sizes to its sprites, inline in a row or a cell. */
+  .team-strip-host.is-compact { container-type: normal; display: inline-block; width: auto; }
+  .grid-6xn-tile .team-strip-host { text-align: center; }
+  .team-strip { --strip-n: 6; display: grid; grid-template-columns: repeat(var(--strip-n), minmax(0, 64px)); gap: 4px; }
+  @container (max-width: 287px) {
+    .team-strip:not(.is-compact) { grid-template-columns: repeat(3, minmax(0, 64px)); }
+  }
+  .team-strip-slot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--light-blue);
+    border-radius: var(--radius-sm);
+    background: var(--light-blue);
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .team-strip-slot:hover, .team-strip-slot[aria-expanded="true"] { border-color: var(--blue); }
+  .team-strip-art { width: 88%; height: 88%; object-fit: contain; }
+  .team-strip-slot .team-comp-blank { width: 70%; height: 70%; }
+  .strip-item { position: absolute; top: -5px; right: -5px; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+  .strip-item img { width: 16px; height: 16px; object-fit: contain; }
+  .strip-item-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .strip-mega { position: absolute; top: 17px; right: -5px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--series-red), var(--series-yellow), var(--series-green), var(--series-blue), var(--series-red)); color: #fff; font-size: 0.62rem; font-weight: 900; text-shadow: 0 0 2px rgba(0, 0, 0, 0.7); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+  .team-strip.is-compact { display: inline-flex; flex-wrap: nowrap; gap: 0; }
+  .team-strip.is-compact .team-strip-slot { width: 32px; border: 0; background: none; }
+  .data-table .team-strip.is-compact .team-strip-slot { width: 26px; }
+  @media (max-width: 1023px) { .team-strip { grid-template-columns: repeat(var(--strip-n), minmax(0, 56px)); } }
+  .strip-pop { position: absolute; z-index: 70; padding: var(--space-3); border-radius: var(--radius-md); border: 2px solid var(--border); background: var(--surface); color: var(--navy); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: var(--font-sm); }
+  .strip-pop[hidden] { display: none; }
+  .strip-pop-name { margin: 0 0 var(--space-2); font-weight: 800; }
+  .strip-pop dl { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); margin: 0 0 var(--space-2); align-items: center; }
+  .strip-pop dt { color: var(--muted); font-weight: 600; }
+  .strip-pop dd { margin: 0; font-weight: 600; }
+  .strip-pop .cell-icon { width: 24px; height: 24px; }
+  .strip-pop-moves { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px var(--space-2); }
+  /* Player line and scoreboard row (V4): name · country · record in chips. */
+  .sb-player { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+  .sb-name { font-weight: 800; color: var(--navy); text-transform: uppercase; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+  a.sb-name { text-decoration: none; }
+  a.sb-name:hover { text-decoration: underline; }
+  .sb-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; background: var(--light-blue); color: var(--navy); font-size: 0.72rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sb-rec { background: var(--panel-dark); color: #fff; }
+  .scoreboard-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--light-blue); }
+  .scoreboard-row > .phase-chip { grid-column: 1 / -1; justify-self: start; }
+  .sb-side { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; color: var(--muted); }
+  .sb-side.sb-b { flex-direction: row-reverse; text-align: right; }
+  .sb-side.sb-b .sb-player { justify-content: flex-end; }
+  .sb-side.is-winner { color: var(--navy); }
+  .sb-side:not(.is-winner) .sb-name { font-weight: 600; }
+  .sb-score { flex: 0 0 auto; min-width: 28px; padding: 2px 6px; border-radius: 4px; background: var(--light-blue); text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .sb-side.is-winner .sb-score { background: var(--accent-red); color: #fff; }
+  .sb-vs { color: var(--muted); font-size: var(--font-xs); font-weight: 700; text-transform: uppercase; }
+  @media (max-width: 480px) {
+    /* Two stacked lines on a phone, A over B, result at the right. */
+    .scoreboard-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .sb-vs { display: none; }
+    .sb-side.sb-b { flex-direction: row; text-align: left; }
+    .sb-side.sb-b .sb-player { justify-content: flex-start; }
+  }
+  .team-card-who .phase-chip { margin-right: 6px; }
+  /* Event and player pages open on a broadcast band (V7). */
+  .page-band { margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) var(--space-4); padding: var(--space-4) var(--space-6); }
+  .page-band .eyebrow, .page-band .eyebrow a, .page-band .event-meta, .page-band .sub, .page-band .sub a { color: #d7dbe8; }
+  .page-band h2.event-title, .page-band .sb-name { color: #fff; }
+  .page-band .sb-chip { background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .page-band .sb-rec { background: var(--board-gold); color: #12131a; }
+  .event-winner { margin: 0 0 var(--space-1); }
+  .builder-strip { margin-bottom: var(--space-3); }
+  .builder-warnings { list-style: none; margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--warning-bg); color: var(--warning); font-size: var(--font-sm); font-weight: 700; }
+  .builder-warnings li + li { margin-top: 4px; }
+  .builder-warnings li::before { content: "⚠ "; }
+  .builder-strip:empty { display: none; }
+  @media (max-width: 480px) { .page-band { margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-4); padding: var(--space-3) var(--space-4); } }
+  /* Mega usage panel (E3): the count split as a stacked bar, then a table. */
+  .mega-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-5); align-items: start; }
+  .mega-count-bar { display: flex; height: 28px; border-radius: var(--radius-sm); overflow: hidden; margin: var(--space-2) 0; }
+  .mega-count-bar span { display: flex; align-items: center; justify-content: center; min-width: 0; color: #fff; font-size: var(--font-xs); font-weight: 800; white-space: nowrap; overflow: hidden; }
+  .mega-count-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--font-sm); }
+  .mega-count-list li { display: flex; align-items: center; gap: var(--space-2); }
+  .mega-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+  .mega-count-list strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+  @media (max-width: 1023px) { .mega-panel { grid-template-columns: minmax(0, 1fr); } }
+  /* The ladder lens (S2): a scatter of ladder against tournament share on
+     tablets and desktops, two ranked lists everywhere, and the profile's
+     checks and counters and spreads. A source chip names the population. */
+  .source-chip-row { margin: 0 0 var(--space-2); }
+  .source-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--series-blue); color: #fff; font-size: var(--font-xs); font-weight: 800; letter-spacing: 0.02em; }
+  .ladder-figure { margin: var(--space-3) 0; }
+  .ladder-figure:empty { display: none; }
+  .ladder-svg { width: 100%; height: auto; display: block; overflow: visible; touch-action: manipulation; }
+  .ladder-svg .axis line, .ladder-svg .grid line { stroke: var(--muted); stroke-opacity: 0.25; }
+  .ladder-svg .axis text, .ladder-svg .axis-title { fill: var(--muted); font-size: 11px; }
+  .ladder-svg .diagonal { stroke: var(--muted); stroke-dasharray: 4 4; stroke-width: 1.5; }
+  .ladder-svg .region { fill: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ladder-svg .dot { stroke: var(--surface); stroke-width: 2; }
+  .ladder-svg .dot.is-ladder { fill: var(--series-blue); }
+  .ladder-svg .dot.is-tournament { fill: var(--series-red); }
+  .ladder-svg .dot.is-even { fill: var(--muted); }
+  .ladder-svg .hit { fill: transparent; cursor: pointer; }
+  .ladder-svg a:focus-visible .dot { stroke: var(--navy); stroke-width: 3; }
+  .ladder-svg .dot-label { fill: var(--navy); font-size: 11px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .ladder-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0 0; padding: 0; list-style: none; font-size: var(--font-xs); color: var(--muted); }
+  .ladder-legend li { display: flex; align-items: center; gap: 6px; }
+  .ladder-legend .mega-swatch { border-radius: 50%; }
+  .ladder-lists { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); }
+  /* Which four they bring (S3): a table, then the common lead pairs. */
+  .ladder-bring { margin-top: var(--space-6); }
+  .lead-pair-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .lead-pair-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .lead-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 0 var(--space-3); min-width: 0; max-width: 520px; }
+  .lead-pair .pokemon-link { min-width: 0; }
+  .lead-pair .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-share { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .lead-pair-list .ladder-sub { grid-column: 1 / -1; margin-top: 2px; padding-bottom: 4px; }
+  .profile-bring { margin-top: var(--space-5); }
+  .profile-bring h4 { margin: var(--space-1) 0 0; }
+  .bring-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-2) 0; }
+  .bring-stats div { padding: var(--space-2); border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
+  .bring-stats dt { font-size: var(--font-xs); color: var(--muted); font-weight: 700; }
+  .bring-stats dd { margin: 0; font-size: var(--font-lg); font-weight: 800; font-variant-numeric: tabular-nums; }
+  @media (max-width: 480px) {
+    .bring-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Two names side by side truncate at phone width: one per line. */
+    .lead-pair { grid-template-columns: minmax(0, 1fr); }
+  }
+  .ladder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .ladder-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .ladder-list .pokemon-link { min-width: 0; }
+  .ladder-list .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ladder-gap { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .ladder-sub { grid-column: 1 / -1; padding-left: calc(var(--icon-sm) + var(--space-2)); margin-top: -6px; font-size: var(--font-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+  @media (max-width: 767px) {
+    .ladder-figure { display: none; }
+    .ladder-lists { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  }
+  .counter-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--space-5); }
+  .counter-list li { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .counter-list .pokemon-link { flex: 1 1 auto; min-width: 0; }
+  .counter-list .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .counter-list .counter-rate { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .counter-list .counter-n { font-size: var(--font-xs); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 6.5em; text-align: right; }
+  @media (max-width: 767px) { .counter-list { grid-template-columns: minmax(0, 1fr); } }
+  .show-all-btn { background: none; border: 0; padding: var(--space-2) 0; min-height: 44px; color: var(--blue); font: inherit; font-weight: 700; cursor: pointer; }
+  .spread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .spread-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .spread-points { font-variant-numeric: tabular-nums; }
+  .spread-points .nature { font-weight: 800; margin-right: 6px; }
+  .spread-share { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .spread-bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 18%, transparent); overflow: hidden; }
+  .spread-bar span { display: block; height: 100%; background: var(--series-blue); border-radius: 3px; }
+  /* Speed line (list #24): from 768px a number line, your team above it
+     and the most-used Pokémon below, sprites stacked into lanes where they
+     would overlap; on phones a list in move order. */
+  .speed-line-section { margin: var(--space-4) 0 var(--space-5); }
+  .speed-line-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
+  .speed-line { position: relative; margin: var(--space-3) 0; }
+  .speed-line-side { position: relative; }
+  .speed-line-axis { position: relative; height: 34px; border-top: 2px solid var(--navy); }
+  .speed-line-axis span { position: absolute; top: 4px; transform: translateX(-50%); font-size: var(--font-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .speed-line-axis .speed-line-first { top: auto; bottom: -2px; transform: none; font-weight: 800; color: var(--navy); }
+  .speed-line-label { font-size: var(--font-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 4px; }
+  .speed-line-dot { position: absolute; width: 40px; height: 40px; transform: translateX(-50%); display: block; }
+  .speed-line-dot .cell-icon { width: 40px; height: 40px; }
+  .speed-line-dot.is-yours { outline: 2px solid var(--series-blue); outline-offset: -2px; border-radius: 50%; background: color-mix(in srgb, var(--series-blue) 12%, transparent); }
+  .speed-line-list { display: none; list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+  .speed-line-list li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .speed-line-list .pokemon-link { min-width: 0; }
+  .speed-line-list .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .speed-line-meta { grid-column: 2 / -1; display: flex; gap: var(--space-2); padding-left: calc(var(--icon-sm) + 8px); margin-top: -4px; }
+  .speed-line-meta:empty { display: none; }
+  .speed-line-list .speed-value { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .speed-line-list .speed-tie { font-size: var(--font-xs); color: var(--warning); font-weight: 700; }
+  .speed-side-chip { font-size: var(--font-xs); font-weight: 800; padding: 1px 8px; border-radius: 999px; background: var(--series-blue); color: #fff; }
+  @media (max-width: 767px) {
+    .speed-line { display: none; }
+    .speed-line-list { display: block; }
+    .speed-line-controls { margin-left: 0; width: 100%; }
+    .speed-line-controls .segmented { flex: 1 1 100%; }
+  }
+  /* Archetype matchups (list #30): a diverging heatmap, blue where the
+     row's archetype wins, red where it loses, grey near even and for
+     samples under 20; the number stays in ink. A list on phones. */
+  .archetype-matchups { margin-top: var(--space-5); }
+  .archetype-heatmap { border-collapse: separate; border-spacing: 2px; font-size: var(--font-xs); }
+  .archetype-heatmap th { padding: 4px; font-weight: 700; color: var(--muted); }
+  .archetype-heatmap thead th { vertical-align: bottom; }
+  .archetype-heatmap tbody th { text-align: left; white-space: nowrap; }
+  .archetype-heatmap .team-composition img { width: 24px; height: 24px; }
+  .archetype-heatmap td { min-width: 52px; height: 40px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--navy); border-radius: 4px; background: color-mix(in srgb, var(--muted) 10%, transparent); }
+  .archetype-heatmap td.is-self { background: none; color: var(--muted); }
+  .archetype-heatmap td.is-thin { font-weight: 500; color: var(--muted); }
+  .archetype-matchup-phone { display: none; }
+  .archetype-matchup-phone label { display: flex; flex-direction: column; gap: 4px; }
+  .archetype-matchup-phone select { width: 100%; max-width: 100%; min-height: 44px; }
+  .archetype-matchup-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+  .archetype-matchup-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); min-height: 44px; padding: 4px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .archetype-matchup-list .matchup-rate { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .archetype-matchup-list .matchup-n { grid-column: 1 / -1; font-size: var(--font-xs); color: var(--muted); }
+  @media (max-width: 767px) {
+    .archetype-heatmap-wrap { display: none; }
+    .archetype-matchup-phone { display: block; }
+  }
+  /* Compare tray (list #34): a bottom sheet over the phone's bottom bar, a
+     card at the bottom right from 721px. */
+  .compare-tray { position: fixed; z-index: 40; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--surface); border-top: 2px solid var(--border); box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.15); }
+  .compare-tray[hidden] { display: none; }
+  .compare-tray-title { margin: 0; font-size: var(--font-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap; }
+  .compare-tray-list { display: flex; gap: 6px; list-style: none; margin: 0; padding: 6px 6px 0 0; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+  @media (max-width: 480px) { .compare-tray-title { display: none; } }
+  .compare-tray-list li { position: relative; }
+  .compare-tray-list a { display: block; width: 44px; height: 44px; }
+  .compare-tray-remove { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--navy); color: var(--surface); font-size: 14px; line-height: 1; cursor: pointer; }
+  .compare-tray-actions { display: flex; align-items: center; gap: var(--space-2); }
+  .compare-tray-actions .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .compare-tray-hint { font-size: var(--font-xs); color: var(--muted); }
+  @media (min-width: 721px) {
+    .compare-tray { left: auto; right: 24px; bottom: 24px; flex-direction: column; align-items: stretch; width: 240px; border: 2px solid var(--border); border-radius: var(--radius-md); }
+    .compare-tray-list { flex-wrap: wrap; }
+  }
+  html.has-compare-tray body { padding-bottom: 72px; }
+  @media (min-width: 721px) { html.has-compare-tray body { padding-bottom: 0; } }
+  .profile-pin { min-height: 44px; align-self: flex-end; }
+  .profile-pin[aria-pressed="true"] { background: var(--light-blue); }
+  .compare-extra { display: contents; }
+  .compare-extra-field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .compare-columns-3, .compare-columns-4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .section-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
+  .section-head h3 { margin: 0; }
+
+  /* The Overview has no card of its own: the board is its hero, and the
+     panels below it carry their own frames. */
+  .tab-panel[data-panel="overview"] { background: none; border: 0; padding: 0; overflow: visible; }
+  .overview-card { border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-4); }
+
+  /* Top 12 board (V2): the official card's 6 + band + 6 on desktop, band on
+     top with 4 columns on tablets and large phones and 3 on phones (M3).
+     The band is first in the DOM, so a screen reader hears the title and
+     sample before the tiles; on desktop it is placed on row 2 and the
+     tiles flow around it. Position is rank: the numeral stays small. */
+  .board {
+    margin: 0 0 var(--space-5);
+    padding: var(--space-3);
+    border-radius: 16px;
+    background-color: var(--board-field);
+    background-image:
+      radial-gradient(var(--board-field-ink) 1.1px, transparent 1.5px),
+      repeating-linear-gradient(135deg, transparent 0 26px, rgba(0, 0, 0, 0.1) 26px 34px);
+    background-size: 11px 11px, auto;
+  }
+  .board[hidden] { display: none; }
+  .board-inner { background: var(--board-surface); border-radius: 12px; padding: 40px var(--space-4) var(--space-4); }
+  .board-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 48px var(--space-3); }
+  .board-band { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: -16px 0 -8px; }
+  .board-band-block { border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 92px; min-width: 0; }
+  .board-band-title h3 { margin: 0; color: #fff; font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; }
+  .board-band-title p { margin: 0; color: #d7dbe8; font-size: var(--font-xs); }
+  .board-band-mark { background: var(--board-gold); color: #12131a; }
+  .board-band-mark strong { font-family: var(--font-display); font-size: 1.9rem; font-weight: 700; line-height: 1; text-transform: uppercase; }
+  .board-band-mark span { font-size: var(--font-sm); font-weight: 700; }
+  .board-band-scope { background: var(--board-tile); color: #fff; align-items: flex-start; }
+  .board-band-scope .segmented { border-color: rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.25); }
+  .board-band-scope .segmented button { color: #e8e0e1; }
+  .board-band-scope .segmented button[aria-pressed="true"] { background: #fff; color: var(--board-tile); }
+  .board-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .board-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    min-height: 172px;
+    border-radius: var(--radius-md);
+    background: var(--board-tile);
+    color: #fff;
+    text-decoration: none;
+  }
+  .board-tile:hover, .board-tile:focus-visible { box-shadow: 0 0 0 3px var(--board-gold); }
+  /* Hero art breaks the tile's top edge, as on the official card. */
+  .board-art { width: 112px; height: 112px; margin-top: -34px; object-fit: contain; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35)); }
+  .board-art-blank { display: block; width: 112px; height: 78px; }
+  .board-rank { position: absolute; top: 6px; left: 8px; font-size: 0.68rem; font-weight: 700; opacity: 0.6; }
+  .board-foot { align-self: stretch; margin-top: auto; padding: 6px 8px 8px; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--board-scrim); text-align: center; }
+  .board-value-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .board-value { font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; color: var(--board-gold); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .board-types { display: inline-flex; gap: 2px; }
+  .board-name { display: block; margin-top: 2px; font-weight: 800; font-size: var(--font-sm); line-height: 1.15; overflow-wrap: normal; }
+  .board-form { font-size: 0.78em; font-weight: 700; opacity: 0.85; }
+  .board-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); margin: var(--space-3) 0 0; font-size: var(--font-sm); }
+  .share-controls { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); margin-right: auto; }
+  .share-controls .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  /* Toast (M4): one line of confirmation above the phone's bottom bar. */
+  .toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 60; max-width: min(92vw, 420px); padding: 10px 16px; border-radius: var(--radius-pill); background: var(--panel-dark); color: #fff; font-size: var(--font-sm); font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s; }
+  .toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
+  @media (min-width: 721px) { .toast { bottom: 24px; } }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+  .event-cards { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+  .event-card-pair { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .event-card-pair .share-controls { margin-right: 0; }
+  .page-band .event-cards .btn { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+  .board-more a { color: var(--blue); font-weight: 700; }
+  /* The board's embed code (list #33). */
+  .board-more > .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .embed-panel { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
+  .embed-panel .sub { margin: 0 0 var(--space-2); }
+  .embed-code { display: block; width: 100%; font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--navy); resize: vertical; }
+  .embed-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+  .embed-actions .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  @media (max-width: 1023px) {
+    .board-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 44px; }
+    .board-band { grid-row: auto; margin: 0 0 4px; }
+    .board-inner { padding-top: var(--space-4); }
+    .board-art { width: 104px; height: 104px; }
+  }
+  @media (max-width: 720px) {
+    /* Full-bleed on phones, so three tiles stay at least 104px wide at
+       360px with 16px gutters and 8px gaps. */
+    .board { margin-left: -16px; margin-right: -16px; padding: 8px; border-radius: 0; }
+    .board-inner { padding: 8px 8px 12px; }
+    .board-band { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .board-band-block { min-height: 0; padding: var(--space-2) var(--space-3); }
+    .board-band-title h3 { font-size: 1.7rem; }
+    .board-band-mark { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+    .board-band-mark strong { font-size: 1.4rem; }
+    .board-controls, .board-controls .segmented { width: 100%; }
+    .board-controls .segmented button { flex: 1 1 0; min-height: 44px; }
+    .board-grid { gap: 36px 8px; }
+    /* One idea per line: the number on its own line, the types in the
+       tile's top-right corner, where U9 puts them on every card. Up to
+       720px: the large-phone tier's four tiles are about 106px wide at
+       481px, too narrow for the number and two badges side by side. */
+    .board-value-row { flex-direction: column; gap: 0; }
+    .board-types { position: absolute; top: 5px; right: 5px; }
+    .board-value { font-size: 1.75rem; }
+  }
+  @media (max-width: 480px) {
+    .board-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .board-tile { min-height: 156px; }
+    .board-art { width: 88px; height: 88px; margin-top: -26px; }
+    .board-name { font-size: var(--font-xs); }
+    .board-form { display: block; }
+  }
+
+  /* ---------------------------------------------------------------
+   * Responsive tiers (docs/upgrade-plan-2027q2.md, M2; docs/design-
+   * system.md's "Responsive behavior"): phone <=480px, large phone
+   * 481-720px, tablet 721-1023px, desktop >=1024px. No width from 360px
+   * up scrolls the page sideways; tests/browser/test_responsive_matrix.py
+   * enforces it, with 44px tap targets and 16px inputs on phones.
+   * --------------------------------------------------------------- */
+  /* iOS Safari zooms into any field under 16px on focus. The selector
+     outranks component rules such as .combo-input's font: inherit. */
+  @media (max-width: 1023px) {
+    :root input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+    :root select,
+    :root textarea { font-size: 16px; }
+  }
+  /* Every control a thumb presses is at least 44px tall on phones (U7). */
+  @media (max-width: 720px) {
+    .movers-toggle button, .calc-mode-btn, .type-popover-btn, .segmented button { min-height: 44px; }
+  }
+  /* Tablet header (finding 2): the brand loses its suffix, the five
+     sections tighten and the regulation select shows only its code, so
+     the bar fits from 721px instead of overflowing until about 808px. */
+  @media (min-width: 721px) and (max-width: 1023px) {
+    .topbar { gap: var(--space-3); padding: 0 16px; }
+    .brand-sub { display: none; }
+    .section-btn { padding: 6px 10px; font-size: 0.9rem; }
+    .regulation-picker .reg-prefix { display: none; }
+  }
+  @media (max-width: 720px) {
+    .regulation-picker .reg-prefix { display: none; }
+  }
+  /* Landscape phones: give the content its height back. */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .tabs, .subtabs { position: static; }
+  }
+
   @media (max-width: 480px) {
     .controls select { width: 100%; }
     section { padding: var(--space-4); }
     section h2 { margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: var(--space-3) var(--space-4); }
-    .grid-6xn { grid-template-columns: repeat(2, 1fr); }
+    .grid-6xn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 </style>
 </head>
@@ -1279,21 +1894,52 @@
     {% if payload.kpis_by_scope %}
       {# Which regulation every figure on the page describes. static/app.js
          sets the selected option from ?reg= and reloads on change. #}
-      <label class="regulation-picker"><span class="visually-hidden">Regulation</span>
+      {# Options read "M-C" so the select stays compact on tablets and phones
+         (docs/upgrade-plan-2027q2.md, M3); "Reg" shows beside it on desktop. #}
+      {# Population scopes ("m-c:online", docs/upgrade-plan-2027q2.md, S1)
+         are picked with the Events select beside it, not listed here. #}
+      {% set default_regulation = payload.default_scope.split(":")[0] %}
+      <label class="regulation-picker"><span class="reg-prefix" aria-hidden="true">Reg</span>
         <select id="regulation-scope" aria-label="Regulation shown on this page">
-          {% for scope in payload.kpis_by_scope %}
+          {% for scope in payload.scope_regulations or (payload.kpis_by_scope | list) %}
             {% set reg = payload.regulations | selectattr("regulation_code", "equalto", scope) | first %}
-            <option value="{{ scope }}"{% if scope == payload.default_scope %} selected{% endif %}>
-              {%- if reg %}Reg {{ scope | upper }}{% else %}All regulations{% endif -%}
+            <option value="{{ scope }}"{% if scope == default_regulation %} selected{% endif %}>
+              {%- if reg %}{{ scope | upper }}{% else %}All{% endif -%}
             </option>
           {% endfor %}
         </select>
       </label>
+      {% set populations = namespace(any=false) %}
+      {% for scope in payload.kpis_by_scope if ":" in scope %}{% set populations.any = true %}{% endfor %}
+      {% if populations.any %}
+        {% set default_population = (payload.default_scope.split(":") + ["official"])[1] %}
+        {# Official / Online / All (S1). Official stays the default; static/
+           app.js disables a choice the selected regulation has no data
+           for. #}
+        <label class="regulation-picker population-picker">
+          <select id="population-scope" aria-label="Events shown: official, online, or both">
+            <option value="official"{% if default_population == "official" %} selected{% endif %}>Official</option>
+            <option value="online"{% if default_population == "online" %} selected{% endif %}>Online</option>
+            <option value="combined"{% if default_population == "combined" %} selected{% endif %}>All</option>
+          </select>
+        </label>
+      {% endif %}
     {% endif %}
+    {# Global search (docs/upgrade-plan-2027q2.md, Q3): static/search.js.
+       From 1024px; below that it is the ⋯ menu's first item. #}
+    <button type="button" class="search-btn" data-search-open aria-label="Search Pokémon, players and events" aria-keyshortcuts="/ Control+K Meta+K">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
     <div class="more-menu">
       <button type="button" class="more-menu-btn" id="more-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-panel" aria-label="More options">&#8943;</button>
       <div class="more-menu-panel" id="more-menu-panel" hidden>
+        <button type="button" class="menu-search" data-search-open>Search</button>
         <button type="button" class="theme-toggle" id="theme-toggle">Theme: Auto</button>
+        {# Pokémon names in another language (docs/upgrade-plan-2027q2.md,
+           Q4); app.js fills the options. Names only. #}
+        <label class="name-language">Pokémon names
+          <select id="name-language"><option value="en">English</option></select>
+        </label>
         <a href="#/data/how-to-read">How to read this page</a>
         <a href="#/data">Data &amp; sources</a>
       </div>
@@ -1304,10 +1950,31 @@
    tournament is over three weeks old, or when no tournament in the data
    was played under the regulation in force today. #}
 <div id="staleness-banner" class="staleness-banner" role="status" hidden></div>
+{# Shown by static/app.js (renderOfflineBanner) while the browser is
+   offline and sw.js serves saved copies (docs/upgrade-plan-2027q2.md, Q5). #}
+<div id="offline-banner" class="staleness-banner offline-banner" role="status" hidden></div>
+{# The compare tray (docs/upgrade-plan-2027q2.md, list #34): Pokémon pinned
+   from their profiles, filled by static/expansions.js. #}
+<aside class="compare-tray" id="compare-tray" aria-label="Pinned to compare" hidden></aside>
+<div class="search-sheet" id="search-sheet" hidden>
+  <div class="search-panel" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="search-bar">
+      <input type="search" id="search-input" class="search-input" placeholder="Pokémon, player or event" autocomplete="off" spellcheck="false"
+        role="combobox" aria-expanded="true" aria-controls="search-results" aria-autocomplete="list">
+      <button type="button" class="search-close" data-search-close>Close</button>
+    </div>
+    <p class="search-status" id="search-status" role="status"></p>
+    <ul class="search-results" id="search-results" role="listbox" aria-label="Results"></ul>
+  </div>
+</div>
 {# Filled in by static/app.js (renderRolloverBanner) during the first weeks
    of a new regulation, when the page opens on the previous one
    (docs/upgrade-plan-2027q1.md, U3). #}
 <div id="rollover-banner" class="staleness-banner rollover-banner" role="status" hidden></div>
+{# Filled in by static/app.js (renderPopulationBanner) when the page shows
+   online events, alone or with official ones (docs/upgrade-plan-2027q2.md,
+   S1): a different population, so every view says so. #}
+<div id="population-banner" class="population-banner" role="status" hidden></div>
 <nav class="tabs" role="tablist" aria-label="Views in this section">
   <button class="tab-btn" role="tab" data-section="meta" data-tab="overview" aria-selected="true">Overview</button>
   <button class="tab-btn" role="tab" data-section="meta" data-tab="tiers" aria-selected="false">Tier List</button>
@@ -1326,16 +1993,36 @@
   <button class="tab-btn" role="tab" data-section="data" data-tab="data-sources" aria-selected="false">Data &amp; Sources</button>
 </nav>
 <main>
+  <section class="tab-panel" data-panel="overview" data-section="meta">
+    <h2 class="panel-title">Overview</h2>
+    {# A one-time note on the change of unit (docs/upgrade-plan-2027q2.md,
+       V1 and its risks), until the reader dismisses it. #}
+    <p class="notice" id="team-share-notice" role="status" hidden>
+      <span>Usage now counts the <strong>share of teams</strong> that brought a Pokémon, the unit the official usage card and other sites use. Every figure reads about six times the old share of roster slots, which is still in each tooltip.</span>
+      <button type="button" class="btn btn-sm" id="team-share-notice-dismiss">Got it</button>
+    </p>
+    {# The Top 12 board (V2), the Overview's hero; app.js renders it from
+       the inline KPIs, so it paints with no data fetch. #}
+    <div class="board" id="top-board" role="region" aria-labelledby="board-title"></div>
+    <section class="movers-panel" id="movers-panel" hidden></section>
+    <div class="overview-row" id="overview-row" hidden>
+      <div id="overview-latest-event"></div>
+      <div id="overview-starters" class="overview-card"></div>
+    </div>
+  {# One KPI row per regulation scope; app.js shows the selected one. It
+     sits under the Top 12 board (docs/upgrade-plan-2027q2.md, V2), which
+     now leads the Overview. #}
   <div id="kpi-strip">
-  {# One KPI row per regulation scope; app.js shows the selected one. The
-     whole strip shows on the Meta section only. #}
   {% for scope, scope_kpis in (payload.kpis_by_scope or {"all": payload.kpis}).items() %}
   <div class="kpi-row" data-scope="{{ scope }}"{% if scope != (payload.default_scope or "all") %} hidden{% endif %}>
     <div class="kpi-card">
       <div class="kpi-body">
-        <div class="label">Sample</div>
+        {% set population = scope_kpis.population or "official" %}
+        <div class="label">Sample{% if population == "online" %} · online{% elif population == "combined" %} · official + online{% endif %}</div>
         <div class="value">{{ scope_kpis.event_count or 0 }} event{% if scope_kpis.event_count != 1 %}s{% endif %} · {{ "{:,}".format(scope_kpis.team_count or 0) }} teams</div>
-        {% if scope_kpis.latest_event %}
+        {% if population != "official" %}
+          <div class="sub">Official events alone: {{ "{:,}".format(scope_kpis.official_team_count or 0) }} teams</div>
+        {% elif scope_kpis.latest_event %}
           <div class="sub">Latest: <a href="#/event/{{ scope_kpis.latest_event.event_id }}" title="{{ scope_kpis.latest_event.event_name }}">{{ scope_kpis.latest_event.short_name }}</a>, {{ scope_kpis.latest_event.event_date }}</div>
         {% endif %}
       </div>
@@ -1349,7 +2036,7 @@
       <div class="kpi-body">
         <div class="label">Most used</div>
         <div class="value">{% if top_used %}<a href="#/pokemon/{{ top_used.pokemon_key }}">{{ top_used.pokemon_name }}</a>{% else %}—{% endif %}</div>
-        <div class="sub">{% if top_used %}{% if top_used.usage_share is not none %}{{ "%.1f"|format(top_used.usage_share * 100) }}% of roster slots · {% endif %}{{ "{:,}".format(top_used.usage_count) }} teams{% endif %}</div>
+        <div class="sub">{% if top_used %}{% if top_used.team_share is defined and top_used.team_share is not none %}On {{ "%.1f"|format(top_used.team_share * 100) }}% of teams · {% endif %}{{ "{:,}".format(top_used.usage_count) }} teams{% endif %}</div>
       </div>
     </div>
     <div class="kpi-card">
@@ -1376,16 +2063,6 @@
   {% endfor %}
   </div>
 
-  <section class="tab-panel" data-panel="overview" data-section="meta">
-    <h2 class="panel-title">Overview</h2>
-    <section class="movers-panel" id="movers-panel" hidden></section>
-    <div class="overview-row" id="overview-row" hidden>
-      <div id="overview-latest-event"></div>
-      <div id="overview-starters"></div>
-    </div>
-    <h3>Most used</h3>
-    <p class="lead" id="overview-sub">Top 12 most-used Pokémon, ranked by share of roster slots.</p>
-    <div class="grid-6xn" id="overview-top-12"></div>
   </section>
 
   <section class="tab-panel" data-panel="tiers" data-section="meta" hidden>
@@ -1399,13 +2076,15 @@
     <h2 class="panel-title">Usage</h2>
     <p class="lead">How often each Pokémon is brought, and how its teams do, in Champions tournaments.</p>
     <details class="method"><summary>How this is computed</summary>
-      <p>Every figure is computed from the team sheets of Champions-format tournaments only (MunchStats), never blended with standard VGC events. Usage is a Pokémon's share of all roster slots; a team contributes six.</p>
+      <p>Every figure is computed from the team sheets of Champions-format tournaments only, never blended with standard VGC events. Usage is the share of teams that brought a Pokémon; hover a figure for its count and its share of roster slots (a team has six). The Ladder view is the exception: Showdown ladder statistics, shown beside tournament usage and never added to it.</p>
     </details>
     <div class="subtabs" role="tablist">
       <button class="subtab-btn" role="tab" data-subtab="usage-leaders" data-route="leaders" aria-selected="true">Usage</button>
       <button class="subtab-btn" role="tab" data-subtab="win-rate-leaders" data-route="win-rate" aria-selected="false">Win rate</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-success" data-route="success" aria-selected="false">Success</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-trends" data-route="trends" aria-selected="false">Trends</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-megas" data-route="megas" aria-selected="false">Megas</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-ladder" data-route="ladder" aria-selected="false">Ladder</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-leaders">
@@ -1492,6 +2171,45 @@
       </div>
       <div id="usage-trend-table"></div>
     </div>
+
+    {# The Mega usage panel (docs/upgrade-plan-2027q2.md, E3). #}
+    <div class="subtab-panel" data-subpanel="usage-megas" hidden>
+      <p class="lead">Which Mega Stones teams carry, and how many each team brings.</p>
+      <p class="sub" id="usage-mega-note"></p>
+      <div class="mega-panel">
+        <div id="usage-mega-count"></div>
+        <div id="usage-mega-table"></div>
+      </div>
+    </div>
+
+    {# Ladder vs tournament (docs/upgrade-plan-2027q2.md, S2): Smogon's
+       Showdown ladder statistics beside official tournament team share,
+       a separate population that is never added to it. static/ladder.js
+       fills it. #}
+    <div class="subtab-panel" data-subpanel="usage-ladder" hidden>
+      <p class="lead">What the Showdown ladder plays more, or less, than tournament players do.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Ladder usage is Smogon's monthly statistics for Pokémon Showdown's Champions ladder: each Pokémon's share of teams across every rated battle in the regulation's month. At <strong>1760+</strong> each battle is weighted by how likely its players are rated above 1760, so the strongest players count most; <strong>All ratings</strong> counts every battle the same. The month is the newest one the regulation was in force for at least half of.</p>
+        <p>Tournament usage is the share of the same regulation's official tournament teams that brought it. Both are shares of teams, so they sit on one scale, but they come from different players and are never added together. Credit: Smogon University and Pokémon Showdown.</p>
+      </details>
+      <div class="controls" id="ladder-controls"></div>
+      <p class="sub" id="ladder-note"></p>
+      <figure class="ladder-figure" id="ladder-scatter"></figure>
+      <div class="ladder-lists" id="ladder-lists"></div>
+      {# Which four they bring (docs/upgrade-plan-2027q2.md, S3; list #27):
+         sampled Showdown replays, the same ladder population. #}
+      <section class="ladder-bring" id="ladder-bring-section" hidden>
+        <div class="section-head"><h3>Which four do they bring?</h3><span class="source-chip">Showdown ladder replays</span></div>
+        <details class="method"><summary>How this is computed</summary>
+          <p>A daily sample of rated Showdown ladder replays, Bo1 and Bo3 together. Each replay names the six each side showed at team preview, every Pokémon that entered the battle, the two that led and who won; player names are never kept. <strong>On teams</strong> is the share of sides that showed it; <strong>Led</strong>, how often a side showing it led with it.</p>
+          <p>A Pokémon brought but never sent in looks the same as one left at home, so <strong>Brought</strong> and the win rates read only battles where both sides revealed all four they brought. <strong>Win, brought</strong> and <strong>Win, benched</strong> are the side's win rate with it in the four and without it. A Mega counts with its base Pokémon: team preview doesn't show the stone. Players choose which battles to upload, so this is a sample of the ladder, and never tournament data: official events aren't played on Showdown.</p>
+        </details>
+        <p class="sub" id="ladder-bring-note"></p>
+        <div id="ladder-bring-table"></div>
+        <h4 class="eyebrow">Most common leads</h4>
+        <ol class="lead-pair-list" id="ladder-lead-pairs"></ol>
+      </section>
+    </div>
   </section>
 
   <section class="tab-panel" data-panel="pokemon-profile" data-section="pokemon" hidden>
@@ -1516,6 +2234,8 @@
       <button class="subtab-btn" role="tab" data-subtab="profile-team-cores" data-route="cores">Teammates</button>
       <button class="subtab-btn" role="tab" data-subtab="profile-teams" data-route="teams">Teams</button>
       <button class="subtab-btn" role="tab" data-subtab="profile-pressure" data-route="pressure">Meta pressure</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-counters" data-route="counters">Counters</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-spreads" data-route="spreads">Spreads</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-items">
@@ -1569,23 +2289,63 @@
       <p class="pressure-summary" id="profile-pressure-summary"></p>
       <div id="profile-pressure-table"></div>
     </div>
+
+    {# The ladder lens on the profile (docs/upgrade-plan-2027q2.md, S2,
+       D3), filled by static/ladder.js. Both panels are Showdown ladder
+       data and say so in their chip. #}
+    <div class="subtab-panel" data-subpanel="profile-counters" hidden>
+      <p class="source-chip-row"><span class="source-chip">Showdown ladder, from battle logs</span></p>
+      <p class="lead">The opponents that most often KO this Pokémon or force it out.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Smogon reads every rated ladder battle in the regulation's month. Each time this Pokémon and an opponent were both in and one of them was KO'd or switched out, that counts as an encounter; the rate is how often it was this Pokémon. Opponents are ranked as Smogon ranks them, by the rate less four standard deviations, so a rate seen in few encounters ranks lower. Only opponents met at least 100 times are listed.</p>
+        <p>This is the only Pokémon-vs-Pokémon signal on the site, and it is ladder data from all ratings: Smogon lists a pair only above about 20 encounters, and weighted toward 1760+ players almost none clear that. Tournament results are team vs team.</p>
+      </details>
+      <p class="sub" id="profile-counters-note"></p>
+      <ol class="counter-list" id="profile-counters"></ol>
+      <button type="button" class="show-all-btn" id="profile-counters-more" hidden>Show all</button>
+      {# Brought and led, from sampled replays (S3): the same population,
+         a different source, so it carries its own chip. #}
+      <div class="profile-bring" id="profile-bring" hidden></div>
+    </div>
+
+    <div class="subtab-panel" data-subpanel="profile-spreads" hidden>
+      <p class="source-chip-row"><span class="source-chip">Showdown ladder; tournament sheets don't publish spreads</span></p>
+      <p class="lead">The Stat Point spreads 1760+ ladder players ran most.</p>
+      <p class="sub" id="profile-spreads-note"></p>
+      <div id="profile-spreads"></div>
+    </div>
   </section>
 
   <section class="tab-panel" data-panel="archetypes" data-section="teams" hidden>
     <h2 class="panel-title">Detected Archetypes</h2>
+    <div data-official-only="Archetypes are detected from official events' teams only." hidden></div>
     <p class="lead">Experimental team identities, each anchored by a three-Pokémon core that recurs across events.</p>
     <details class="method"><summary>How this is computed</summary>
       <p>Qualifying cores appear on at least five teams and have above-chance three-way and average pair lift. Cores sharing two members consolidate under their strongest neighbour; each team gets one primary assignment and may keep one near-tied secondary one.</p>
       <p>The names are neutral on purpose: composition alone does not prove an editorial label such as “Rain” or “Balance.”</p>
     </details>
     <div class="grid-6xn" id="detected-archetype-grid"></div>
+    {# Archetype matchups (docs/upgrade-plan-2027q2.md, list #30): a
+       heatmap from 768px, one archetype's list below. Team vs team. #}
+    <section class="archetype-matchups" aria-labelledby="archetype-matchups-title">
+      <div class="section-head">
+        <h3 id="archetype-matchups-title">Matchups</h3>
+        <span class="source-chip">Team vs team</span>
+      </div>
+      <p class="sub" id="archetype-matchups-note"></p>
+      <div class="table-scroll archetype-heatmap-wrap"><table class="archetype-heatmap" id="archetype-heatmap"></table></div>
+      <div class="archetype-matchup-phone">
+        <label>Archetype <select id="archetype-matchup-select"></select></label>
+        <ol class="archetype-matchup-list" id="archetype-matchup-list"></ol>
+      </div>
+    </section>
   </section>
 
   <section class="tab-panel" data-panel="speed-tiers" data-section="meta" hidden>
     <h2 class="panel-title">Speed tiers</h2>
     <p class="lead">Who moves first under the scenario you pick. Enter an opposing Speed to see who outruns it.</p>
     <details class="method"><summary>How this is computed</summary>
-      <p>Everything but "Base stat" assumes <strong>max Speed investment</strong> at level 50 (252 EVs, a beneficial nature, a 31 IV). That's a convention, not data: no source publishes the EV spreads teams actually run.</p>
+      <p>Everything but "Base stat" assumes <strong>max Speed investment</strong> at level 50: 32 <abbr class="term" tabindex="0" data-tip="Champions' replacement for EVs: 66 points per Pokémon, at most 32 in one stat, with IVs fixed at 31.">Stat Points</abbr> (of 66 in total), a beneficial <abbr class="term" tabindex="0" data-tip="What Champions and the official team sheets call a nature.">Stat Alignment</abbr>, and IVs, which are fixed at 31. That's a convention, not data: tournament team sheets don't publish the Stat Points teams actually run.</p>
     </details>
     <div class="controls">
       <label>Scenario
@@ -1611,6 +2371,19 @@
         <div class="type-filter-row" id="speed-tiers-type-filter"></div>
       </div>
     </div>
+    {# The speed line (docs/upgrade-plan-2027q2.md, list #24): your Builder
+       team over the regulation's most-used Pokémon on one number line,
+       with Tailwind and Trick Room toggles; a list in move order on
+       phones. static/app.js drawSpeedLine. #}
+    <section class="speed-line-section" aria-labelledby="speed-line-title">
+      <div class="section-head">
+        <h3 id="speed-line-title">Speed line</h3>
+        <div class="speed-line-controls" id="speed-line-controls"></div>
+      </div>
+      <p class="sub" id="speed-line-note"></p>
+      <div class="speed-line" id="speed-line"></div>
+      <ol class="speed-line-list" id="speed-line-list"></ol>
+    </section>
     <p class="sub" id="speed-tiers-benchmark-note" hidden></p>
     <div id="speed-tiers-table"></div>
   </section>
@@ -1618,8 +2391,11 @@
   <section class="tab-panel" data-panel="matchup" data-section="pokemon" hidden>
     <h2 class="panel-title">Matchup</h2>
     <p class="lead">A damage estimate, type effectiveness and real head-to-head records for two Pokémon.</p>
+    {# Official-only views say so on an Online or All scope
+       (docs/upgrade-plan-2027q2.md, S1); static/app.js fills these. #}
+    <div data-official-only="Head-to-head records cover official events only." hidden></div>
     <details class="method"><summary>How this is computed</summary>
-      <p>The calculator assumes level 50 with full investment in the attacking and defending stat (no source publishes EV spreads). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
+      <p>The calculator assumes level 50 with full investment, 32 Stat Points, in the attacking and defending stat (tournament team sheets publish no Stat Points). It models STAB, type effectiveness, stat stages, weather and the listed items and abilities. It does not model burns, critical hits, multi-hit moves or other items and abilities.</p>
       <p>Head-to-head is measured <strong>team vs team</strong>: no source publishes which Pokémon were brought to a given match.</p>
     </details>
     {# "vs the meta" (docs/upgrade-plan-2027q1.md, P3): one attacker and move
@@ -1663,7 +2439,7 @@
     <p class="sub" id="matchup-preset-note"></p>
     <div class="damage-result" id="matchup-damage-result"></div>
     <div id="matchup-meta" hidden>
-      <p class="sub">Estimated damage from the attacker's move against the 12 most-used Pokémon in the regulation, each with its own #1 set's Intimidate where it has one. An estimate: level 50 and full investment in the attacking and defending stats, since team sheets publish no EVs.</p>
+      <p class="sub">Estimated damage from the attacker's move against the 12 most-used Pokémon in the regulation, each with its own #1 set's Intimidate where it has one. An estimate: level 50 and full investment (32 Stat Points) in the attacking and defending stats, since team sheets publish no Stat Points.</p>
       <div id="matchup-meta-table"></div>
     </div>
 
@@ -1730,11 +2506,19 @@
       </div>
       <div class="team-roster">
         <h3>Your team (<span id="team-builder-count">0</span>/6)</h3>
+        {# The team as the strip every team on the site uses (V3), held items
+           and Mega badges included; it follows the slots' edits. #}
+        <div class="builder-strip" id="team-builder-strip"></div>
+        {# Item and species clause warnings (docs/upgrade-plan-2027q2.md,
+           list #22), from static/teams.js. #}
+        <ul class="builder-warnings" id="team-builder-warnings" role="status" hidden></ul>
         <div class="team-slots" id="team-builder-slots"></div>
         <div class="pokepaste-actions">
           <button class="btn btn-sm" id="team-builder-clear" type="button">Clear team</button>
           <button class="btn btn-sm" id="team-builder-export" type="button">Export as pokepaste text</button>
           <button class="btn btn-sm" id="team-builder-share" type="button">Copy share link</button>
+          {# An Open Team Sheet image (docs/upgrade-plan-2027q2.md, list #21). #}
+          <button class="btn btn-sm" id="team-builder-sheet" type="button">Download team sheet image</button>
         </div>
         <textarea id="team-builder-export-output" class="pokepaste-box" style="display:none" readonly></textarea>
         {# Saved teams and share links (docs/upgrade-plan-2027q1.md, P4): up to
@@ -1786,7 +2570,7 @@
               <h4>Common-threat screen</h4>
               <div class="table-scroll">
                 <table id="team-analysis-threat-table">
-                  <thead><tr><th>Threat</th><th>Super-effective answers</th><th>Team members exposed</th></tr></thead>
+                  <thead><tr><th>Threat</th><th>Super-effective answers</th><th>Team members exposed</th><th>Ladder checks on your team</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -1800,6 +2584,7 @@
 
   <section class="tab-panel" data-panel="top-teams" data-section="teams" hidden>
     <h2 class="panel-title">Top Teams</h2>
+    <div data-official-only="Top Teams ranks official events' top-cut teams only." hidden></div>
     <div class="subtabs" role="tablist">
       <button class="subtab-btn" role="tab" data-subtab="tt-leaderboard" data-route="top" aria-selected="true">Top cut</button>
       <button class="subtab-btn" role="tab" data-subtab="tt-converged" data-route="converged" aria-selected="false">Converged lists</button>
@@ -1840,23 +2625,54 @@
     <h2 class="panel-title">Events</h2>
     <p class="lead" id="events-note">Every Champions event on record.</p>
     <div id="events-table"></div>
+    {# Upcoming online tournaments (docs/upgrade-plan-2027q2.md, list #31),
+       in the visitor's time zone; static/events.js shows them when there
+       are any. #}
+    <div class="section-head" id="upcoming-events-head" hidden><h3>Upcoming online tournaments</h3><span class="phase-chip is-online">Online</span></div>
+    <p class="sub" id="upcoming-events-note" hidden></p>
+    <div id="upcoming-events-list" class="upcoming" hidden></div>
+    {# Limitless online tournaments (docs/upgrade-plan-2027q2.md, S1): their
+       own list, linking out; static/events.js shows it when there are any. #}
+    <div class="section-head" id="online-events-head" hidden><h3>Online tournaments</h3><span class="phase-chip is-online">Online</span></div>
+    <p class="sub" id="online-events-note" hidden></p>
+    <div id="online-events-table"></div>
   </section>
 
   {# One event (docs/upgrade-plan-2027q1.md, C1): #/event/<event_id>. #}
   <section class="tab-panel" data-panel="event" data-section="teams" hidden>
     <div id="event-header"></div>
-    <h3>Top 8</h3>
+    {# Every event-scoped section says its phase (docs/upgrade-plan-2027q2.md, V5). #}
+    <div class="section-head"><h3>Top 8</h3></div>
     <div class="team-card-grid" id="event-top8"></div>
-    <h3>Over- and under-performers</h3>
+    {# The top-cut bracket (docs/upgrade-plan-2027q2.md, E2): round tabs
+       below 1024px, columns above; a player opens their path. static/
+       events.js fills it when RK9 published the event's pairings. #}
+    <div class="section-head" id="event-bracket-head" hidden><h3>Top cut</h3><span class="phase-chip" id="event-bracket-chip"></span></div>
+    <p class="sub" id="event-bracket-note" hidden></p>
+    <div class="bracket" id="event-bracket" hidden></div>
+    <div class="path-panel" id="event-path" hidden></div>
+    {# Day 2 conversion (E1): field share against Day 2 share. #}
+    <div class="section-head" id="event-conversion-head" hidden><h3>Day 2 conversion</h3><span class="phase-chip">Day 2</span></div>
+    <p class="sub" id="event-conversion-note" hidden></p>
+    <div id="event-conversion-table"></div>
+    <div class="section-head"><h3>Over- and under-performers</h3><span class="phase-chip">All players</span></div>
     <p class="sub" id="event-performers-note"></p>
     <div class="performer-columns" id="event-performers">
       <div><h4>Used more than usual</h4><div id="event-over-table"></div></div>
       <div><h4>Used less than usual</h4><div id="event-under-table"></div></div>
     </div>
+    {# The Mega usage panel (E3): which Mega Stones this event's teams carried. #}
+    <div class="section-head"><h3>Mega Stones</h3><span class="phase-chip">All players</span></div>
+    <p class="sub" id="event-mega-note"></p>
+    <div class="mega-panel" id="event-mega">
+      <div id="event-mega-count"></div>
+      <div id="event-mega-table"></div>
+    </div>
   </section>
 
   <section class="tab-panel" data-panel="players" data-section="teams" hidden>
     <h2 class="panel-title">Players &amp; Regions</h2>
+    <div data-official-only="Players and regions cover official events only: online handles are not legal names." hidden></div>
     <p class="lead">Who plays what, across each player's or country's whole Champions history.</p>
     <details class="method"><summary>How this is computed</summary>
       <p>Country codes are the two-letter codes the source publishes, and a team only counts toward a country if its player reported one.</p>
@@ -1925,10 +2741,12 @@
 
   <section class="tab-panel" data-panel="compare" data-section="pokemon" hidden>
     <h2 class="panel-title">Compare Pokémon</h2>
-    <p class="lead">Two Pokémon side by side. The address bar links to exactly this comparison.</p>
+    <p class="lead">Two to four Pokémon side by side. Pin them from any profile; the address bar links to exactly this comparison.</p>
     <div class="filters">
-      <label>Pokémon A <select id="compare-a"></select></label>
-      <label>Pokémon B <select id="compare-b"></select></label>
+      <label>Pokémon A <select id="compare-a" data-compare-select></select></label>
+      <label>Pokémon B <select id="compare-b" data-compare-select></select></label>
+      <span class="compare-extra" id="compare-extra"></span>
+      <button class="btn btn-sm" id="compare-add" type="button">Add Pokémon</button>
       <button class="button" id="compare-copy" type="button">Copy view link</button>
     </div>
     <div id="compare-results"></div>
@@ -2013,7 +2831,7 @@
         <li><strong>Every percentage has a denominator.</strong> Hover a figure (or see its row) for "N of M"; sample sizes appear as <em>n</em>.</li>
         <li><strong>Small samples say so.</strong> Win rates rank by their Wilson bound, deltas are withheld below 100 teams, and thin sets are marked.</li>
         <li><strong>Matchups are team vs team.</strong> No source says which four Pokémon were brought to a game.</li>
-        <li><strong>There are no EVs.</strong> Team sheets publish ability, item, nature and moves only; anything that needs stats assumes full investment.</li>
+        <li><strong>There are no Stat Point spreads in tournament data.</strong> Team sheets publish ability, item, Stat Alignment (nature) and moves only; anything that needs stats assumes full investment: 32 Stat Points and IVs fixed at 31.</li>
       </ul>
       <h3>Glossary</h3>
       <dl class="glossary" id="ds-glossary"></dl>
@@ -2112,6 +2930,9 @@
           No source publishes a per-battle log naming which four of six were
           actually brought, so a "matchup" figure means teams containing A
           beat teams containing B — it is attributed to the whole roster.
+          The one Pokémon-vs-Pokémon figure on the site is a profile's
+          Checks and counters, which comes from Showdown ladder battle logs,
+          not tournaments.
         </li>
         <li>
           <strong>Matchup appearance counts overstate sample roughly 6×</strong>
@@ -2135,11 +2956,20 @@
           two would be comparing different games.
         </li>
         <li>
-          <strong>No EV or IV spreads exist anywhere in this dataset.</strong>
-          Official team sheets publish ability, held item, nature and moves
-          and nothing more. The damage calculator therefore assumes a
-          maximally-invested level-50 baseline on both sides rather than any
-          real spread.
+          <strong>Tournament data has no Stat Point spreads.</strong>
+          Official team sheets publish ability, held item, Stat Alignment
+          (nature) and moves and nothing more. The damage calculator
+          therefore assumes a fully invested level-50 baseline on both
+          sides (32 Stat Points, IVs fixed at 31) rather than any real
+          spread. A profile's Spreads panel shows what Showdown ladder
+          players ran, a different population; no tournament view uses it.
+        </li>
+        <li>
+          <strong>The Showdown ladder is its own population.</strong>
+          Smogon's monthly statistics count every rated ladder battle, weighted
+          toward 1760+ players. They sit beside tournament figures in the
+          Usage tab's Ladder view and the profile's Counters and Spreads, are
+          labelled there, and are never added to a tournament figure.
         </li>
         <li>
           <strong>Legality has a single snapshot date</strong>, so nothing on
@@ -2166,6 +2996,10 @@
   {% if payload.provenance.validation_available %}<span>{% if payload.provenance.release_blocking_findings %}{{ payload.provenance.release_blocking_findings | length }} gate failure(s){% else %}all release gates passing{% endif %}</span>{% endif %}
   <span>built {{ payload.generated_at_utc[:10] }}</span>
   <a href="#/data">Data &amp; sources</a>
+  {# The site borrows the official broadcast grammar, never its marks
+     (docs/upgrade-plan-2027q2.md): it must never be mistaken for an
+     official product. #}
+  <span class="footer-unofficial">Unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, The Pokémon Company or Play! Pokémon.</span>
 </footer>
 
 <script>window.DASHBOARD_DATA = {{ data_json | safe }};</script>
@@ -2175,6 +3009,8 @@
 <script src="expansions.js"></script>
 <script src="events.js"></script>
 <script src="players.js"></script>
-<script src="graph.js"></script>
+<script src="ladder.js"></script>
+<script src="search.js"></script>
+{# graph.js loads when the Meta Graph first opens (app.js's LAZY_TAB_SCRIPTS). #}
 </body>
 </html>

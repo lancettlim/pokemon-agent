@@ -23,18 +23,18 @@ with regulation_order as (
 ),
 team_counts as (
   select regulation_code, count(distinct team_id) as team_count
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
   group by regulation_code
 ),
 usage as (
-  select regulation_scope as regulation_code, pokemon_key, usage_count, usage_share, usage_rank
+  select regulation_scope as regulation_code, pokemon_key, usage_count, usage_share, team_share, usage_rank
   from {{ ref('pokemon_usage_summary') }}
-  where event_tier is null and regulation_scope != 'all'
+  where event_tier is null and regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 win as (
   select regulation_scope as regulation_code, pokemon_key, win_rate, wilson_lower_bound, record_count
   from {{ ref('pokemon_win_rate_summary') }}
-  where regulation_scope != 'all'
+  where regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 latest_legality as (
   select regulation_code, pokemon_key
@@ -64,6 +64,13 @@ select
   previous_usage.usage_rank as previous_usage_rank,
   round(coalesce(current_usage.usage_share, 0) - coalesce(previous_usage.usage_share, 0), 4)
     as usage_share_delta,
+  -- Team share (docs/upgrade-plan-2027q2.md, V1), the headline the "What
+  -- changed" panel reports; the slot-share columns above stay for
+  -- tooltips and local queries.
+  coalesce(current_usage.team_share, 0) as team_share,
+  coalesce(previous_usage.team_share, 0) as previous_team_share,
+  round(coalesce(current_usage.team_share, 0) - coalesce(previous_usage.team_share, 0), 4)
+    as team_share_delta,
   previous_usage.usage_rank - current_usage.usage_rank as rank_change,
   current_win.win_rate,
   previous_win.win_rate as previous_win_rate,

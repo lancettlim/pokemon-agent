@@ -14,13 +14,12 @@
  * ability, and up to 4 moves are all user-selectable (defaulting to that
  * Pokémon's top recorded choices), drawn from real recorded usage data
  * (pokemon_item_usage/pokemon_ability_usage/pokemon_move_usage) — never
- * invented options. There is deliberately no stat/EV selector: no source
- * publishes real EV/IV data at all -- official tournament team sheets
- * carry ability, item, nature and moves and nothing more -- so building
- * one would mean presenting invented numbers as if they were sourced (see
- * docs/backlog.md item #25 and docs/data-sources.md's Victory Road entry).
- * Nature IS published (100% of Champions roster slots) but is not part of
- * this builder's model. */
+ * invented options. There is deliberately no Stat Point selector:
+ * official tournament team sheets carry ability, item, Stat Alignment
+ * (nature) and moves and nothing more, so building one would mean
+ * presenting invented numbers as if they were sourced (see docs/backlog.md
+ * item #25). Stat Alignment IS published (100% of Champions roster
+ * slots) and each slot carries it. */
 (function () {
   "use strict";
 
@@ -79,6 +78,11 @@
     });
     Object.keys(App.pokemonNames).forEach(function (key) {
       lookup[normalizeSpeciesName(key)] = key;
+    });
+    // A page showing names in another language (Q4) still reads English
+    // pastes, Showdown's own spelling.
+    Object.keys(App.englishNames || {}).forEach(function (key) {
+      lookup[normalizeSpeciesName(App.englishNames[key])] = key;
     });
     return lookup;
   }
@@ -156,6 +160,120 @@
       nature: slot.nature,
       moves: (slot.moves || []).filter(Boolean),
     };
+  }
+
+  // ---------- team sheet image (docs/upgrade-plan-2027q2.md, list #21) ----------
+  // The team as an Open Team Sheet image: each Pokémon with its ability,
+  // held item and moves, the details an open sheet shows (no Stat Points,
+  // no Stat Alignment), drawn on a canvas and saved as a PNG. Names follow
+  // the page's name language; the sprites are the site's own, same-origin,
+  // so the canvas stays exportable.
+  var SHEET_W = 1200;
+  var SHEET_H = 760;
+
+  function loadImage(src) {
+    return new Promise(function (resolve) {
+      if (!src) return resolve(null);
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function fitText(ctx, text, maxWidth) {
+    var out = String(text || "");
+    if (ctx.measureText(out).width <= maxWidth) return out;
+    while (out.length > 1 && ctx.measureText(out + "…").width > maxWidth) out = out.slice(0, -1);
+    return out + "…";
+  }
+
+  function drawTeamSheet(teamSlots) {
+    var canvas = document.createElement("canvas");
+    canvas.width = SHEET_W;
+    canvas.height = SHEET_H;
+    var ctx = canvas.getContext("2d");
+    var css = getComputedStyle(document.documentElement);
+    var red = css.getPropertyValue("--board-field").trim() || "#ea0028";
+    var navy = "#16264d";
+    var display = '"Board Display", "Arial Narrow", sans-serif';
+    var body = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+    var fontsReady = document.fonts && document.fonts.load ? document.fonts.load("700 40px \"Board Display\"") : Promise.resolve();
+    return Promise.all([fontsReady].concat(teamSlots.map(function (slot) {
+      return loadImage((App.DATA.hero_art || {})[slot.key] || App.sprites[slot.key]);
+    }))).then(function (loaded) {
+      var images = loaded.slice(1);
+      ctx.fillStyle = "#f4f6fb";
+      ctx.fillRect(0, 0, SHEET_W, SHEET_H);
+      ctx.fillStyle = red;
+      ctx.fillRect(0, 0, SHEET_W, 96);
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 44px " + display;
+      ctx.textBaseline = "middle";
+      ctx.fillText("OPEN TEAM SHEET", 40, 50);
+      ctx.font = "600 22px " + body;
+      ctx.textAlign = "right";
+      ctx.fillText(App.shortRegulation(App.regulationCode) + " · Pokémon Champions VGC", SHEET_W - 40, 50);
+      ctx.textAlign = "left";
+      var cardW = 360;
+      var cardH = 280;
+      teamSlots.forEach(function (slot, i) {
+        var x = 40 + (i % 3) * (cardW + 20);
+        var y = 120 + Math.floor(i / 3) * (cardH + 20);
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = navy;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y, cardW, cardH, 12);
+        else ctx.rect(x, y, cardW, cardH);
+        ctx.fill();
+        ctx.stroke();
+        if (images[i]) ctx.drawImage(images[i], x + 12, y + 12, 96, 96);
+        ctx.fillStyle = navy;
+        ctx.textBaseline = "alphabetic";
+        // The name shrinks to fit before it is cut ("Mega Charizard Y").
+        var name = App.pokemonNames[slot.key] || slot.key;
+        var size = 26;
+        ctx.font = "800 " + size + "px " + body;
+        while (size > 18 && ctx.measureText(name).width > cardW - 132) {
+          size -= 1;
+          ctx.font = "800 " + size + "px " + body;
+        }
+        ctx.fillText(fitText(ctx, name, cardW - 132), x + 120, y + 52);
+        ctx.font = "600 18px " + body;
+        ctx.fillStyle = "#5b6b8c";
+        ctx.fillText(fitText(ctx, "Ability: " + (slot.ability || "—"), cardW - 132), x + 120, y + 82);
+        ctx.fillText(fitText(ctx, "Item: " + (slot.item || "—"), cardW - 132), x + 120, y + 108);
+        ctx.fillStyle = navy;
+        ctx.font = "600 20px " + body;
+        var moves = (slot.moves || []).filter(Boolean);
+        for (var m = 0; m < 4; m++) {
+          ctx.fillText(fitText(ctx, "• " + (moves[m] || "—"), cardW - 40), x + 20, y + 150 + m * 34);
+        }
+      });
+      ctx.fillStyle = "#5b6b8c";
+      ctx.font = "500 16px " + body;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("Made with Champions Data · unofficial fan project, not affiliated with Nintendo, Game Freak, The Pokémon Company or Play! Pokémon", 40, SHEET_H - 22);
+      return canvas;
+    });
+  }
+
+  function downloadTeamSheet(teamSlots, button) {
+    drawTeamSheet(teamSlots).then(function (canvas) {
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "team-sheet.png";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        if (button) button.textContent = "Team sheet saved";
+      }, "image/png");
+    });
   }
 
   // A team sheet row (tournament_team_sheets / team_list_sheets) -> a slot.
@@ -248,9 +366,13 @@
     }
 
     var team = [];
+    // Saved Pokémon this regulation's pool lacks (a team built under the
+    // last set): dropped, and said so once the notice exists (#22).
+    var droppedAtLoad = 0;
     try {
       var saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
       team = saved.map(normalizeEntry).filter(Boolean).slice(0, MAX_TEAM_SIZE);
+      droppedAtLoad = Math.max(0, Math.min(saved.length, MAX_TEAM_SIZE) - team.length);
     } catch (e) {
       team = [];
     }
@@ -267,6 +389,12 @@
     var exportBtn = document.getElementById("team-builder-export");
     var exportOutput = document.getElementById("team-builder-export-output");
     var shareBtnEl = document.getElementById("team-builder-share");
+    var sheetBtnEl = document.getElementById("team-builder-sheet");
+    if (sheetBtnEl) {
+      sheetBtnEl.addEventListener("click", function () {
+        if (team.length) downloadTeamSheet(team, sheetBtnEl);
+      });
+    }
     var analysisSummaryEl = document.getElementById("team-analysis-summary");
     var analysisDefenseTable = document.getElementById("team-analysis-defense-table");
     var analysisThreatTable = document.getElementById("team-analysis-threat-table");
@@ -299,6 +427,19 @@
       }).filter(function (member) {
         return member.profile;
       });
+    }
+
+    // Ladder checks (docs/upgrade-plan-2027q2.md, list #23): the team
+    // members among a threat's twelve strongest checks and counters on the
+    // Showdown ladder, from battle logs (ladder.js's regulation choice).
+    function ladderChecks(threatKey) {
+      var rows = App.marts.ladder_checks_counters || [];
+      var reg = App.ladderRegulation ? App.ladderRegulation(rows) : { code: App.regulationCode };
+      var onTeam = {};
+      team.forEach(function (slot) { onTeam[slot.key] = true; });
+      return rows.filter(function (r) {
+        return r.regulation_code === reg.code && r.pokemon_key === threatKey && onTeam[r.counter_pokemon_key];
+      }).sort(function (a, b) { return a.counter_rank - b.counter_rank; });
     }
 
     function typeLabel(type) {
@@ -350,7 +491,11 @@
         });
       });
 
-      var threatRows = sortByUsageRank(rows).slice(0, 12).map(function (threat) {
+      // The regulation's most-used Pokémon, by team share (profile rows
+      // carry no usage_rank, so sorting on it left the order arbitrary).
+      var threatRows = rows.slice().sort(function (a, b) {
+        return (b.team_share || 0) - (a.team_share || 0);
+      }).slice(0, 12).map(function (threat) {
         var threatTypes = [threat.type_1, threat.type_2].filter(Boolean);
         var threatMoveTypes = (movesByKey[threat.pokemon_key] || []).filter(function (move) {
           return move.category !== "status" && Number(move.power || 0) > 0 && move.move_type;
@@ -365,7 +510,7 @@
             return typeMultiplier(move.move_type, [member.profile.type_1, member.profile.type_2]) > 1;
           });
         }).length;
-        return { threat: threat, answers: answers, exposed: exposed };
+        return { threat: threat, answers: answers, exposed: exposed, checks: ladderChecks(threat.pokemon_key) };
       });
 
       analysisSummaryEl.innerHTML =
@@ -390,13 +535,22 @@
         var threatBody = analysisThreatTable.querySelector("tbody");
         threatBody.innerHTML = threatRows.map(function (row) {
           var cls = row.answers === 0 || row.exposed >= Math.max(2, Math.ceil(members.length / 2)) ? "status-warn" : "status-good";
+          var checks = row.checks.map(function (c) {
+            return App.escapeHtml(App.pokemonNames[c.counter_pokemon_key] || c.counter_pokemon_key);
+          }).join(", ");
+          var checksTip = row.checks.map(function (c) {
+            return (App.pokemonNames[c.counter_pokemon_key] || c.counter_pokemon_key) + ": " +
+              App.formatPercent(c.ko_or_switch_rate) + " KO'd or switched out, n=" + c.encounters.toLocaleString();
+          }).join("; ");
           return '<tr><td>' + App.escapeHtml(row.threat.pokemon_name) + "</td><td class=\"" + cls + "\">" +
-            row.answers + " / " + members.length + "</td><td>" + row.exposed + " / " + members.length + "</td></tr>";
+            row.answers + " / " + members.length + "</td><td>" + row.exposed + " / " + members.length + "</td>" +
+            '<td class="' + (row.checks.length ? "status-good" : "") + '"' +
+            (checksTip ? ' data-tip="' + App.escapeHtml(checksTip) + '"' : "") + ">" + (checks || "—") + "</td></tr>";
         }).join("");
       }
       if (analysisNoteEl) {
         analysisNoteEl.textContent =
-          "Coverage checks selected recorded damaging moves against single defending types. Threat exposure uses the threat Pokémon's recorded damaging move types; it is a screening heuristic, not a full moveset or battle simulation.";
+          "Coverage checks selected recorded damaging moves against single defending types. Threat exposure uses the threat Pokémon's recorded damaging move types; it is a screening heuristic, not a full moveset or battle simulation. Ladder checks are the team members among each threat's strongest checks and counters on the Showdown ladder, from battle logs: ladder data, not tournament results.";
       }
     }
 
@@ -413,7 +567,7 @@
       var normalized = normalizeEntry(slot);
       if (!normalized) {
         showNotice((App.pokemonNames[slot.key] || slot.key) + " isn't legal in " +
-          App.shortRegulation(App.regulationScope) + ".", false);
+          App.shortRegulation(App.regulationCode) + ".", false);
         return;
       }
       var existing = team.map(function (s) { return s.key; }).indexOf(normalized.key);
@@ -465,7 +619,7 @@
       renderAll();
       showNotice(
         message + (skipped ? " " + skipped + " Pokémon not legal in " +
-          App.shortRegulation(App.regulationScope) + " were skipped." : ""),
+          App.shortRegulation(App.regulationCode) + " were skipped." : ""),
         previousTeam.length > 0
       );
     }
@@ -512,7 +666,7 @@
         li.innerHTML =
           App.spriteImg(r.pokemon_key, App.ICON_SIZES.md) +
           '<div class="roster-info"><div class="roster-name">' + App.escapeHtml(r.pokemon_name) + "</div>" +
-          '<div class="roster-sub">' + App.formatPercent(r.usage_share) + " usage · " +
+          '<div class="roster-sub">On ' + App.formatPercent(r.team_share) + " of teams · " +
           App.formatPercent(r.win_rate) + " win rate · " + (r.speed != null ? r.speed : "—") + " speed</div></div>" +
           '<button class="btn btn-sm" type="button"' + (full ? " disabled" : "") + ">Add</button>";
         li.querySelector("button").addEventListener("click", function () {
@@ -600,6 +754,7 @@
         function (value) {
           slot.item = value;
           persist();
+          renderStrip();
         }
       );
       itemSelect.setAttribute("aria-label", "Held item");
@@ -698,7 +853,57 @@
       return el;
     }
 
+    // Team legality (docs/upgrade-plan-2027q2.md, list #22): VGC's item
+    // clause (no two Pokémon hold the same item) and species clause (no
+    // two of one species, a Pokémon and its Mega or regional form
+    // included). The legal pool is enforced as Pokémon are added.
+    var warningsEl = document.getElementById("team-builder-warnings");
+    function speciesOf(key) {
+      return (App.DATA.form_species || {})[key] || key;
+    }
+    function nameList(keys) {
+      var names = keys.map(function (k) { return App.pokemonNames[k] || k; });
+      return names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0];
+    }
+    function teamWarnings() {
+      var byItem = {};
+      var bySpecies = {};
+      team.forEach(function (slot) {
+        if (slot.item) (byItem[slot.item] = byItem[slot.item] || []).push(slot.key);
+        var species = speciesOf(slot.key);
+        (bySpecies[species] = bySpecies[species] || []).push(slot.key);
+      });
+      var warnings = [];
+      Object.keys(byItem).forEach(function (item) {
+        if (byItem[item].length > 1) {
+          warnings.push("Item clause: " + nameList(byItem[item]) +
+            (byItem[item].length === 2 ? " both hold " : " all hold ") + item + ". A team can carry each item once.");
+        }
+      });
+      Object.keys(bySpecies).forEach(function (species) {
+        if (bySpecies[species].length > 1) {
+          warnings.push("Species clause: " + nameList(bySpecies[species]) +
+            " are the same species. A team can have each species once.");
+        }
+      });
+      return warnings;
+    }
+    function renderWarnings() {
+      if (!warningsEl) return;
+      var warnings = teamWarnings();
+      warningsEl.hidden = !warnings.length;
+      warningsEl.innerHTML = warnings.map(function (w) {
+        return "<li>" + App.escapeHtml(w) + "</li>";
+      }).join("");
+    }
+
+    var stripEl = document.getElementById("team-builder-strip");
+    function renderStrip() {
+      if (stripEl) stripEl.innerHTML = team.length ? App.teamStripHtml(team.map(slotToSet), { label: "Your team" }) : "";
+    }
+
     function renderSlots() {
+      renderStrip();
       if (!slotsEl) return;
       slotsEl.innerHTML = "";
       for (var i = 0; i < MAX_TEAM_SIZE; i++) {
@@ -708,6 +913,10 @@
       if (clearBtn) clearBtn.disabled = team.length === 0;
       if (exportBtn) exportBtn.disabled = team.length === 0;
       if (shareBtnEl) shareBtnEl.disabled = team.length === 0;
+      if (sheetBtnEl) {
+        sheetBtnEl.disabled = team.length === 0;
+        sheetBtnEl.textContent = "Download team sheet image";
+      }
     }
 
     function renderSpeedOrder() {
@@ -763,7 +972,7 @@
       var avgSpeed = avg("speed");
       summaryEl.innerHTML =
         '<div class="stat"><strong>' + (avgSpeed !== null ? Math.round(avgSpeed) : "—") + "</strong>Avg. speed</div>" +
-        '<div class="stat"><strong>' + App.formatPercent(avg("usage_share")) + "</strong>Avg. usage share</div>" +
+        '<div class="stat"><strong>' + App.formatPercent(avg("team_share")) + "</strong>Avg. team share</div>" +
         '<div class="stat"><strong>' + App.formatPercent(avg("win_rate")) + "</strong>Avg. win rate</div>";
     }
 
@@ -833,6 +1042,7 @@
       if (typeof renderSaved === "function") renderSaved();
       renderAvailable();
       renderSlots();
+      renderWarnings();
       renderSpeedOrder();
       renderSummary();
       renderSuggestions();
@@ -859,6 +1069,11 @@
     }
 
     renderAll();
+    if (droppedAtLoad) {
+      var one = droppedAtLoad === 1;
+      showNotice(droppedAtLoad + " Pokémon from your saved team " + (one ? "isn't" : "aren't") + " legal in " +
+        App.shortRegulation(App.regulationCode) + " and " + (one ? "was" : "were") + " removed.", false);
+    }
 
     // ---------- share links and saved teams (P4) ----------
     // A share link is #/builder/<key>.<set>,<key>.<set>,... with each set an
@@ -1118,7 +1333,7 @@
       if (note) {
         note.textContent = list.length + " top-16 teams from " +
           Object.keys(list.reduce(function (acc, t) { acc[t.event_id] = 1; return acc; }, {})).length +
-          " events in " + App.shortRegulation(App.regulationScope) + ".";
+          " events in " + App.officialScopeName + ".";
       }
     }
 
@@ -1171,6 +1386,8 @@
           },
           {
             headline: n + (n === 1 ? " player" : " players"),
+            // Limitless lists cover the day-2 cut only (V5's phase).
+            phase: "Day 2",
             meta: meta.join(" · "),
             useHref: App.routeHash("team-builder", ["list", r.team_list_id]),
           }
@@ -1266,10 +1483,10 @@
       ensureTeamBuilder();
       setupPokepasteImport();
     },
-    { onRoute: loadFromRoute }
+    { onRoute: loadFromRoute, extraMarts: ["ladder_checks_counters"] }
   );
   App.registerTab("top-teams", setupTopTeams, {
-    extraMarts: ["tournament_team_sheets", "team_list_sheets"],
+    extraMarts: ["tournament_team_sheets", "team_list_sheets", "team_list_convergence"],
     onRoute: function (route) {
       topTeamsRoute(route);
     },
