@@ -34,7 +34,7 @@ select
   ) as nature_share,
   row_number() over (
     partition by regulation_scope, pokemon_key
-    order by usage_count desc
+    order by usage_count desc, nature
   ) as usage_rank
 from counted
 order by regulation_scope, pokemon_key, usage_count desc

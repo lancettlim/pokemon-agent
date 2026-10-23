@@ -113,7 +113,15 @@ _CRITICAL_PAYLOAD_KEYS = (
 #                             extraMarts in static/app.js)
 # The page's scripts, in load order (templates/index.html.jinja's <script>
 # tags). Each is copied verbatim next to index.html.
-SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js", "events.js", "players.js")
+SCRIPT_NAMES = (
+    "app.js",
+    "matchup.js",
+    "teams.js",
+    "expansions.js",
+    "events.js",
+    "players.js",
+    "ladder.js",
+)
 
 SHARD_DIR = "data"
 ON_DEMAND_MARTS = (
@@ -146,6 +154,11 @@ ON_DEMAND_MARTS = (
     "pokemon_event_phase_usage",
     "tournament_top_cut_matches",
     "tournament_top_cut_paths",
+    # The Showdown ladder lens (S2): the Usage tab's Ladder view and the
+    # profile's Checks and counters and Stat Point spreads panels.
+    "ladder_pokemon_usage",
+    "ladder_checks_counters",
+    "ladder_stat_point_spreads",
 )
 
 # Marts the build summarises into the inline KPIs and no view reads raw:

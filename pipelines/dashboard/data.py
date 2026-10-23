@@ -45,6 +45,9 @@ _STAGING_LABELS = {
     "pokeapi_move": "PokéAPI (move detail)",
     "pokebase": "PokéBase",
     "rk9_pairings": "RK9.gg",
+    "smogon_ladder": "Smogon usage statistics",
+    "smogon_ladder_counters": "Smogon usage statistics (checks and counters)",
+    "smogon_ladder_spreads": "Smogon usage statistics (Stat Point spreads)",
 }
 
 # mart_name -> (int_fields, float_fields) for numeric coercion; every other
@@ -249,6 +252,30 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         (),
     ),
     "tournament_top_cut_paths": (("round_number", "table_number", "opponent_placement"), ()),
+    # docs/upgrade-plan-2027q2.md, S2: the Showdown ladder lens, its own
+    # population. Sliced (MART_SLICERS) to the rows the views read.
+    "ladder_pokemon_usage": (
+        ("cutoff", "battles", "raw_count", "ladder_rank", "tournament_rank"),
+        ("ladder_usage", "tournament_team_share", "ladder_gap"),
+    ),
+    "ladder_checks_counters": (
+        ("cutoff", "battles", "encounters", "counter_rank"),
+        ("ko_or_switch_rate", "std_dev", "score"),
+    ),
+    "ladder_stat_point_spreads": (
+        (
+            "cutoff",
+            "battles",
+            "sp_hp",
+            "sp_atk",
+            "sp_def",
+            "sp_spa",
+            "sp_spd",
+            "sp_spe",
+            "spread_rank",
+        ),
+        ("share",),
+    ),
     # docs/upgrade-plan-2027q2.md, S1: the Events tab's online list.
     "online_event_summary": (
         (
@@ -478,7 +505,62 @@ def _better_placement(current: int | None, placement: int | None) -> int | None:
     return placement if current is None else min(current, placement)
 
 
+# The ladder lens (docs/upgrade-plan-2027q2.md, S2) ships what its views
+# show: usage for every ladder and cutoff (the Ladder view's switches),
+# each Pokémon's top LADDER_COUNTERS checks on the Bo1 ladder, and its top
+# LADDER_SPREADS spreads among 1760+ Bo1 players. The full marts stay in
+# data/marts/. Columns the views don't read are dropped: every row of a
+# regulation shares one file, which the page names by its month.
+LADDER_VARIANT = "bo1"
+LADDER_TOP_CUTOFF = 1760
+LADDER_COUNTERS = 12
+LADDER_SPREADS = 6
+_LADDER_DROP = {
+    "ladder_pokemon_usage": ("ladder_name", "source_name", "source_url"),
+    "ladder_checks_counters": (
+        "variant",
+        "cutoff",
+        "battles",
+        "std_dev",
+        "score",
+        "source_name",
+        "source_url",
+    ),
+    "ladder_stat_point_spreads": ("variant", "cutoff", "battles", "source_name", "source_url"),
+}
+
+
+def _trim(mart_name: str, row: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in row.items() if k not in _LADDER_DROP[mart_name]}
+
+
+def _slice_ladder_usage(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_trim("ladder_pokemon_usage", row) for row in rows]
+
+
+def _slice_ladder_counters(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        _trim("ladder_checks_counters", row)
+        for row in rows
+        if row.get("variant") == LADDER_VARIANT
+        and (row.get("counter_rank") or 0) <= LADDER_COUNTERS
+    ]
+
+
+def _slice_ladder_spreads(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        _trim("ladder_stat_point_spreads", row)
+        for row in rows
+        if row.get("variant") == LADDER_VARIANT
+        and row.get("cutoff") == LADDER_TOP_CUTOFF
+        and (row.get("spread_rank") or 0) <= LADDER_SPREADS
+    ]
+
+
 MART_SLICERS = {
+    "ladder_pokemon_usage": _slice_ladder_usage,
+    "ladder_checks_counters": _slice_ladder_counters,
+    "ladder_stat_point_spreads": _slice_ladder_spreads,
     "pokemon_set_variants": _slice_set_variants,
     "tournament_team_results": _slice_team_results,
     "pokemon_team_synergy": _slice_team_synergy,
@@ -744,6 +826,7 @@ NAME_JOINS = (
     ("pokemon_key_b", "pokemon_name_b"),
     ("pokemon_key_c", "pokemon_name_c"),
     ("top_extension_pokemon_key", "top_extension_pokemon_name"),
+    ("counter_pokemon_key", "counter_pokemon_name"),
 )
 
 

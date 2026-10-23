@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from pipelines.cli import _EXTRACTORS
-from pipelines.extract import pokeapi
+from pipelines.extract import pokeapi, smogon_ladder
 from pipelines.schema_contracts import schema_field_names, staging_contract_mismatches
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -41,8 +41,17 @@ def test_extractor_fieldnames_match_schema_contract(module, schema_stem):
         (pokeapi.ABILITY_FIELDNAMES, "pokeapi_ability"),
         (pokeapi.ITEM_FIELDNAMES, "pokeapi_item"),
         (pokeapi.ARTWORK_FIELDNAMES, "pokeapi_artwork"),
+        (smogon_ladder.COUNTER_FIELDNAMES, "smogon_ladder_counters"),
+        (smogon_ladder.SPREAD_FIELDNAMES, "smogon_ladder_spreads"),
     ],
-    ids=["pokeapi_move", "pokeapi_ability", "pokeapi_item", "pokeapi_artwork"],
+    ids=[
+        "pokeapi_move",
+        "pokeapi_ability",
+        "pokeapi_item",
+        "pokeapi_artwork",
+        "smogon_ladder_counters",
+        "smogon_ladder_spreads",
+    ],
 )
 def test_pokeapi_detail_fieldnames_match_schema_contract(module_fieldnames, schema_stem):
     schema_path = STAGING_SCHEMA_DIR / f"{schema_stem}.schema.json"

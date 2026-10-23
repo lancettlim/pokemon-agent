@@ -606,6 +606,9 @@
   .set-share { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 720px) { .profile-layout { grid-template-columns: 1fr; } }
+  /* Phones: the stat bars need 260px, which doesn't fit beside the 128px
+     hero, so the header wraps and the bars take the full width. */
+  @media (max-width: 480px) { #pokemon-profile-stats > .cell-with-icon { flex-wrap: wrap; } }
   /* Phones: the bar keeps the brand, the regulation and Events selects and
      the ⋯ menu, packed tighter so the pair fits from 360px. */
   @media (max-width: 480px) {
@@ -1477,6 +1480,54 @@
   .mega-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
   .mega-count-list strong { margin-left: auto; font-variant-numeric: tabular-nums; }
   @media (max-width: 1023px) { .mega-panel { grid-template-columns: minmax(0, 1fr); } }
+  /* The ladder lens (S2): a scatter of ladder against tournament share on
+     tablets and desktops, two ranked lists everywhere, and the profile's
+     checks and counters and spreads. A source chip names the population. */
+  .source-chip-row { margin: 0 0 var(--space-2); }
+  .source-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--series-blue); color: #fff; font-size: var(--font-xs); font-weight: 800; letter-spacing: 0.02em; }
+  .ladder-figure { margin: var(--space-3) 0; }
+  .ladder-figure:empty { display: none; }
+  .ladder-svg { width: 100%; height: auto; display: block; overflow: visible; touch-action: manipulation; }
+  .ladder-svg .axis line, .ladder-svg .grid line { stroke: var(--muted); stroke-opacity: 0.25; }
+  .ladder-svg .axis text, .ladder-svg .axis-title { fill: var(--muted); font-size: 11px; }
+  .ladder-svg .diagonal { stroke: var(--muted); stroke-dasharray: 4 4; stroke-width: 1.5; }
+  .ladder-svg .region { fill: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ladder-svg .dot { stroke: var(--surface); stroke-width: 2; }
+  .ladder-svg .dot.is-ladder { fill: var(--series-blue); }
+  .ladder-svg .dot.is-tournament { fill: var(--series-red); }
+  .ladder-svg .dot.is-even { fill: var(--muted); }
+  .ladder-svg .hit { fill: transparent; cursor: pointer; }
+  .ladder-svg a:focus-visible .dot { stroke: var(--navy); stroke-width: 3; }
+  .ladder-svg .dot-label { fill: var(--navy); font-size: 11px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .ladder-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0 0; padding: 0; list-style: none; font-size: var(--font-xs); color: var(--muted); }
+  .ladder-legend li { display: flex; align-items: center; gap: 6px; }
+  .ladder-legend .mega-swatch { border-radius: 50%; }
+  .ladder-lists { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); }
+  .ladder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .ladder-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .ladder-list .pokemon-link { min-width: 0; }
+  .ladder-list .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ladder-gap { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .ladder-sub { grid-column: 1 / -1; padding-left: calc(var(--icon-sm) + var(--space-2)); margin-top: -6px; font-size: var(--font-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+  @media (max-width: 767px) {
+    .ladder-figure { display: none; }
+    .ladder-lists { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  }
+  .counter-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--space-5); }
+  .counter-list li { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .counter-list .pokemon-link { flex: 1 1 auto; min-width: 0; }
+  .counter-list .pokemon-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .counter-list .counter-rate { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .counter-list .counter-n { font-size: var(--font-xs); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 6.5em; text-align: right; }
+  @media (max-width: 767px) { .counter-list { grid-template-columns: minmax(0, 1fr); } }
+  .show-all-btn { background: none; border: 0; padding: var(--space-2) 0; min-height: 44px; color: var(--blue); font: inherit; font-weight: 700; cursor: pointer; }
+  .spread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .spread-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .spread-points { font-variant-numeric: tabular-nums; }
+  .spread-points .nature { font-weight: 800; margin-right: 6px; }
+  .spread-share { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .spread-bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 18%, transparent); overflow: hidden; }
+  .spread-bar span { display: block; height: 100%; background: var(--series-blue); border-radius: 3px; }
   .section-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
   .section-head h3 { margin: 0; }
 
@@ -1800,7 +1851,7 @@
     <h2 class="panel-title">Usage</h2>
     <p class="lead">How often each Pokémon is brought, and how its teams do, in Champions tournaments.</p>
     <details class="method"><summary>How this is computed</summary>
-      <p>Every figure is computed from the team sheets of Champions-format tournaments only (MunchStats), never blended with standard VGC events. Usage is a Pokémon's share of all roster slots; a team contributes six.</p>
+      <p>Every figure is computed from the team sheets of Champions-format tournaments only, never blended with standard VGC events. Usage is the share of teams that brought a Pokémon; hover a figure for its count and its share of roster slots (a team has six). The Ladder view is the exception: Showdown ladder statistics, shown beside tournament usage and never added to it.</p>
     </details>
     <div class="subtabs" role="tablist">
       <button class="subtab-btn" role="tab" data-subtab="usage-leaders" data-route="leaders" aria-selected="true">Usage</button>
@@ -1808,6 +1859,7 @@
       <button class="subtab-btn" role="tab" data-subtab="usage-success" data-route="success" aria-selected="false">Success</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-trends" data-route="trends" aria-selected="false">Trends</button>
       <button class="subtab-btn" role="tab" data-subtab="usage-megas" data-route="megas" aria-selected="false">Megas</button>
+      <button class="subtab-btn" role="tab" data-subtab="usage-ladder" data-route="ladder" aria-selected="false">Ladder</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="usage-leaders">
@@ -1904,6 +1956,22 @@
         <div id="usage-mega-table"></div>
       </div>
     </div>
+
+    {# Ladder vs tournament (docs/upgrade-plan-2027q2.md, S2): Smogon's
+       Showdown ladder statistics beside official tournament team share,
+       a separate population that is never added to it. static/ladder.js
+       fills it. #}
+    <div class="subtab-panel" data-subpanel="usage-ladder" hidden>
+      <p class="lead">What the Showdown ladder plays more, or less, than tournament players do.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Ladder usage is Smogon's monthly statistics for Pokémon Showdown's Champions ladder: each Pokémon's share of teams across every rated battle in the regulation's month. At <strong>1760+</strong> each battle is weighted by how likely its players are rated above 1760, so the strongest players count most; <strong>All ratings</strong> counts every battle the same. The month is the newest one the regulation was in force for at least half of.</p>
+        <p>Tournament usage is the share of the same regulation's official tournament teams that brought it. Both are shares of teams, so they sit on one scale, but they come from different players and are never added together. Credit: Smogon University and Pokémon Showdown.</p>
+      </details>
+      <div class="controls" id="ladder-controls"></div>
+      <p class="sub" id="ladder-note"></p>
+      <figure class="ladder-figure" id="ladder-scatter"></figure>
+      <div class="ladder-lists" id="ladder-lists"></div>
+    </div>
   </section>
 
   <section class="tab-panel" data-panel="pokemon-profile" data-section="pokemon" hidden>
@@ -1928,6 +1996,8 @@
       <button class="subtab-btn" role="tab" data-subtab="profile-team-cores" data-route="cores">Teammates</button>
       <button class="subtab-btn" role="tab" data-subtab="profile-teams" data-route="teams">Teams</button>
       <button class="subtab-btn" role="tab" data-subtab="profile-pressure" data-route="pressure">Meta pressure</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-counters" data-route="counters">Counters</button>
+      <button class="subtab-btn" role="tab" data-subtab="profile-spreads" data-route="spreads">Spreads</button>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-items">
@@ -1979,6 +2049,28 @@
       </details>
       <p class="pressure-summary" id="profile-pressure-summary"></p>
       <div id="profile-pressure-table"></div>
+    </div>
+
+    {# The ladder lens on the profile (docs/upgrade-plan-2027q2.md, S2,
+       D3), filled by static/ladder.js. Both panels are Showdown ladder
+       data and say so in their chip. #}
+    <div class="subtab-panel" data-subpanel="profile-counters" hidden>
+      <p class="source-chip-row"><span class="source-chip">Showdown ladder, from battle logs</span></p>
+      <p class="lead">The opponents that most often KO this Pokémon or force it out.</p>
+      <details class="method"><summary>How this is computed</summary>
+        <p>Smogon reads every rated ladder battle in the regulation's month. Each time this Pokémon and an opponent were both in and one of them was KO'd or switched out, that counts as an encounter; the rate is how often it was this Pokémon. Opponents are ranked as Smogon ranks them, by the rate less four standard deviations, so a rate seen in few encounters ranks lower. Only opponents met at least 100 times are listed.</p>
+        <p>This is the only Pokémon-vs-Pokémon signal on the site, and it is ladder data from all ratings: Smogon lists a pair only above about 20 encounters, and weighted toward 1760+ players almost none clear that. Tournament results are team vs team.</p>
+      </details>
+      <p class="sub" id="profile-counters-note"></p>
+      <ol class="counter-list" id="profile-counters"></ol>
+      <button type="button" class="show-all-btn" id="profile-counters-more" hidden>Show all</button>
+    </div>
+
+    <div class="subtab-panel" data-subpanel="profile-spreads" hidden>
+      <p class="source-chip-row"><span class="source-chip">Showdown ladder; tournament sheets don't publish spreads</span></p>
+      <p class="lead">The Stat Point spreads 1760+ ladder players ran most.</p>
+      <p class="sub" id="profile-spreads-note"></p>
+      <div id="profile-spreads"></div>
     </div>
   </section>
 
@@ -2516,6 +2608,9 @@
           No source publishes a per-battle log naming which four of six were
           actually brought, so a "matchup" figure means teams containing A
           beat teams containing B — it is attributed to the whole roster.
+          The one Pokémon-vs-Pokémon figure on the site is a profile's
+          Checks and counters, which comes from Showdown ladder battle logs,
+          not tournaments.
         </li>
         <li>
           <strong>Matchup appearance counts overstate sample roughly 6×</strong>
@@ -2544,7 +2639,15 @@
           (nature) and moves and nothing more. The damage calculator
           therefore assumes a fully invested level-50 baseline on both
           sides (32 Stat Points, IVs fixed at 31) rather than any real
-          spread.
+          spread. A profile's Spreads panel shows what Showdown ladder
+          players ran, a different population; no tournament view uses it.
+        </li>
+        <li>
+          <strong>The Showdown ladder is its own population.</strong>
+          Smogon's monthly statistics count every rated ladder battle, weighted
+          toward 1760+ players. They sit beside tournament figures in the
+          Usage tab's Ladder view and the profile's Counters and Spreads, are
+          labelled there, and are never added to a tournament figure.
         </li>
         <li>
           <strong>Legality has a single snapshot date</strong>, so nothing on
@@ -2584,5 +2687,6 @@
 <script src="expansions.js"></script>
 <script src="events.js"></script>
 <script src="players.js"></script>
+<script src="ladder.js"></script>
 </body>
 </html>

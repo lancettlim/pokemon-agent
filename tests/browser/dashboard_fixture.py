@@ -950,6 +950,118 @@ def write_fixture_mega_marts(marts_dir: Path) -> None:
     _write(marts_dir / "team_mega_count.csv", counts)
 
 
+# docs/upgrade-plan-2027q2.md, S2: Smogon ladder statistics for M-C only,
+# so M-B shows the views' "not published" states. (ladder, tournament)
+# team shares per Pokémon on the 1760+ Bo1 ladder: Garchomp plays most
+# above its tournament share, Gholdengo most below, Pelipper within 2 pts.
+LADDER_SHARES = {
+    "rillaboom": (0.46, 0.52),
+    "sneasler": (0.37, 0.40),
+    "incineroar": (0.32, 0.32),
+    "garchomp": (0.28, 0.20),
+    "kingambit": (0.25, 0.23),
+    "gholdengo": (0.19, 0.27),
+    "whimsicott": (0.10, 0.05),
+    "pelipper": (0.015, 0.03),
+}
+LADDER_COUNTER_KEYS = (
+    "garchomp",
+    "incineroar",
+    "sneasler",
+    "rillaboom",
+    "gholdengo",
+    "whimsicott",
+    "pelipper",
+)
+
+
+def write_fixture_ladder_marts(marts_dir: Path) -> None:
+    base = {"regulation_code": "m-c", "month": "2026-09", "battles": 1631943}
+    source = {
+        "source_name": "Smogon usage statistics",
+        "source_url": "https://www.smogon.com/stats/2026-09/chaos/gen9championsvgc2026regmc-1760.json",
+    }
+    usage = []
+    # Bo3 at 1760+ carries the top five; Bo3 at all ratings isn't published.
+    for variant, cutoff, keys in (
+        ("bo1", 1760, KEYS),
+        ("bo1", 0, KEYS),
+        ("bo3", 1760, KEYS[:5]),
+    ):
+        ranked = sorted(keys, key=lambda k: -LADDER_SHARES[k][0])
+        for rank, key in enumerate(ranked, start=1):
+            ladder, tournament = LADDER_SHARES[key]
+            usage.append(
+                {
+                    **base,
+                    "variant": variant,
+                    "cutoff": cutoff,
+                    "pokemon_key": key,
+                    "ladder_name": POKEMON[key][0],
+                    "raw_count": int(ladder * 1000000),
+                    "ladder_usage": ladder,
+                    "ladder_rank": rank,
+                    "tournament_team_share": tournament,
+                    "tournament_rank": rank,
+                    "ladder_gap": round(ladder - tournament, 4),
+                    **source,
+                }
+            )
+    _write(marts_dir / "ladder_pokemon_usage.csv", usage)
+    counters = []
+    for key, opponents in (
+        ("kingambit", LADDER_COUNTER_KEYS),
+        ("rillaboom", ("incineroar", "pelipper")),
+    ):
+        for rank, opponent in enumerate(opponents, start=1):
+            rate = round(0.62 - rank * 0.02, 4)
+            counters.append(
+                {
+                    **base,
+                    "variant": "bo1",
+                    "cutoff": 0,
+                    "pokemon_key": key,
+                    "counter_pokemon_key": opponent,
+                    "encounters": 1000 * rank,
+                    "ko_or_switch_rate": rate,
+                    "std_dev": 0.005,
+                    "score": round(rate - 0.02, 4),
+                    "counter_rank": rank,
+                    **source,
+                }
+            )
+    _write(marts_dir / "ladder_checks_counters.csv", counters)
+    spreads = []
+    for rank, (nature, points, share) in enumerate(
+        (
+            ("Adamant", (32, 32, 0, 0, 2, 0), 0.1577),
+            ("Adamant", (2, 32, 0, 0, 0, 32), 0.0962),
+            ("Brave", (32, 32, 0, 0, 2, 0), 0.0679),
+        ),
+        start=1,
+    ):
+        spreads.append(
+            {
+                **base,
+                "variant": "bo1",
+                "cutoff": 1760,
+                "pokemon_key": "kingambit",
+                "nature": nature,
+                **dict(
+                    zip(
+                        ("sp_hp", "sp_atk", "sp_def", "sp_spa", "sp_spd", "sp_spe"),
+                        points,
+                        strict=True,
+                    )
+                ),
+                "share": share,
+                "spread_rank": rank,
+                **source,
+            }
+        )
+    _write(marts_dir / "ladder_stat_point_spreads.csv", spreads)
+
+
 def write_fixture_manifest(manifests_dir: Path) -> None:
     """A 0.4.0-style manifest, distributed as a Release asset (its
     `package` block), for the Data section's table cards (D1/D2)."""

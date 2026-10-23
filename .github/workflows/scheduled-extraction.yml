@@ -16,6 +16,11 @@ name: Scheduled extraction
 # each run re-fetches only tournaments from the last two days. A
 # LIMITLESS_API_KEY repository secret, when set, raises the limit.
 #
+# smogon_ladder (Showdown ladder statistics, S2) is published monthly. It
+# runs daily anyway because a month it already holds is reused from the
+# previous snapshot: a run that finds nothing new costs a few listing
+# requests, and a new month lands the day Smogon publishes it.
+#
 # data/staging/ is gitignored (pipelines/cli.py's snapshot history — see
 # backlog.md #1 — would otherwise grow unboundedly in git history), so
 # runner-to-runner persistence goes through actions/cache instead: each run
@@ -28,12 +33,12 @@ name: Scheduled extraction
 # snapshots for the day. The job still fails at the end, naming them.
 on:
   schedule:
-    - cron: "0 6 * * *" # daily 06:00 UTC: OP.GG, MunchStats, PokéBase, RK9, Limitless, Limitless online
+    - cron: "0 6 * * *" # daily 06:00 UTC: OP.GG, MunchStats, PokéBase, RK9, Limitless, Limitless online, Smogon ladder
     - cron: "0 7 * * 1" # weekly, Monday 07:00 UTC: PokéAPI
   workflow_dispatch:
     inputs:
       source:
-        description: "Source to extract (pokeapi | opgg | munchstats | rk9 | limitless | limitless_play | pokebase | bulbagarden | all); defaults to the triggering schedule's normal set"
+        description: "Source to extract (pokeapi | opgg | munchstats | rk9 | limitless | limitless_play | smogon_ladder | pokebase | bulbagarden | all); defaults to the triggering schedule's normal set"
         required: false
         default: ""
 
@@ -70,7 +75,7 @@ jobs:
           elif [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
             echo "sources=pokeapi" >> "$GITHUB_OUTPUT"
           else
-            echo "sources=opgg munchstats rk9 limitless limitless_play pokebase" >> "$GITHUB_OUTPUT"
+            echo "sources=opgg munchstats rk9 limitless limitless_play smogon_ladder pokebase" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run extraction

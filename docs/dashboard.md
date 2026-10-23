@@ -203,6 +203,43 @@ competitive graphics and work on every screen. What changed, by sprint:
   resolved to one roster (both Noah Gardners at Indianapolis 2026 had been
   credited to the one in the top 16), and only Masters pairings resolve.
 
+**Sprint 14 — the ladder lens.** Smogon's monthly Showdown ladder
+statistics (S2, decisions D2 and D3), a population of their own:
+`static/ladder.js`, hooked into the Usage tab and the profile through
+`App.extendTab`, reading three on-demand marts. Every view carries a
+"Showdown ladder" label and none adds a ladder figure to a tournament one.
+
+- **Ladder vs tournament** (`#/usage/ladder`, `ladder_pokemon_usage`):
+  ladder usage against the same regulation's official tournament team
+  share. From 768px a scatter on one square-root scale (the dashed
+  diagonal is the same share on both; blue is played more on the ladder,
+  red more at tournaments, grey within 2 pts; each dot a 44px target that
+  opens the profile), and at every width two ranked lists, "Played more on
+  the ladder" and "Played more at tournaments", which are the scatter's
+  text equivalent and all a phone shows. Bo1/Bo3 and 1760+/All ratings
+  switches. In M-C, Mega Raichu Y is on 12.5% of 1760+ ladder teams
+  against 25.9% of official ones; Basculegion runs the other way, 20.6%
+  against 15.0%.
+- **Checks and counters** (`#/pokemon/<key>/counters`,
+  `ladder_checks_counters`): the six opponents that most often KO the
+  Pokémon or force it out, with the rate and n, "Show all" for twelve.
+  The only Pokémon-vs-Pokémon signal on the site, labelled "Showdown
+  ladder, from battle logs". All ratings on the Bo1 ladder, since Smogon
+  publishes almost no pairs for 1760+ (see `docs/data-sources.md` §10).
+- **Stat Point spreads** (`#/pokemon/<key>/spreads`,
+  `ladder_stat_point_spreads`): the six spreads 1760+ Bo1 ladder players
+  ran most, labelled "Showdown ladder; tournament sheets don't publish
+  spreads". They never reach a tournament view, a set card or the Builder.
+- Under "All regulations", the ladder views show the newest regulation
+  with ladder data and say so; a regulation Smogon has no file for says
+  that instead of showing an empty panel.
+- **Profile header on phones**: the stat bars need 260px, which never fit
+  beside the 128px hero at 360–480px, so the header was clipped by the
+  panel's edge; it now wraps.
+- **S4, checked and parked**: MunchStats shows the game's ranked Battle
+  Data only in its rendered pages, not its published JSON (see
+  `docs/data-sources.md` §4).
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -572,6 +609,7 @@ reached 22 MB:
 | `data/core.json` | unscoped marts the common tabs read | first tab that needs marts |
 | `data/scope-<scope>.json` | the selected regulation's rows of every scoped mart | with core, for the page's regulation only |
 | `data/pokemon_head_to_head.json`, `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the three largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
+| `data/ladder_pokemon_usage.json`, `data/ladder_checks_counters.json`, `data/ladder_stat_point_spreads.json` | the Showdown ladder marts (S2), sliced to what the views show (`data.py`'s `_slice_ladder_*`), about 190 KB compressed together | the Usage tab (usage) and the profile (counters, spreads) |
 
 The default M-C view downloads about 400 KB compressed in total, against
 roughly 2 MB for the old single file.
@@ -781,8 +819,8 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 | Route | View |
 |---|---|
 | `#/overview`, `#/tiers`, `#/speed` | Meta views |
-| `#/usage[/win-rate\|success\|trends]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window |
-| `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure]` | A Pokémon's profile |
+| `#/usage[/win-rate\|success\|trends\|megas\|ladder]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window; `ladder` is Ladder vs tournament |
+| `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure\|counters\|spreads]` | A Pokémon's profile; `counters` and `spreads` are Showdown ladder data |
 | `#/compare/<a>,<b>`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons; `meta` is the calculator's "vs the meta" mode |
 | `#/teams[/converged]?tier=regional&sort=win-rate` | Top Teams |
 | `#/events`, `#/event/<event_id>` | Event index and event pages |

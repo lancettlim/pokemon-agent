@@ -904,6 +904,105 @@ models:
         description: "'Day 1', 'Day 2' or 'Top cut'."
       - name: result
         description: "W, L, T or Bye, for this team."
+  - name: ladder_pokemon_usage
+    description: >
+      Showdown ladder usage per Pokémon (docs/upgrade-plan-2027q2.md, S2,
+      decision D2), from Smogon's monthly statistics: one row per
+      regulation, ladder (variant), rating cutoff and Pokémon, beside the
+      official tournament team share for the same regulation. A separate
+      population, never blended into tournament figures. Feeds the Usage
+      tab's Ladder vs tournament view. Written to
+      data/marts/ladder_pokemon_usage.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'cutoff', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: ladder_pokemon_usage}
+    columns:
+      - name: month
+        description: "The month the statistics cover (YYYY-MM): the newest one the regulation was in force for at least half of."
+      - name: variant
+        description: "'bo1' or 'bo3': the Showdown ladder."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['bo1', 'bo3']
+              config:
+                meta: {category: mart_quality, table_name: ladder_pokemon_usage}
+      - name: cutoff
+        description: "Rating cutoff: 1760 weights battles toward players rated above 1760; 0 counts every battle."
+      - name: battles
+        description: "Battles in the month's file: the n behind every share."
+      - name: ladder_name
+        description: "Showdown's display name for the Pokémon."
+      - name: raw_count
+        description: "Teams it appeared on, unweighted."
+      - name: ladder_usage
+        description: "Weighted share of ladder teams it appeared on, 0 to 1."
+      - name: ladder_rank
+        description: "1 for the most-used Pokémon on that ladder and cutoff."
+      - name: tournament_team_share
+        description: "Share of the regulation's official tournament teams that brought it (pokemon_usage_by_regulation); null when it was not legal in the latest snapshot."
+      - name: tournament_rank
+        description: "Its usage rank in the regulation's official events."
+      - name: ladder_gap
+        description: "ladder_usage minus tournament_team_share: positive where the ladder plays it more."
+  - name: ladder_checks_counters
+    description: >
+      Showdown ladder checks and counters (docs/upgrade-plan-2027q2.md,
+      S2): for each Pokémon, the opponents that most often KO it or force
+      it out, from the battle logs of the regulation's month, all ratings
+      (cutoff 0, the only files that carry them). Pokémon vs Pokémon on the
+      ladder, the only battle-level matchup signal any source publishes;
+      tournament data is team vs team and this is never presented as
+      tournament data. Mirror matches are dropped. Feeds the Pokémon
+      profile's Checks and counters panel. Written to
+      data/marts/ladder_checks_counters.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'pokemon_key', 'counter_pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: ladder_checks_counters}
+    columns:
+      - name: counter_pokemon_key
+        description: "The opponent that checks or counters pokemon_key."
+      - name: encounters
+        description: "Times the pair met and one was KO'd or switched out (Smogon's n). At least 100."
+      - name: ko_or_switch_rate
+        description: "Share of those encounters in which pokemon_key was KO'd or switched out, 0 to 1."
+      - name: std_dev
+        description: "Standard deviation of ko_or_switch_rate."
+      - name: score
+        description: "ko_or_switch_rate minus four standard deviations: Smogon's own ranking."
+      - name: counter_rank
+        description: "1 for pokemon_key's strongest check or counter on that ladder."
+  - name: ladder_stat_point_spreads
+    description: >
+      The Stat Point spreads Showdown ladder players ran
+      (docs/upgrade-plan-2027q2.md, S2, decision D3): per regulation,
+      ladder, rating cutoff and Pokémon, its ten most-run nature and spread
+      combinations. Ladder only: official team sheets publish no spreads,
+      so these never enter a tournament entity, a team sheet or the
+      Builder's sets, and every consumer labels them "Showdown ladder;
+      tournament sheets don't publish spreads". Written to
+      data/marts/ladder_stat_point_spreads.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'cutoff', 'pokemon_key', 'spread_rank']
+          config:
+            meta: {category: mart_quality, table_name: ladder_stat_point_spreads}
+    columns:
+      - name: nature
+        description: "The spread's nature."
+      - name: sp_hp
+        description: "Stat Points in HP (sp_atk, sp_def, sp_spa, sp_spd and sp_spe likewise): 66 per Pokémon, at most 32 in one stat."
+      - name: share
+        description: "The spread's share of all the Pokémon's spreads in the file, 0 to 1."
+      - name: spread_rank
+        description: "1 for the most-run spread."
   - name: online_event_summary
     description: >
       One row per Limitless online tournament (docs/upgrade-plan-2027q2.md,

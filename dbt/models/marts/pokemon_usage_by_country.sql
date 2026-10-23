@@ -48,7 +48,7 @@ select
   round(counted.usage_count::double / country_teams.country_team_count, 4) as team_share,
   country_teams.country_team_count,
   row_number() over (
-    partition by counted.player_country order by counted.usage_count desc
+    partition by counted.player_country order by counted.usage_count desc, counted.pokemon_key
   ) as country_usage_rank
 from counted
 inner join country_teams

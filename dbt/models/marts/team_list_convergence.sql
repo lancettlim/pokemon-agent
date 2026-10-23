@@ -36,7 +36,7 @@ select
   roster.pokemon_keys,
   roster.roster_size,
   row_number() over (
-    order by list.player_count desc, list.tournament_count desc, list.best_placement asc
+    order by list.player_count desc, list.tournament_count desc, list.best_placement asc, list.team_list_id
   ) as convergence_rank
 from {{ ref('team_list') }} list
 inner join member_rosters roster

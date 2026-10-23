@@ -105,6 +105,22 @@ seeds:
       - name: pokeapi_form_name
         description: The matching form_name in stg_pokeapi/pokemon.
 
+  - name: smogon_name_to_pokeapi_form
+    description: >
+      Overrides for the Showdown display names in Smogon's ladder statistics
+      (docs/upgrade-plan-2027q2.md, S2) that neither
+      munchstats_name_to_pokeapi_form nor the slug rule it was built with
+      resolves (int_smogon_ladder_names). Two when the source was added: a
+      bare "Gourgeist", resolved to the form PokéAPI flags is_default
+      (gourgeist-average), as the MunchStats seed does for bare species; and
+      "Meowstic-M-Mega", PokéAPI's meowstic-male-mega. All 333 names in the
+      September 2026 files resolve.
+    columns:
+      - name: smogon_pokemon_name
+        description: The Smogon ladder pokemon_name or counter_name value.
+      - name: pokeapi_form_name
+        description: The matching form_name in stg_pokeapi/pokemon.
+
   - name: bulbagarden_title_to_pokeapi_form
     description: >
       Controlled name/form mapping (docs/dataset-spec.md's Bulbagarden

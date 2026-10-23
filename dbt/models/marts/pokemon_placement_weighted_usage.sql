@@ -77,7 +77,7 @@ select
     as top_cut_team_share,
   round(placement_weighted_score / nullif(team_weights.total_team_weight, 0), 4)
     as weighted_team_share,
-  row_number() over (partition by regulation_scope order by placement_weighted_score desc) as weighted_usage_rank
+  row_number() over (partition by regulation_scope order by placement_weighted_score desc, pokemon_key) as weighted_usage_rank
 from per_pokemon
 inner join team_weights using (regulation_scope)
 order by regulation_scope, placement_weighted_score desc

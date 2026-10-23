@@ -791,6 +791,37 @@ tall. The board puts them under its tiles, an event page in its header.
 2.6s; a copy on a touch screen confirms with it, since there is no hover
 feedback. It respects `prefers-reduced-motion`.
 
+### Ladder lens (2027 Q2, S2)
+
+Showdown ladder data is a population of its own, so every view of it opens
+with a `.source-chip`, a blue pill naming the source ("Showdown ladder,
+from battle logs"; "Showdown ladder; tournament sheets don't publish
+spreads"). A ladder figure sits beside the tournament figure it compares
+with and is never added to it.
+
+- **Ladder vs tournament scatter** (`.ladder-svg`, 768px and up): ladder
+  share of teams against official tournament share on one square-root
+  scale, so the many Pokémon under 5% stay apart and equal shares stay on
+  the dashed diagonal. One dot per Pokémon (r 5, a 2px surface ring),
+  coloured by the gap: `--series-blue` played more on the ladder,
+  `--series-red` more at tournaments, `--muted` within 2 pts (the pair
+  passes the palette validator in light and dark). Each dot sits in a
+  44px transparent target with a tooltip naming both shares, and links to
+  the profile. The three widest gaps each way are named beside their dots,
+  placed clear of each other. A legend sits under the plot.
+- **Ladder lists** (`.ladder-list`, every width; all a phone shows): "Played
+  more on the ladder" and "Played more at tournaments", ten each, among
+  Pokémon on 2% of teams on either side. A row is the Pokémon link and
+  the gap in pts, with "Ladder 20.6% · Tournaments 15.0%" under the name.
+  They are the scatter's text equivalent.
+- **Checks and counters** (`.counter-list`): rows of sprite and name, the
+  KO-or-switch rate (tooltip: the encounter count and what the rate
+  means) and n; two columns from 768px, one below. Six show, then "Show
+  all".
+- **Stat Point spreads** (`.spread-list`): nature in bold, the non-zero
+  Stat Points ("32 HP / 32 Atk / 2 SpD"), the share, and a thin bar of the
+  share under the row.
+
 ### Segmented control (2027 Q2)
 
 `.segmented` holds two to four mutually exclusive `<button

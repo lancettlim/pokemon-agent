@@ -1005,9 +1005,20 @@ sprint progress.
 - [x] Event-weekend hourly refresh of RK9 pairings (E4)
   `.github/workflows/event-weekend.yml` plus `pipelines.cli live-events`;
   MunchStats and RK9 now re-fetch a live event instead of reusing it.
-- [ ] Smogon ladder extractor; `ladder_pokemon_usage`, `ladder_checks_counters`; profile panel and ladder-vs-tournament view (S2, after D2)
-- [ ] Stat Point spreads from the ladder, labelled ladder-only (D3)
-- [ ] Check MunchStats for published in-game Battle Data ranks (S4)
+- [x] Smogon ladder extractor; `ladder_pokemon_usage`, `ladder_checks_counters`; profile panel and ladder-vs-tournament view (S2, after D2)
+  `pipelines/extract/smogon_ladder.py` takes each regulation's newest
+  mostly-in-force month (M-A June, M-B August, M-C September 2026), Bo1
+  and Bo3, cutoffs 1760 and 0; all 333 Showdown names resolve
+  (`assert_smogon_ladder_name_coverage`). Checks and counters come from
+  the all-ratings files, since Smogon publishes almost none at 1760.
+  `#/usage/ladder` and the profile's Counters panel, both labelled ladder.
+- [x] Stat Point spreads from the ladder, labelled ladder-only (D3)
+  `ladder_stat_point_spreads` and the profile's Spreads panel; CLAUDE.md's
+  rule now says tournament data has no spreads and ladder data may show
+  them. `assert_ladder_stat_points_bounded` checks 66 total, 32 per stat.
+- [x] Check MunchStats for published in-game Battle Data ranks (S4)
+  Not published: the ranks are only in MunchStats' rendered pages, not its
+  JSON. Parked until they are (`docs/data-sources.md` §4).
 
 ## Release readiness (v1 definition of done)
 

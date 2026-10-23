@@ -37,7 +37,7 @@ select
   ) as item_share,
   row_number() over (
     partition by counted.regulation_scope, counted.pokemon_key
-    order by counted.usage_count desc
+    order by counted.usage_count desc, counted.item_name
   ) as usage_rank
 from counted
 left join {{ ref('item_detail') }} item_detail

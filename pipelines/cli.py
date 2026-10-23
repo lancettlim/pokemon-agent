@@ -39,6 +39,7 @@ from pipelines.extract import (
     pokeapi,
     pokebase,
     rk9,
+    smogon_ladder,
 )
 from pipelines.extract import http as extract_http
 from pipelines.extract import summary as extraction_summary
@@ -61,6 +62,10 @@ _EXTRACTORS = {
     # Online tournaments (docs/upgrade-plan-2027q2.md, S1): writes its
     # pairings to limitless_play_pairings too, see _run_limitless_play.
     "limitless_play": (limitless_play, "limitless_play"),
+    # Showdown ladder statistics (docs/upgrade-plan-2027q2.md, S2): also
+    # writes smogon_ladder_counters and smogon_ladder_spreads, see
+    # _run_smogon_ladder.
+    "smogon_ladder": (smogon_ladder, "smogon_ladder"),
     "opgg": (opgg, "opgg_champions"),
     "pokebase": (pokebase, "pokebase"),
     "bulbagarden": (bulbagarden, "bulbagarden"),
@@ -87,6 +92,11 @@ _RETENTION_COUNTS = {
     "limitless": 14,
     "limitless_play": 14,
     "limitless_play_pairings": 14,
+    # Smogon publishes monthly and a held month is reused, so a daily run
+    # only re-stamps it; three snapshots (~14MB each) cover a missed run.
+    "smogon_ladder": 3,
+    "smogon_ladder_counters": 3,
+    "smogon_ladder_spreads": 3,
     "pokebase": 14,
     "bulbagarden": 10,
 }
@@ -115,6 +125,7 @@ _ENDPOINTS = {
     "/api/tournaments/{id}/standings",
     "limitless_play_pairings": "https://play.limitlesstcg.com/api/tournaments/{id}/pairings",
     "pokebase": "https://pokebase.app/pokemon-champions/pokemon",
+    "smogon_ladder": "https://www.smogon.com/stats/{month}/chaos/{metagame}[bo3]-{cutoff}.json",
     "bulbagarden": "https://archives.bulbagarden.net/w/api.php (Category:Champions_menu_sprites)",
 }
 
@@ -336,6 +347,32 @@ def _run_limitless_play(dataset_version: str) -> int:
     return 0
 
 
+def _run_smogon_ladder(dataset_version: str) -> int:
+    """Smogon's ladder statistics: one tracked pass writing usage
+    (smogon_ladder), checks and counters (smogon_ladder_counters) and Stat
+    Point spreads (smogon_ladder_spreads) from the same files, each reusing
+    the previous snapshot's rows for a month it already holds. The
+    extraction summary counts the usage table's rows."""
+    date_str = _snapshot_date()
+    subdirs = ("smogon_ladder", "smogon_ladder_counters", "smogon_ladder_spreads")
+    paths = [_dated_snapshot_path(subdir, date_str) for subdir in subdirs]
+    previous = tuple(_latest_snapshot_path(subdir) for subdir in subdirs)
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(smogon_ladder, "smogon_ladder"),
+        staging_subdir="smogon_ladder",
+        output_path=paths[0],
+        dataset_version=dataset_version,
+        call=lambda: smogon_ladder.extract(
+            *paths, dataset_version=dataset_version, previous_paths=previous
+        ),
+    )
+    if not ok:
+        return 1
+    for subdir in subdirs:
+        _prune_old_snapshots(subdir)
+    return 0
+
+
 def _run_extract(source: str, dataset_version: str) -> int:
     if source == "all":
         for one_source in _EXTRACTORS:
@@ -346,6 +383,8 @@ def _run_extract(source: str, dataset_version: str) -> int:
 
     if source == "limitless_play":
         return _run_limitless_play(dataset_version)
+    if source == "smogon_ladder":
+        return _run_smogon_ladder(dataset_version)
 
     module, staging_subdir = _EXTRACTORS[source]
     date_str = _snapshot_date()

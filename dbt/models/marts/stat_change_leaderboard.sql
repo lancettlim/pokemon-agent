@@ -10,8 +10,8 @@ select
   case when stat_total_delta >= 0 then 'gainer' else 'loser' end as direction,
   case
     when stat_total_delta >= 0
-      then row_number() over (order by stat_total_delta desc)
-    else row_number() over (order by stat_total_delta asc)
+      then row_number() over (order by stat_total_delta desc, pokemon_key)
+    else row_number() over (order by stat_total_delta asc, pokemon_key)
   end as rank_within_direction
 from {{ ref('pokemon_stat_delta') }}
 order by direction, rank_within_direction

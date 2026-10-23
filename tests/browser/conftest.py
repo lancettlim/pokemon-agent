@@ -20,6 +20,7 @@ import pytest
 from dashboard_fixture import (
     ONLINE_SCOPES,
     write_fixture_event_phase_marts,
+    write_fixture_ladder_marts,
     write_fixture_manifest,
     write_fixture_marts,
     write_fixture_mega_marts,
@@ -47,6 +48,7 @@ def _build_site(
     write_fixture_marts(marts_dir, normalized_dir, online_scopes)
     write_fixture_mega_marts(marts_dir)
     write_fixture_event_phase_marts(marts_dir)
+    write_fixture_ladder_marts(marts_dir)
     write_fixture_manifest(root / "manifests")
     output_dir = root / "site"
     write_fixture_share_cards(output_dir)

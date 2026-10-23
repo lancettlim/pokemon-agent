@@ -180,6 +180,41 @@ def test_run_extract_rk9_passes_previous_snapshot_path(tmp_path, monkeypatch):
     assert fake.refresh == ["LIVE"]
 
 
+def test_run_extract_smogon_ladder_writes_three_tables_from_one_pass(tmp_path, monkeypatch):
+    # Usage, checks and counters and spreads come out of the same files, so
+    # one call writes all three, each reusing its own previous snapshot
+    # (docs/upgrade-plan-2027q2.md, S2); each is pruned to its retention.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    for subdir in ("smogon_ladder", "smogon_ladder_counters", "smogon_ladder_spreads"):
+        for day in ("2026-07-27", "2026-07-28", "2026-07-29"):
+            _write_csv(tmp_path / subdir / f"{day}.csv", [], ["a"])
+    calls = []
+
+    def fake_extract(usage, counters, spreads, *, dataset_version, previous_paths):
+        calls.append(((usage, counters, spreads), dataset_version, previous_paths))
+        for path in (usage, counters, spreads):
+            _write_csv(path, [], ["a"])
+
+    monkeypatch.setattr(cli.smogon_ladder, "extract", fake_extract)
+    monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+
+    exit_code = cli._run_extract("smogon_ladder", "1.2.3")
+
+    assert exit_code == 0
+    subdirs = ("smogon_ladder", "smogon_ladder_counters", "smogon_ladder_spreads")
+    assert calls == [
+        (
+            tuple(tmp_path / subdir / "2026-07-30.csv" for subdir in subdirs),
+            "1.2.3",
+            tuple(tmp_path / subdir / "2026-07-29.csv" for subdir in subdirs),
+        )
+    ]
+    for subdir in subdirs:
+        kept = sorted(path.name for path in (tmp_path / subdir).glob("*.csv"))
+        assert kept == ["2026-07-28.csv", "2026-07-29.csv", "2026-07-30.csv"]
+
+
 def test_run_extract_other_sources_do_not_receive_previous_snapshot_path(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
     _stub_extraction_summary(monkeypatch)

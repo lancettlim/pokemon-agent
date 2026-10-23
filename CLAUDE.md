@@ -67,11 +67,15 @@ source of truth for product-level goals/non-goals.
   RK9.gg (round-by-round pairings and match outcomes) and Limitless VGC
   (canonical shared team-list identity), both added 2026-08-03, and
   Limitless online tournaments (`play.limitlesstcg.com`'s JSON API: a
-  separate online population, added 2026-10-21 — see "Populations" below)
+  separate online population, added 2026-10-21 — see "Populations" below),
+  and Smogon usage statistics (the Showdown ladder's monthly files: a
+  separate ladder population that feeds three marts and no release
+  entity, added 2026-10-23)
 - **Deferred sources**: none. Limitless VGC was brought into scope and
-  Victory Road was closed as unbuildable — the EV data it was wanted for is
-  published by no source at all (see `docs/dataset-spec.md`'s "Formerly
-  deferred sources" and `docs/backlog.md` #25/#26)
+  Victory Road was closed as unbuildable — the tournament EV data it was
+  wanted for is published by no source at all (see `docs/dataset-spec.md`'s
+  "Formerly deferred sources" and `docs/backlog.md` #25/#26; the Showdown
+  ladder's spreads are a different population)
 - **Core entities**: `pokemon`, `pokemon_stat_canonical`,
   `pokemon_stat_champions`, `pokemon_stat_delta`, `legality_snapshot`,
   `tournament_event`, `tournament_team`, `tournament_team_member`,
@@ -102,8 +106,8 @@ docs/
 `data/staging/*.csv`, `data/normalized/*.csv`, and `data/marts/*.csv` are
 all gitignored build output — regenerate staging with `python -m
 pipelines.cli extract <source>` (`pokeapi` | `opgg` | `munchstats` |
-`rk9` | `limitless` | `limitless_play` | `pokebase` | `bulbagarden` |
-`all`) and normalized/marts with `make
+`rk9` | `limitless` | `limitless_play` | `smogon_ladder` | `pokebase` |
+`bulbagarden` | `all`) and normalized/marts with `make
 dbt-build`. `make extract-all` / `make refresh` (extract-all → dbt-build →
 validate) / `make release VERSION=X.Y.Z` (refresh → release) chain these,
 mirroring `make dashboard`'s `dbt-build` → `build-dashboard` chain. Each
@@ -190,14 +194,23 @@ dashboard's population banner). Online handles are not legal names: never
 join them to RK9/MunchStats player identities, and keep player-level
 output official-only (`scope_population = 'official'`).
 
+The Showdown ladder (Smogon's statistics, S2) is a third population. It
+feeds only the `ladder_*` marts, never a release entity or
+`int_champions_roster`, and every view of it carries a "Showdown ladder"
+label beside, never added to, the tournament figure it compares with.
+
 **Team-vs-team grain.** `tournament_match` and the head-to-head marts
 report which *team* beat which, not which Pokémon beat which — no source
 publishes a per-battle log naming the four of six actually brought. Any new
 consumer of that data must say so where it's displayed.
 
-**EV/IV spreads do not exist.** Official tournament team sheets publish
-ability, held item, nature and moves and nothing more. Don't add an EV
-field, and don't reintroduce the retired "MunchStats nature coverage is
+**Tournament data has no spreads.** Official tournament team sheets
+publish ability, held item, nature and moves and nothing more. Don't add an
+EV or Stat Point field to a tournament entity, a team sheet or the
+Builder's sets. Ladder data may show them: `ladder_stat_point_spreads` is
+the Stat Point spreads Showdown ladder players ran (decision D3), and every
+consumer labels it "Showdown ladder; tournament sheets don't publish
+spreads". Don't reintroduce the retired "MunchStats nature coverage is
 ~17%" claim — that number was the Champions share of a format-mixed corpus,
 not a coverage gap (nature is 100% within Champions).
 
@@ -217,7 +230,8 @@ all`), `make refresh` (extract-all → dbt-build → validate), `make release
 VERSION=X.Y.Z` (refresh → release).
 
 - `pipelines/extract/` — one module per source (PokéAPI, OP.GG,
-  MunchStats, PokéBase, Bulbagarden, RK9, Limitless, Limitless online) that writes
+  MunchStats, PokéBase, Bulbagarden, RK9, Limitless, Limitless online,
+  Smogon ladder) that writes
   provenance-tagged rows into `data/staging/`. PokéAPI fetches every entry in its `/pokemon` list (base
   species plus Mega/regional/alternate forms); OP.GG and PokéBase each do a
   plain GET against their respective Champions pages (both server-rendered,
@@ -280,8 +294,10 @@ VERSION=X.Y.Z` (refresh → release).
   the hash router (every view is a `#/...` route; `docs/dashboard.md`'s
   "Routes" lists them), the shared table and tooltip/glossary components
   and the core views; `matchup.js`, `teams.js`, `expansions.js`,
-  `events.js` and `players.js` add the calculator, Top Teams/Builder,
-  Compare/Core Explorer, event pages and player pages. Marts ship as JSON
+  `events.js`, `players.js` and `ladder.js` add the calculator, Top
+  Teams/Builder, Compare/Core Explorer, event pages, player pages and the
+  Showdown ladder views (hooked into the Usage tab and profile through
+  `App.extendTab`). Marts ship as JSON
   shards under `docs/dashboard/data/` (core, one per regulation, and
   on-demand files), with the core payload held under 500KB compressed by
   `tests/browser/`. `dictionary.py` generates the Data section's table

@@ -1583,3 +1583,70 @@ def test_day2_board_ranks_day2_teams_and_carries_reliable_conversion():
     assert [t["pokemon_key"] for t in board["forms"]] == ["rillaboom", "kingambit"]
     assert board["forms"][1]["conversion"] == 1.299
     assert data.day2_board(rows, "m-b", {}) is None
+
+
+def test_ladder_counters_ship_the_bo1_top_twelve_without_source_columns(tmp_path):
+    # docs/upgrade-plan-2027q2.md, S2: the profile panel reads the Bo1
+    # ladder's strongest checks only.
+    rows = [
+        {
+            "regulation_code": "m-c",
+            "month": "2026-09",
+            "variant": variant,
+            "cutoff": "0",
+            "battles": "1631943",
+            "pokemon_key": "kingambit",
+            "counter_pokemon_key": f"opponent-{rank}",
+            "encounters": "500",
+            "ko_or_switch_rate": "0.55",
+            "std_dev": "0.01",
+            "score": "0.51",
+            "counter_rank": str(rank),
+            "source_name": "Smogon usage statistics",
+            "source_url": "https://www.smogon.com/stats/2026-09/chaos/x-0.json",
+        }
+        for variant in ("bo1", "bo3")
+        for rank in range(1, 16)
+    ]
+    _write_csv(tmp_path / "ladder_checks_counters.csv", rows)
+
+    sliced = data.load_mart(tmp_path, "ladder_checks_counters")
+
+    assert len(sliced) == data.LADDER_COUNTERS
+    assert {row["counter_rank"] for row in sliced} == set(range(1, data.LADDER_COUNTERS + 1))
+    assert sliced[0]["ko_or_switch_rate"] == 0.55
+    assert "source_url" not in sliced[0] and "variant" not in sliced[0] and "score" not in sliced[0]
+
+
+def test_ladder_spreads_ship_top_rated_bo1_only(tmp_path):
+    rows = [
+        {
+            "regulation_code": "m-c",
+            "month": "2026-09",
+            "variant": variant,
+            "cutoff": cutoff,
+            "battles": "1631943",
+            "pokemon_key": "kingambit",
+            "nature": "Adamant",
+            "sp_hp": "32",
+            "sp_atk": "32",
+            "sp_def": "0",
+            "sp_spa": "0",
+            "sp_spd": "2",
+            "sp_spe": "0",
+            "share": "0.1577",
+            "spread_rank": str(rank),
+            "source_name": "Smogon usage statistics",
+            "source_url": "https://www.smogon.com/stats/2026-09/chaos/x-1760.json",
+        }
+        for variant in ("bo1", "bo3")
+        for cutoff in ("1760", "0")
+        for rank in range(1, 11)
+    ]
+    _write_csv(tmp_path / "ladder_stat_point_spreads.csv", rows)
+
+    sliced = data.load_mart(tmp_path, "ladder_stat_point_spreads")
+
+    assert len(sliced) == data.LADDER_SPREADS
+    assert sliced[0]["sp_hp"] == 32 and sliced[0]["share"] == 0.1577
+    assert "cutoff" not in sliced[0] and "source_name" not in sliced[0]

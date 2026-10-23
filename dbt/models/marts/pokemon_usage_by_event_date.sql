@@ -45,7 +45,7 @@ select
     4
   ) as usage_share,
   round(counted.usage_count::double / date_teams.team_count, 4) as team_share,
-  row_number() over (partition by counted.event_date order by counted.usage_count desc) as usage_rank
+  row_number() over (partition by counted.event_date order by counted.usage_count desc, counted.pokemon_key) as usage_rank
 from counted
 inner join date_teams
   on date_teams.event_date = counted.event_date

@@ -78,7 +78,7 @@ select
   ) as usage_share,
   round(usage.usage_count::double / team_totals.scope_team_count, 4) as team_share,
   team_totals.scope_team_count,
-  row_number() over (partition by usage.regulation_scope, usage.event_tier order by usage.usage_count desc) as usage_rank
+  row_number() over (partition by usage.regulation_scope, usage.event_tier order by usage.usage_count desc, usage.pokemon_key) as usage_rank
 from (
   select * from overall
   union all

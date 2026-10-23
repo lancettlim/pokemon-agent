@@ -78,6 +78,14 @@ MunchStats bridges static Pokédex data with active competitive tournament metad
 2. Use Python: `pd.read_json(url)` or [convert.town JSON-to-CSV](https://convert.town/json-to-csv)
 3. Flatten nested team arrays into flat rows (one row per team member)
 
+**In-game ranked usage (checked 2026-10-22, `docs/upgrade-plan-2027q2.md`,
+S4): not published as data.** MunchStats' site shows the game's own Battle
+Data ranks for each ranked season, but only in its rendered pages: the
+repository's published JSON carries tournament rosters and no ranked-season
+file. The plan's rule was to ingest the ranks only from published data and
+never reverse-engineer an undocumented endpoint, so S4 is parked until
+MunchStats publishes them.
+
 ## 5. Bulbagarden Archives
 **Best for:** Pokémon sprite/menu-icon artwork for the newest Champions-format Pokémon
 
@@ -288,3 +296,52 @@ sliding-window limiter and waits out a 429); a key for public-facing
 projects raises it (`LIMITLESS_API_KEY`). Players are handles, not legal
 names, so online teams never join RK9 or MunchStats identities and get no
 player pages.
+
+## 10. Smogon usage statistics (smogon.com/stats)
+**Best for:** The Showdown ladder as its own population: usage, the only
+Pokémon-vs-Pokémon battle signal any source publishes, and Stat Point
+spreads
+
+Smogon publishes, on the first of each month, usage statistics for every
+Pokémon Showdown ladder, computed from every rated battle. September
+2026's Champions Reg M-C file covers 1,631,943 Bo1 battles and 277
+Pokémon at the 1760 cutoff. Added 2026-10-23 (`docs/upgrade-plan-2027q2.md`,
+S2, decisions D2 and D3) as a separate `ladder` population, never blended
+into tournament figures. Credit: Smogon University and Pokémon Showdown.
+
+**Key coverage (per Pokémon, per file):**
+- `usage`: weighted share of teams, the same unit as tournament team share
+- `Checks and Counters`: per opponent, `n` (encounters where the pair met
+  and one was KO'd or switched out), `p` (the share in which this Pokémon
+  was the one) and `d` (its standard deviation). Smogon ranks by `p - 4d`
+- `Spreads`: nature and Stat Points (`Adamant:32/32/0/0/2/0`, HP/Atk/Def/
+  SpA/SpD/Spe), weighted. Every spread fits Champions' 66 points with at
+  most 32 in one stat
+- Abilities, items, moves and teammates, which tournament sheets already
+  cover, are not extracted
+
+**How to extract:** static files, no API:
+1. `GET /stats/` lists the months; `GET /stats/<YYYY-MM>/chaos/` lists a
+   month's files.
+2. A file is `<metagame>[bo3]-<cutoff>.json`. The metagame is the
+   regulation registry's `munchstats_format`
+   (`gen9championsvgc2026regmc`), so nothing hardcodes a regulation.
+   Cutoffs 0, 1500, 1630 and 1760 exist; 1760 (rating-weighted toward the
+   strongest players) and 0 (every battle) are kept, Bo1 and Bo3.
+3. For each regulation take the newest month it was in force for at least
+   half of: August 2026 for M-B, which ended on 9 September, and
+   September for M-C, which began on the 9th. A month never changes after
+   publication, so a file the previous snapshot holds is reused.
+4. Resolve names with `munchstats_name_to_pokeapi_form` (Showdown and
+   MunchStats share names), then the slug rule that seed was built with,
+   then `smogon_name_to_pokeapi_form` for the two names neither handles.
+   All 333 names in the September 2026 files resolve.
+
+**Checks and counters at 1760:** the rating-weighted files carry almost
+none (13 pairs in September's M-C file, against 35,013 at cutoff 0).
+Smogon lists a pair only above about 20 encounters (the smallest `n` in
+either file is 21), a doubles battle rarely reaches the one-on-one moments
+the statistic counts, and at 1760 each encounter is weighted by the chance
+its players are rated that high, so almost no pair clears the bar. They are
+read from the all-ratings files, and labelled so.
+

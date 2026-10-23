@@ -58,9 +58,13 @@ resolution matched its deferral reason (see `docs/backlog.md` #25/#26):
   moves and nothing else. Verified directly against RK9's and Limitless'
   team-list pages: no EV or IV data on either. The moveset half was
   already covered by MunchStats and Limitless at 100% for Champions
-  events. Treat EV/IV spreads as structurally unavailable rather than
-  pending. (Victory Road is also unreachable from this project's egress —
-  see `docs/data-sources.md` — but that is incidental to the conclusion.)
+  events. Treat tournament EV/IV spreads as structurally unavailable
+  rather than pending. (Victory Road is also unreachable from this
+  project's egress — see `docs/data-sources.md` — but that is incidental to
+  the conclusion.) The Showdown ladder's Stat Point spreads, added
+  2026-10-23 (see "Added sources"), don't change this: they are what ladder
+  players ran, a different population, and never enter a tournament
+  entity.
 
 ## Added sources (post-v1)
 
@@ -88,6 +92,23 @@ resolution matched its deferral reason (see `docs/backlog.md` #25/#26):
   plus `:combined` scopes for both together (see "Key rules"). Events under
   16 players and Monotype events are skipped. See `docs/data-sources.md`
   §9 for the API, and `pipelines/extract/limitless_play.py`.
+- **Smogon usage statistics** (`smogon.com/stats`) — added 2026-10-23
+  (`docs/upgrade-plan-2027q2.md`, S2, decisions D2 and D3). Smogon's
+  monthly statistics for Pokémon Showdown's Champions ladder, per
+  registered regulation (the file is named by the registry's
+  `munchstats_format`), Bo1 and Bo3, at rating cutoffs 1760 and 0. Three
+  staging tables come from the same files: usage per Pokémon
+  (`smogon_ladder`), checks and counters (`smogon_ladder_counters`: per
+  pair, how often the Pokémon was KO'd or switched out, from the battle
+  logs) and Stat Point spreads (`smogon_ladder_spreads`). The ladder is
+  **its own population**, anyone on Showdown weighted toward the
+  strongest players, and **feeds no release entity**: it lands in three
+  marts only (`ladder_pokemon_usage`, `ladder_checks_counters`,
+  `ladder_stat_point_spreads`), shown beside tournament figures and never
+  added to them. Its spreads are the one place Stat Points appear (D3):
+  tournament team sheets publish none, so they never enter a tournament
+  entity, a team sheet or the Builder's sets. See `docs/data-sources.md`
+  §10 and `pipelines/extract/smogon_ladder.py`.
 
 ## Image asset source (Phase 4 addition)
 
@@ -372,6 +393,11 @@ value there (vs. as dashboard-only support data) is clearer.
   snapshot holds is reused rather than re-fetched (the API allows 50
   requests per 5 minutes without a key, so a first backfill of a
   regulation takes about an hour and later runs a few minutes)
+- **Smogon usage statistics**: published monthly, extracted daily. Each
+  regulation's month is the newest one it was in force for at least half
+  of (a new regulation's first, partial month until a full one exists); a
+  month the previous snapshot holds is reused, so a daily run costs a few
+  listing requests and a new month lands the day it is published
 - **Versioning rule**: publish `dataset_version` on every successful refresh
   cycle with changelog notes for schema or major row-count shifts
 - **Snapshot history**: `python -m pipelines.cli extract <source>` writes
@@ -620,6 +646,11 @@ JSON API.
   was 317/359 titles, 88.3%).
 - Any unmapped or low-confidence rows must be documented in the manifest and
   excluded from release tables unless explicitly approved.
+- Smogon ladder names should resolve to a `pokemon_key` for at least 99%
+  of usage rows (`assert_smogon_ladder_name_coverage`, 333 of 333 names
+  when the source was added). It is a mart check, not a release gate:
+  ladder data feeds no release entity, so an unmapped name drops that
+  Pokémon from the ladder views rather than stopping a release.
 
 ## Phased execution roadmap
 

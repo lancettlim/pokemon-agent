@@ -1,6 +1,6 @@
 {
   "description": "Phase 1 ingestion check: source availability and row-level parsing success for each staging extractor. Distinct from validation_report.json, which gates normalized-table release readiness.",
-  "generated_at_utc": "2026-10-21T15:07:01Z",
+  "generated_at_utc": "2026-10-23T02:19:08Z",
   "dataset_version": "0.3.0",
   "sources": [
     {
@@ -145,6 +145,17 @@
       "rows_written": 31912,
       "required_field_null_rate": 0.0,
       "checked_at_utc": "2026-10-21T06:45:33Z"
+    },
+    {
+      "source_name": "Smogon usage statistics",
+      "endpoint": "https://www.smogon.com/stats/{month}/chaos/{metagame}[bo3]-{cutoff}.json",
+      "availability": "reachable, HTTP 200 for all requests",
+      "requests_attempted": 19,
+      "requests_succeeded": 19,
+      "request_success_rate": 1.0,
+      "rows_written": 0,
+      "required_field_null_rate": 0.0,
+      "checked_at_utc": "2026-10-23T02:19:08Z"
     }
   ]
 }

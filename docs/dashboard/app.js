@@ -980,7 +980,9 @@
     realset: ["Real set", "An item, ability, nature and four moves that appeared together on actual team sheets. A core set groups item, ability and the three most common moves."],
     teamvsteam: ["Team vs team", "Head-to-head records credit the whole team that won. No source says which four Pokémon were brought to a game."],
     n: ["n", "The sample size behind a figure: teams, team sheets or matches, as labelled."],
-    statpoints: ["Stat Points", "Champions' replacement for EVs: 66 points per Pokémon, at most 32 in one stat, with IVs fixed at 31. At level 50 a stat is base + Stat Points + 20 before Stat Alignment. Tournament team sheets don't publish them, so anything here that needs a stat assumes 32 in it."],
+    statpoints: ["Stat Points", "Champions' replacement for EVs: 66 points per Pokémon, at most 32 in one stat, with IVs fixed at 31. At level 50 a stat is base + Stat Points + 20 before Stat Alignment. Tournament team sheets don't publish them, so anything here that needs a stat assumes 32 in it; the spreads a profile shows are what Showdown ladder players ran."],
+    ladder: ["Showdown ladder", "Rated battles on Pokémon Showdown's Champions ladder, from Smogon's monthly statistics: every battle in the month, weighted at 1760+ toward the strongest players. A different population from tournament players, so its figures are shown beside tournament ones and never added to them."],
+    counters: ["Checks and counters", "From the ladder's battle logs: when this Pokémon and the opponent met and one was KO'd or switched out, how often it was this Pokémon. 55% means the opponent came out on top 55% of the time. Pokémon vs Pokémon, unlike tournament records, which are team vs team. Ranked as Smogon ranks them, by the rate less four standard deviations, so a rate measured on few encounters ranks lower."],
     alignment: ["Stat Alignment", "What Champions and the official team sheets call a nature: one stat ×1.1, another ×0.9, or neutral. Team sheets publish it for every Pokémon."],
   };
 
@@ -1650,6 +1652,20 @@
 
   function pokemonRowHref(row) {
     return row.pokemon_key ? pokemonHref(row.pokemon_key) : null;
+  }
+
+  // Views another file adds inside a tab (ladder.js): "usage" hooks run
+  // once the Usage tab is set up, "profile" hooks on every profile render
+  // with the profile's row. Scripts all load before routing starts, so a
+  // hook is registered before its tab can open.
+  var tabExtensions = { usage: [], profile: [] };
+  function extendTab(tabId, fn) {
+    tabExtensions[tabId].push(fn);
+  }
+  function runExtensions(tabId, arg) {
+    tabExtensions[tabId].forEach(function (fn) {
+      fn(arg);
+    });
   }
 
   // ---------- tab switching ----------
@@ -2894,6 +2910,7 @@
       null,
       { route: { tab: "usage", argIndex: 0 } }
     );
+    runExtensions("usage");
   }
   var usageSubTabs = null;
   var usageWindowRoute = function () {};
@@ -3840,6 +3857,7 @@
         drawFeaturing(profile);
         drawPressure(profile);
         drawRecent(profile.pokemon_key);
+        runExtensions("profile", profile);
       }
     }
 
@@ -4896,14 +4914,19 @@
   });
   registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage, {
-    extraMarts: ["pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count"],
+    extraMarts: ["pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count", "ladder_pokemon_usage"],
     onRoute: function (route) {
       if (usageSubTabs) usageSubTabs.fromRoute(route);
       usageWindowRoute(route);
     },
   });
   registerTab("pokemon-profile", setupPokemonProfile, {
-    extraMarts: ["pokemon_team_core_triple_usage", "tournament_team_sheets"],
+    extraMarts: [
+      "pokemon_team_core_triple_usage",
+      "tournament_team_sheets",
+      "ladder_checks_counters",
+      "ladder_stat_point_spreads",
+    ],
     onRoute: function (route) {
       profileRoute(route);
     },
@@ -5016,6 +5039,7 @@
     createDataTable: createDataTable,
     pokemonRowHref: pokemonRowHref,
     registerTab: registerTab,
+    extendTab: extendTab,
     setupSubTabs: setupSubTabs,
     renderMegaPanel: renderMegaPanel,
     ensureData: ensureData,
