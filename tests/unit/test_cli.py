@@ -152,6 +152,24 @@ def test_run_extract_munchstats_passes_previous_snapshot_path(tmp_path, monkeypa
     assert fake.calls == [(tmp_path / "munchstats" / "2026-07-30.csv", "1.2.3", previous_path)]
 
 
+def test_run_extract_showdown_replays_passes_previous_snapshot_path(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, S3: every battle already sampled is kept
+    # and never fetched again.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    previous_path = tmp_path / "showdown_replays" / "2026-07-29.csv"
+    _write_csv(previous_path, [], ["a"])
+    fake = _RecordingMunchstatsExtractor()
+    monkeypatch.setattr(cli, "_EXTRACTORS", {"showdown_replays": (fake, "showdown_replays")})
+    monkeypatch.setattr(cli, "_RETENTION_COUNTS", {"showdown_replays": 3})
+    monkeypatch.setattr(cli, "_snapshot_date", lambda: "2026-07-30")
+
+    assert cli._run_extract("showdown_replays", "1.2.3") == 0
+    assert fake.calls == [
+        (tmp_path / "showdown_replays" / "2026-07-30.csv", "1.2.3", previous_path)
+    ]
+
+
 def test_run_extract_rk9_passes_previous_snapshot_path(tmp_path, monkeypatch):
     # rk9 shares munchstats' incremental path: a concluded event's pairings
     # never change, so the previous snapshot is reused rather than re-fetched.
@@ -213,6 +231,37 @@ def test_run_extract_smogon_ladder_writes_three_tables_from_one_pass(tmp_path, m
     for subdir in subdirs:
         kept = sorted(path.name for path in (tmp_path / subdir).glob("*.csv"))
         assert kept == ["2026-07-28.csv", "2026-07-29.csv", "2026-07-30.csv"]
+
+
+def test_run_extract_limitless_play_lists_upcoming_tournaments_last(tmp_path, monkeypatch):
+    # docs/upgrade-plan-2027q2.md, list #31: the upcoming list is a third
+    # pass of the online run, under the same snapshot date.
+    monkeypatch.setattr(cli, "STAGING_DIR", tmp_path)
+    _stub_extraction_summary(monkeypatch)
+    order = []
+
+    def fake_extract(output_path, *, dataset_version, previous_snapshot_path, extracted_at_utc):
+        order.append("roster")
+        _write_csv(output_path, [], ["a"])
+        return []
+
+    def fake_pairings(output_path, covered, **kwargs):
+        order.append("pairings")
+        _write_csv(output_path, [], ["a"])
+
+    def fake_upcoming(output_path, *, dataset_version, extracted_at_utc):
+        order.append(
+            ("upcoming", output_path.parent.name, output_path.stem == extracted_at_utc[:10])
+        )
+        _write_csv(output_path, [], ["a"])
+        return 0
+
+    monkeypatch.setattr(cli.limitless_play, "extract", fake_extract)
+    monkeypatch.setattr(cli.limitless_play, "extract_pairings", fake_pairings)
+    monkeypatch.setattr(cli.limitless_play, "extract_upcoming", fake_upcoming)
+
+    assert cli._run_extract("limitless_play", "1.2.3") == 0
+    assert order == ["roster", "pairings", ("upcoming", "limitless_play_upcoming", True)]
 
 
 def test_run_extract_pokeapi_extracts_names_for_the_forms_it_wrote(tmp_path, monkeypatch):

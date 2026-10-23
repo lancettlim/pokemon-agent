@@ -2481,9 +2481,43 @@
       (tiles.length
         ? tiles.map(boardTileHtml).join("")
         : '<p class="empty-state" style="grid-column: 1 / -1">No usage recorded for this scope yet.</p>') +
-      '</div><p class="board-more">' + boardShareHtml() + '<a href="' + routeHash("usage", []) +
-      '">Every Pokémon in the Usage table &rarr;</a></p></div>';
+      '</div><p class="board-more">' + boardShareHtml() +
+      '<button type="button" class="btn btn-sm" data-embed-toggle aria-expanded="' + boardEmbedOpen +
+      '" aria-controls="board-embed">Embed</button><a href="' + routeHash("usage", []) +
+      '">Every Pokémon in the Usage table &rarr;</a></p>' + boardEmbedHtml(tiles.length) + "</div>";
   }
+
+  // The embeddable widget (docs/upgrade-plan-2027q2.md, list #33): an
+  // <iframe> of embed.html showing this board, for a creator's site. It
+  // carries its own citation and links back here.
+  var boardEmbedOpen = false;
+  function boardEmbedSnippet() {
+    var base = window.location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "");
+    var board = isOfficialScope ? boardState.scope : regulationPopulation === "online" ? "online" : "all";
+    var src = base + "embed.html?reg=" + encodeURIComponent(regulationCode) + "&board=" + board +
+      "&group=" + boardState.grouping + (nameLanguage !== "en" ? "&lang=" + nameLanguage : "");
+    return '<iframe src="' + src + '" title="Top 12 Pokémon, ' + shortRegulation(regulationCode) +
+      ' (Pokémon Champions Data)" width="100%" height="480" style="border:0;max-width:760px" loading="lazy"></iframe>';
+  }
+  function boardEmbedHtml(hasTiles) {
+    if (!hasTiles) return "";
+    var snippet = boardEmbedSnippet();
+    return '<div class="embed-panel" id="board-embed"' + (boardEmbedOpen ? "" : " hidden") + ">" +
+      '<p class="sub">Paste this into your site or post to show this board. It updates with the site, cites its ' +
+      "sample and links back here.</p>" +
+      '<textarea class="embed-code" readonly rows="3" aria-label="Embed code">' + escapeHtml(snippet) + "</textarea>" +
+      '<div class="embed-actions">' + copyButtonHtml(snippet, "Copy embed code") +
+      '<a class="btn btn-sm" href="' + escapeHtml(snippet.match(/src="([^"]+)"/)[1]) +
+      '" target="_blank" rel="noopener">Preview</a></div></div>';
+  }
+  document.addEventListener("click", function (e) {
+    var toggle = e.target.closest && e.target.closest("[data-embed-toggle]");
+    if (!toggle) return;
+    boardEmbedOpen = !boardEmbedOpen;
+    renderBoard();
+    var again = document.querySelector("[data-embed-toggle]");
+    if (again) again.focus();
+  });
 
   document.addEventListener("click", function (e) {
     var group = e.target.closest && e.target.closest("[data-board-group]");
@@ -5317,7 +5351,10 @@
   });
   registerTab("tiers", setupTiers);
   registerTab("usage", setupUsage, {
-    extraMarts: ["pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count", "ladder_pokemon_usage"],
+    extraMarts: [
+      "pokemon_event_usage_vs_regulation", "mega_stone_usage", "team_mega_count", "ladder_pokemon_usage",
+      "ladder_bring_rate", "ladder_lead_pairs",
+    ],
     onRoute: function (route) {
       if (usageSubTabs) usageSubTabs.fromRoute(route);
       usageWindowRoute(route);
@@ -5329,6 +5366,7 @@
       "tournament_team_sheets",
       "ladder_checks_counters",
       "ladder_stat_point_spreads",
+      "ladder_bring_rate",
     ],
     onRoute: function (route) {
       profileRoute(route);

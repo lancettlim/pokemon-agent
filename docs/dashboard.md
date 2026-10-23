@@ -311,6 +311,41 @@ statistics (S2, decisions D2 and D3), a population of their own:
   phone's bottom bar, a card from 721px) that opens Compare on them.
   Compare now takes two to four Pokémon, adding and removing columns.
 
+**Sprint 17 — sources and distribution.**
+
+- **"Watch on stream" links** (S5, E5): `tournament_top_cut_matches.vod_url`
+  from the curated `featured_match_vods` seed puts a "▶ Watch on stream"
+  link under a bracket match with a video (opens YouTube in a new tab).
+  Five finals so far, each a dedicated Play! Pokémon upload checked for its
+  title and channel; a match inside a day-long stream gets a row once
+  someone has its timestamp (`docs/data-sources.md` §12).
+- **Upcoming online tournaments** (list #31, `online_upcoming_events`): on
+  the Events tab above the past online list, the next 14 days of Limitless
+  online tournaments in the visitor's own time zone (named in the note),
+  grouped by local day ("Today", "Tomorrow", then the date), each with its
+  time, organiser, platform, registrations and whether registration is
+  open, linking to Limitless. The list is a day old by the time it is read,
+  so tournaments that have started are dropped in the browser. A row per
+  tournament on phones, the registrations under the name.
+- **Embeddable Top 12** (list #33): `embed.html`, a page for an
+  `<iframe>` (`templates/embed.html.jinja`, its own ~20KB inline payload
+  from `build.py`'s `_embed_payload`, no shards or app scripts). Query
+  parameters choose the regulation (`reg`), board (`board=all|day2|online`),
+  grouping, `view=grid|list`, name language and theme. Every view carries
+  its citation (team share, the sample, the update date, "an unofficial
+  fan project") and links back to the dashboard. The Overview board's
+  "Embed" button gives the snippet for what it shows, with Copy and
+  Preview. Twelve tiles fit the snippet's 480px height from 320px wide;
+  outside its red frame the page is transparent.
+- **Which four do they bring?** (S3, list #27; `ladder_bring_rate`,
+  `ladder_lead_pairs`): under the Ladder view, a table of how often each
+  Pokémon is on Showdown ladder teams, brought, led, and its side's win
+  rate brought versus benched, from sampled replays; then the ten most
+  common lead pairs with their win rates. A Pokémon under 30 complete
+  sides is left out. Every profile's Counters panel opens with the same
+  four figures for that Pokémon (a Mega reads its base Pokémon's, and says
+  so). Labelled "Showdown ladder replays" and "not tournament data".
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -682,6 +717,8 @@ reached 22 MB:
 | `data/scope-<scope>.json` | the selected regulation's rows of every scoped mart | with core, for the page's regulation only |
 | `data/pokemon_head_to_head.json`, `data/pokemon_team_core_triple_usage.json`, `data/player_signature_pokemon.json` | the three largest unscoped marts | only by the tabs that read them (`registerTab(..., { extraMarts: [...] })`: Matchup, Profile and Core Explorer, Players & Regions) |
 | `data/ladder_pokemon_usage.json`, `data/ladder_checks_counters.json`, `data/ladder_stat_point_spreads.json` | the Showdown ladder marts (S2), sliced to what the views show (`data.py`'s `_slice_ladder_*`), about 190 KB compressed together | the Usage tab (usage) and the profile (counters, spreads) |
+| `data/ladder_bring_rate.json`, `data/ladder_lead_pairs.json` | Showdown replay bring rates and lead pairs (S3), Bo1 and Bo3 pooled | the Usage tab (both) and the profile (bring rate) |
+| `data/online_upcoming_events.json` | upcoming Limitless online tournaments (list #31) | the Events tab |
 
 The default M-C view downloads about 400 KB compressed in total, against
 roughly 2 MB for the old single file.
@@ -905,7 +942,7 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 | `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure\|counters\|spreads]` | A Pokémon's profile; `counters` and `spreads` are Showdown ladder data |
 | `#/compare/<a>,<b>[,<c>[,<d>]]`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons of two to four Pokémon; `meta` is the calculator's "vs the meta" mode |
 | `#/teams[/converged]?tier=regional&sort=win-rate` | Top Teams |
-| `#/events`, `#/event/<event_id>` | Event index and event pages |
+| `#/events`, `#/event/<event_id>` | Event index (with upcoming online tournaments) and event pages |
 | `#/cores/<key>[/triple]`, `#/archetypes` | Cores and archetypes |
 | `#/players[/regions\|signatures]`, `#/player/<player_id>` | Find a player, players by region and signature Pokémon; a player's page |
 | `#/builder`, `#/builder/team/<team_id>`, `#/builder/list/<team_list_id>`, `#/builder/add/<key>.<set>`, `#/builder/<key>.<set>,...` | Team Builder, loading a real team, a converged list, one added Pokémon, or a shared team |
@@ -916,6 +953,10 @@ filter, a sub-tab) replaces it. Links from before routing (`#usage`,
 `?tab=compare&a=..&b=..`) are rewritten to their routes on load.
 `?reg=` in the query string stays the scope: a regulation, or a regulation
 and population (`?reg=m-c:online`).
+
+`embed.html?reg=<code>&board=all|day2|online&group=forms|species&view=grid|list&lang=<ja|es|fr|de>&theme=auto|light|dark`
+is the embeddable Top 12 widget (list #33), a separate page rather than a
+route; every parameter is optional.
 
 ## Data section: table cards and dictionary
 

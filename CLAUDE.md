@@ -68,9 +68,11 @@ source of truth for product-level goals/non-goals.
   (canonical shared team-list identity), both added 2026-08-03, and
   Limitless online tournaments (`play.limitlesstcg.com`'s JSON API: a
   separate online population, added 2026-10-21 — see "Populations" below),
-  and Smogon usage statistics (the Showdown ladder's monthly files: a
+  Smogon usage statistics (the Showdown ladder's monthly files: a
   separate ladder population that feeds three marts and no release
-  entity, added 2026-10-23)
+  entity, added 2026-10-23), and Showdown ladder replays (a daily sample of
+  rated battles: which four of six were brought and led, the same ladder
+  population, two more marts, added 2026-10-23)
 - **Deferred sources**: none. Limitless VGC was brought into scope and
   Victory Road was closed as unbuildable — the tournament EV data it was
   wanted for is published by no source at all (see `docs/dataset-spec.md`'s
@@ -106,8 +108,8 @@ docs/
 `data/staging/*.csv`, `data/normalized/*.csv`, and `data/marts/*.csv` are
 all gitignored build output — regenerate staging with `python -m
 pipelines.cli extract <source>` (`pokeapi` | `opgg` | `munchstats` |
-`rk9` | `limitless` | `limitless_play` | `smogon_ladder` | `pokebase` |
-`bulbagarden` | `all`) and normalized/marts with `make
+`rk9` | `limitless` | `limitless_play` | `smogon_ladder` |
+`showdown_replays` | `pokebase` | `bulbagarden` | `all`) and normalized/marts with `make
 dbt-build`. `make extract-all` / `make refresh` (extract-all → dbt-build →
 validate) / `make release VERSION=X.Y.Z` (refresh → release) chain these,
 mirroring `make dashboard`'s `dbt-build` → `build-dashboard` chain. Each
@@ -194,15 +196,21 @@ dashboard's population banner). Online handles are not legal names: never
 join them to RK9/MunchStats player identities, and keep player-level
 output official-only (`scope_population = 'official'`).
 
-The Showdown ladder (Smogon's statistics, S2) is a third population. It
-feeds only the `ladder_*` marts, never a release entity or
-`int_champions_roster`, and every view of it carries a "Showdown ladder"
-label beside, never added to, the tournament figure it compares with.
+The Showdown ladder (Smogon's statistics, S2, and sampled replays, S3) is
+a third population. It feeds only the `ladder_*` marts, never a release
+entity or `int_champions_roster`, and every view of it carries a "Showdown
+ladder" label beside, never added to, the tournament figure it compares
+with. Replay player names are read only to tell who won and are never
+stored or shown.
 
 **Team-vs-team grain.** `tournament_match` and the head-to-head marts
 report which *team* beat which, not which Pokémon beat which — no source
-publishes a per-battle log naming the four of six actually brought. Any new
-consumer of that data must say so where it's displayed.
+publishes a per-battle log naming the four of six actually brought to an
+official game. Any new consumer of that data must say so where it's
+displayed. Showdown replays do name the four for the ladder
+(`int_ladder_battle*`, `ladder_bring_rate`, `ladder_lead_pairs`); that is
+ladder data only, labelled so, and never stands in for tournament
+results.
 
 **Tournament data has no spreads.** Official tournament team sheets
 publish ability, held item, nature and moves and nothing more. Don't add an
@@ -231,7 +239,7 @@ VERSION=X.Y.Z` (refresh → release).
 
 - `pipelines/extract/` — one module per source (PokéAPI, OP.GG,
   MunchStats, PokéBase, Bulbagarden, RK9, Limitless, Limitless online,
-  Smogon ladder) that writes
+  Smogon ladder, Showdown replays) that writes
   provenance-tagged rows into `data/staging/`. PokéAPI fetches every entry in its `/pokemon` list (base
   species plus Mega/regional/alternate forms); OP.GG and PokéBase each do a
   plain GET against their respective Champions pages (both server-rendered,
@@ -299,7 +307,9 @@ VERSION=X.Y.Z` (refresh → release).
   Showdown ladder views (hooked into the Usage tab and profile through
   `App.extendTab`); `search.js` is the global search (`/`, Ctrl/⌘+K), and
   `sw.js` the offline service worker, written by `build.py` with its
-  precache list. Marts ship as JSON
+  precache list. `templates/embed.html.jinja` becomes `embed.html`, the
+  embeddable Top 12 widget creators put in an `<iframe>`, with its own
+  small inline payload and a citation. Marts ship as JSON
   shards under `docs/dashboard/data/` (core, one per regulation, and
   on-demand files), with the core payload held under 500KB compressed by
   `tests/browser/`. `dictionary.py` generates the Data section's table

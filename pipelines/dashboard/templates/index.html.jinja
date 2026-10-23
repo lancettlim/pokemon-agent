@@ -1371,6 +1371,7 @@
   .bracket-player { display: block; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .bracket-player[aria-expanded="true"] .sb-name { text-decoration: underline; }
   .bracket-player.is-unknown { display: flex; align-items: center; color: var(--muted); font-style: italic; cursor: default; }
+  .bracket-vod { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 var(--space-2); border-top: 1px solid var(--light-blue); font-size: var(--font-sm); font-weight: 700; }
   @media (max-width: 1023px) {
     .bracket-rounds { display: block; }
     .bracket-round:not(.is-active) { display: none; }
@@ -1381,6 +1382,23 @@
   .conversion { font-weight: 700; font-variant-numeric: tabular-nums; }
   .conversion.is-up { color: var(--positive); }
   .conversion.is-down { color: var(--danger); }
+  /* Upcoming online tournaments (list #31): local time, name and organiser,
+     registrations; the registrations drop under the name on phones. */
+  .upcoming { margin-bottom: var(--space-5); }
+  .upcoming-day { margin: var(--space-3) 0 var(--space-1); font-size: var(--font-sm); font-weight: 800; font-style: italic; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .upcoming-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
+  .upcoming-item { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-3); padding: 8px var(--space-3); min-height: 44px; }
+  .upcoming-item + .upcoming-item { border-top: 1px solid var(--light-blue); }
+  .upcoming-time { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .upcoming-main { display: flex; flex-direction: column; min-width: 0; }
+  .upcoming-main a { font-weight: 700; overflow-wrap: anywhere; }
+  .upcoming-seats { display: flex; flex-direction: column; align-items: flex-end; font-size: var(--font-sm); font-variant-numeric: tabular-nums; }
+  .upcoming-reg { font-size: var(--font-xs); color: var(--muted); }
+  .upcoming-reg.is-open { color: var(--positive); font-weight: 700; }
+  @media (max-width: 480px) {
+    .upcoming-item { grid-template-columns: 4.2em minmax(0, 1fr); }
+    .upcoming-seats { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+  }
   /* A top-cut player's path (E2), opened from the bracket. */
   .path-panel { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-5); }
   .path-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
@@ -1538,6 +1556,20 @@
   .ladder-legend li { display: flex; align-items: center; gap: 6px; }
   .ladder-legend .mega-swatch { border-radius: 50%; }
   .ladder-lists { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); }
+  /* Which four they bring (S3): a table, then the common lead pairs. */
+  .ladder-bring { margin-top: var(--space-6); }
+  .lead-pair-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .lead-pair-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+  .lead-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); min-width: 0; }
+  .lead-share { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .lead-pair-list .ladder-sub { grid-column: 1 / -1; }
+  .profile-bring { margin-top: var(--space-5); }
+  .profile-bring h4 { margin: var(--space-1) 0 0; }
+  .bring-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-2) 0; }
+  .bring-stats div { padding: var(--space-2); border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
+  .bring-stats dt { font-size: var(--font-xs); color: var(--muted); font-weight: 700; }
+  .bring-stats dd { margin: 0; font-size: var(--font-lg); font-weight: 800; font-variant-numeric: tabular-nums; }
+  @media (max-width: 480px) { .bring-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .ladder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .ladder-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
   .ladder-list .pokemon-link { min-width: 0; }
@@ -1713,6 +1745,13 @@
   .event-card-pair .share-controls { margin-right: 0; }
   .page-band .event-cards .btn { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
   .board-more a { color: var(--blue); font-weight: 700; }
+  /* The board's embed code (list #33). */
+  .board-more > .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  .embed-panel { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--light-blue); border-radius: var(--radius-sm); background: var(--surface); }
+  .embed-panel .sub { margin: 0 0 var(--space-2); }
+  .embed-code { display: block; width: 100%; font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--navy); resize: vertical; }
+  .embed-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+  .embed-actions .btn { min-height: 44px; display: inline-flex; align-items: center; }
   @media (max-width: 1023px) {
     .board-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 44px; }
     .board-band { grid-row: auto; margin: 0 0 4px; }
@@ -2112,6 +2151,19 @@
       <p class="sub" id="ladder-note"></p>
       <figure class="ladder-figure" id="ladder-scatter"></figure>
       <div class="ladder-lists" id="ladder-lists"></div>
+      {# Which four they bring (docs/upgrade-plan-2027q2.md, S3; list #27):
+         sampled Showdown replays, the same ladder population. #}
+      <section class="ladder-bring" id="ladder-bring-section" hidden>
+        <div class="section-head"><h3>Which four do they bring?</h3><span class="source-chip">Showdown ladder replays</span></div>
+        <details class="method"><summary>How this is computed</summary>
+          <p>A daily sample of rated Showdown ladder replays, Bo1 and Bo3 together. Each replay names the six each side showed at team preview, every Pokémon that entered the battle, the two that led and who won; player names are never kept. <strong>On teams</strong> is the share of sides that showed it; <strong>Led</strong>, how often a side showing it led with it.</p>
+          <p>A Pokémon brought but never sent in looks the same as one left at home, so <strong>Brought</strong> and the win rates read only battles where both sides revealed all four they brought. <strong>Win, brought</strong> and <strong>Win, benched</strong> are the side's win rate with it in the four and without it. A Mega counts with its base Pokémon: team preview doesn't show the stone. Players choose which battles to upload, so this is a sample of the ladder, and never tournament data: official events aren't played on Showdown.</p>
+        </details>
+        <p class="sub" id="ladder-bring-note"></p>
+        <div id="ladder-bring-table"></div>
+        <h4 class="eyebrow">Most common leads</h4>
+        <ol class="lead-pair-list" id="ladder-lead-pairs"></ol>
+      </section>
     </div>
   </section>
 
@@ -2205,6 +2257,9 @@
       <p class="sub" id="profile-counters-note"></p>
       <ol class="counter-list" id="profile-counters"></ol>
       <button type="button" class="show-all-btn" id="profile-counters-more" hidden>Show all</button>
+      {# Brought and led, from sampled replays (S3): the same population,
+         a different source, so it carries its own chip. #}
+      <div class="profile-bring" id="profile-bring" hidden></div>
     </div>
 
     <div class="subtab-panel" data-subpanel="profile-spreads" hidden>
@@ -2524,6 +2579,12 @@
     <h2 class="panel-title">Events</h2>
     <p class="lead" id="events-note">Every Champions event on record.</p>
     <div id="events-table"></div>
+    {# Upcoming online tournaments (docs/upgrade-plan-2027q2.md, list #31),
+       in the visitor's time zone; static/events.js shows them when there
+       are any. #}
+    <div class="section-head" id="upcoming-events-head" hidden><h3>Upcoming online tournaments</h3><span class="phase-chip is-online">Online</span></div>
+    <p class="sub" id="upcoming-events-note" hidden></p>
+    <div id="upcoming-events-list" class="upcoming" hidden></div>
     {# Limitless online tournaments (docs/upgrade-plan-2027q2.md, S1): their
        own list, linking out; static/events.js shows it when there are any. #}
     <div class="section-head" id="online-events-head" hidden><h3>Online tournaments</h3><span class="phase-chip is-online">Online</span></div>

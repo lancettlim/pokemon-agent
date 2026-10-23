@@ -38,6 +38,40 @@ seeds:
         description: First day the set is in force (inclusive, ISO-8601).
       - name: end_date
         description: Day the next set takes over (exclusive, ISO-8601).
+  - name: featured_match_vods
+    description: >
+      Curated "Watch on stream" links (docs/upgrade-plan-2027q2.md, S5 and
+      E5): one row per top-cut match with a video of it, keyed by the
+      match's event, round and table as RK9 reports them. Only videos that
+      are the match itself are listed: Play! Pokémon's dedicated finals
+      uploads ("<player> vs <player> - Pokémon VGC Masters Finals |
+      <event>"), each checked through YouTube's oEmbed endpoint for its
+      title (both finalists named) and its channel (Play Pokémon) on
+      checked_on. A match inside a day-long stream needs a timestamp
+      someone has watched for, so none is guessed: add a row with `t` when
+      one is known. tournament_top_cut_matches carries the link, and
+      assert_featured_match_vods_resolve fails the build when a row names
+      no real top-cut match.
+    columns:
+      - name: event_id
+        description: The match's tournament_event.event_id.
+        tests: [not_null]
+      - name: round_number
+        description: The RK9 round the match was played in.
+        tests: [not_null]
+      - name: table_number
+        description: The match's RK9 table.
+        tests: [not_null]
+      - name: url
+        description: The video's https://www.youtube.com/watch?v=<id> link.
+        tests: [unique, not_null]
+      - name: t
+        description: Seconds into the video the match starts (0 for a video that is the match).
+        tests: [not_null]
+      - name: video_title
+        description: The video's title when it was checked, kept so a reviewer can see what it was matched on.
+      - name: checked_on
+        description: The date the link, title and channel were checked (ISO-8601).
   - name: opgg_key_to_pokeapi_form
     description: >
       Controlled name/form mapping (dataset-spec.md's OP.GG mapping rule:

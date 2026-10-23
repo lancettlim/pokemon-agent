@@ -775,6 +775,7 @@ def write_fixture_marts(
     ]
     if online_events:
         _write(marts_dir / "online_event_summary.csv", online_events)
+    _write(marts_dir / "online_upcoming_events.csv", UPCOMING_EVENTS)
     _write(
         marts_dir / "tournament_team_results.csv",
         [
@@ -1060,6 +1061,76 @@ def write_fixture_ladder_marts(marts_dir: Path) -> None:
             }
         )
     _write(marts_dir / "ladder_stat_point_spreads.csv", spreads)
+    write_fixture_replay_marts(marts_dir)
+
+
+# docs/upgrade-plan-2027q2.md, S3: replay bring rates for the fixture's
+# Pokémon (Kingambit brought 90% of the time, winning more when brought),
+# one below the 30-side floor, and three lead pairs.
+def write_fixture_replay_marts(marts_dir: Path) -> None:
+    source = {
+        "source_name": "Pokémon Showdown replays",
+        "source_url": "https://replay.pokemonshowdown.com",
+    }
+    bring = []
+    for rank, key in enumerate(KEYS, start=1):
+        shown = 400 - rank * 30 if key != KEYS[-1] else 20
+        complete = shown // 2
+        brought = round(complete * (0.9 if key == "kingambit" else 0.7))
+        for variant in ("bo1", "all"):
+            bring.append(
+                {
+                    "regulation_code": "m-c",
+                    "variant": variant,
+                    "pokemon_key": key,
+                    "battles": 1000,
+                    "complete_battles": 600,
+                    "shown": shown,
+                    "shown_share": round(shown / 2000, 4),
+                    "led": shown // 3,
+                    "lead_rate": round((shown // 3) / shown, 4),
+                    "complete_shown": complete,
+                    "brought": brought,
+                    "bring_rate": round(brought / complete, 4),
+                    "brought_decided": brought,
+                    "wins_brought": round(brought * 0.56),
+                    "win_rate_brought": round(round(brought * 0.56) / brought, 4),
+                    "benched_decided": complete - brought,
+                    "wins_benched": round((complete - brought) * 0.4),
+                    "win_rate_benched": round(
+                        round((complete - brought) * 0.4) / (complete - brought), 4
+                    ),
+                    "mega_evolved": 0,
+                    "shown_rank": rank,
+                    **source,
+                }
+            )
+    _write(marts_dir / "ladder_bring_rate.csv", bring)
+    pairs = []
+    for rank, (one, two, led, wins) in enumerate(
+        (
+            ("incineroar", "rillaboom", 120, 66),
+            ("kingambit", "pelipper", 80, 40),
+            ("garchomp", "kingambit", 50, 20),
+        ),
+        start=1,
+    ):
+        pairs.append(
+            {
+                "regulation_code": "m-c",
+                "variant": "all",
+                "pokemon_key_1": one,
+                "pokemon_key_2": two,
+                "sides_led": led,
+                "lead_share": round(led / 2000, 4),
+                "decided": led,
+                "wins": wins,
+                "win_rate": round(wins / led, 4),
+                "pair_rank": rank,
+                **source,
+            }
+        )
+    _write(marts_dir / "ladder_lead_pairs.csv", pairs)
 
 
 # docs/upgrade-plan-2027q2.md, Q4: the fixture's Pokémon in Japanese and
@@ -1245,6 +1316,8 @@ def write_fixture_event_phase_marts(marts_dir: Path) -> None:
                 "winner_team_id": one["team_id"],
                 "outcome": "player1_win",
                 "is_complete": "true",
+                # A curated video for the final only (S5).
+                "vod_url": FIXTURE_VOD_URL if label == "Final" else "",
             }
             for n, s in ((1, one), (2, two)):
                 row.update({f"{field}_{n}": value for field, value in s.items()})
@@ -1288,6 +1361,35 @@ def write_fixture_event_phase_marts(marts_dir: Path) -> None:
     _write(marts_dir / "tournament_top_cut_matches.csv", matches)
     _write(marts_dir / "tournament_top_cut_paths.csv", paths)
 
+
+FIXTURE_VOD_URL = "https://www.youtube.com/watch?v=GHNLQjVj1Xc"
+
+# Upcoming online tournaments (list #31), against the browser tests' usual
+# clock of 2026-10-20T12:00Z: one already started, two ahead (today and
+# tomorrow in UTC), one past the 14-day horizon, and one in another
+# regulation.
+UPCOMING_EVENTS = [
+    {
+        "tournament_id": tournament_id,
+        "tournament_name": name,
+        "regulation_code": regulation,
+        "starts_at_utc": starts,
+        "platform": platform,
+        "organizer_name": "Fixture League",
+        "registrations": registrations,
+        "player_cap": cap,
+        "registration_open": "true" if open_ else "false",
+        "source_url": f"https://play.limitlesstcg.com/tournament/{tournament_id}/details",
+        "extracted_at_utc": "2026-10-20T06:00:00Z",
+    }
+    for tournament_id, name, regulation, starts, platform, registrations, cap, open_ in (
+        ("up-started", "Started Cup", "m-c", "2026-10-20T11:00:00Z", "Switch", 40, None, True),
+        ("up-today", "Evening Cup", "m-c", "2026-10-20T18:00:00Z", "Switch", 22, 32, True),
+        ("up-tomorrow", "Showdown Open", "m-c", "2026-10-21T09:30:00Z", "Showdown", 0, None, False),
+        ("up-far", "Winter Classic", "m-c", "2026-11-20T18:00:00Z", "Switch", 5, None, True),
+        ("up-mb", "Old Format Cup", "m-b", "2026-10-22T18:00:00Z", "Switch", 8, None, True),
+    )
+]
 
 # A one-pixel PNG: the share-card manifest only has to point at real files.
 _PIXEL_PNG = bytes.fromhex(

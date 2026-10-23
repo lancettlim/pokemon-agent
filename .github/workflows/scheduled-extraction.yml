@@ -21,6 +21,10 @@ name: Scheduled extraction
 # previous snapshot: a run that finds nothing new costs a few listing
 # requests, and a new month lands the day Smogon publishes it.
 #
+# showdown_replays (Showdown ladder replays, S3) samples at most 150 new
+# rated replays per regulation and ladder each run, one request a second
+# (about 15 minutes at most), keeping every battle already held.
+#
 # data/staging/ is gitignored (pipelines/cli.py's snapshot history — see
 # backlog.md #1 — would otherwise grow unboundedly in git history), so
 # runner-to-runner persistence goes through actions/cache instead: each run
@@ -38,7 +42,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Source to extract (pokeapi | opgg | munchstats | rk9 | limitless | limitless_play | smogon_ladder | pokebase | bulbagarden | all); defaults to the triggering schedule's normal set"
+        description: "Source to extract (pokeapi | opgg | munchstats | rk9 | limitless | limitless_play | smogon_ladder | showdown_replays | pokebase | bulbagarden | all); defaults to the triggering schedule's normal set"
         required: false
         default: ""
 
@@ -75,7 +79,7 @@ jobs:
           elif [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
             echo "sources=pokeapi" >> "$GITHUB_OUTPUT"
           else
-            echo "sources=opgg munchstats rk9 limitless limitless_play smogon_ladder pokebase" >> "$GITHUB_OUTPUT"
+            echo "sources=opgg munchstats rk9 limitless limitless_play smogon_ladder showdown_replays pokebase" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run extraction

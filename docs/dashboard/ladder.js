@@ -8,6 +8,9 @@
  *   #/pokemon/<key>/counters    checks and counters, from battle logs
  *   #/pokemon/<key>/spreads     the Stat Point spreads ladder players ran
  *                               (decision D3: ladder only)
+ * and, from sampled Showdown replays (S3, laundry list #27), which of a
+ * team is brought and led: a table and the common lead pairs under the
+ * Ladder view, and a line on the profile's Counters panel.
  * Hooked into app.js's Usage tab and profile through App.extendTab. */
 (function () {
   "use strict";
@@ -237,6 +240,86 @@
     listsEl.innerHTML = listHtml("Played more on the ladder", more) + listHtml("Played more at tournaments", less);
   }
 
+  // ---------- Showdown replays: brought, led (S3, list #27) ----------
+
+  // A rate on fewer sides than this is left out: noise.
+  var MIN_BRING_SIDES = 30;
+  var LEAD_PAIRS_SHOWN = 10;
+  var bringTable = null;
+
+  function replayNote(row, reg) {
+    return esc(fallbackText(reg)) + row.battles.toLocaleString() + " rated Bo1 and Bo3 ladder battles in " +
+      esc(regName(reg.code)) + " that players chose to upload, sampled daily (" +
+      row.complete_battles.toLocaleString() + " where both sides revealed all four).";
+  }
+
+  function winTip(wins, decided, what) {
+    return decided ? wins.toLocaleString() + " wins in " + decided.toLocaleString() + " decided battles " + what + "." : "";
+  }
+
+  function renderBringView() {
+    var section = document.getElementById("ladder-bring-section");
+    var noteEl = document.getElementById("ladder-bring-note");
+    var tableEl = document.getElementById("ladder-bring-table");
+    var leadsEl = document.getElementById("ladder-lead-pairs");
+    if (!section || !tableEl) return;
+    var all = App.marts.ladder_bring_rate || [];
+    var reg = ladderRegulation(all);
+    var rows = all.filter(function (r) { return r.regulation_code === reg.code; });
+    section.hidden = !rows.length;
+    if (!rows.length) return;
+    noteEl.innerHTML = replayNote(rows[0], reg) +
+      " Brought means it entered the battle, so bring and win rates read only the battles where every brought Pokémon was revealed.";
+    var listed = rows.filter(function (r) { return r.complete_shown >= MIN_BRING_SIDES; }).map(function (r) {
+      return Object.assign({}, r, { pokemon_name: nameOf(r.pokemon_key) });
+    });
+    if (!bringTable) {
+      bringTable = App.createDataTable(tableEl, {
+        caption: "Brought from team preview, Showdown ladder",
+        citation: function () {
+          return { scope: "Showdown ladder replays, " + regName(reg.code), sample: "n = " + rows[0].battles.toLocaleString() + " battles" };
+        },
+        sort: { key: "shown", dir: "desc" },
+        limit: 15,
+        empty: "No Pokémon was shown in " + MIN_BRING_SIDES + " complete battles yet.",
+        columns: [
+          { key: "pokemon_name", label: "Pokémon", type: "pokemon", main: true, sortable: true },
+          {
+            key: "shown", label: "On teams", type: "share", sortKey: "shown", main: true,
+            render: function (r) { return esc(pct(r.shown_share)); },
+            title: function (r) { return r.shown.toLocaleString() + " of the sampled sides showed it at team preview."; },
+          },
+          {
+            key: "bring_rate", label: "Brought", type: "percent", main: true,
+            title: function (r) { return "Brought " + r.brought.toLocaleString() + " times of " + r.complete_shown.toLocaleString() + " in complete battles."; },
+          },
+          {
+            key: "lead_rate", label: "Led", type: "percent",
+            title: function (r) { return "Led " + r.led.toLocaleString() + " times of " + r.shown.toLocaleString() + "."; },
+          },
+          {
+            key: "win_rate_brought", label: "Win, brought", type: "percent", hideOnPhone: true,
+            title: function (r) { return winTip(r.wins_brought, r.brought_decided, "it was brought"); },
+          },
+          {
+            key: "win_rate_benched", label: "Win, benched", type: "percent", hideOnPhone: true,
+            title: function (r) { return winTip(r.wins_benched, r.benched_decided, "it stayed home"); },
+          },
+        ],
+      });
+    }
+    bringTable.setRows(listed);
+    var pairs = (App.marts.ladder_lead_pairs || []).filter(function (r) { return r.regulation_code === reg.code; })
+      .sort(function (a, b) { return a.pair_rank - b.pair_rank; }).slice(0, LEAD_PAIRS_SHOWN);
+    leadsEl.innerHTML = pairs.length ? pairs.map(function (r) {
+      return '<li><span class="lead-pair">' + App.pokemonCell(r.pokemon_key_1, nameOf(r.pokemon_key_1)) +
+        App.pokemonCell(r.pokemon_key_2, nameOf(r.pokemon_key_2)) + "</span>" +
+        '<span class="lead-share">' + esc(pct(r.lead_share)) + "</span>" +
+        '<span class="ladder-sub" data-tip="' + esc(winTip(r.wins, r.decided, "with this lead")) + '" tabindex="0">' +
+        r.sides_led.toLocaleString() + " leads · won " + esc(pct(r.win_rate)) + "</span></li>";
+    }).join("") : '<li class="empty-state">No lead pair yet.</li>';
+  }
+
   function setupLadderView() {
     var controls = document.getElementById("ladder-controls");
     if (!controls) return;
@@ -255,6 +338,7 @@
       renderLadderView();
     });
     renderLadderView();
+    renderBringView();
   }
 
   App.extendTab("usage", setupLadderView);
@@ -353,7 +437,47 @@
     }).join("") + "</ol>";
   }
 
+  // The profile's line from replays (S3). A Mega form reads its base
+  // Pokémon's row: team preview hides the stone, so replays count them
+  // together.
+  function drawBring(profile) {
+    var el = document.getElementById("profile-bring");
+    if (!el) return;
+    var all = App.marts.ladder_bring_rate || [];
+    var reg = ladderRegulation(all);
+    var key = profile.pokemon_key;
+    var base = (App.DATA.form_species || {})[key];
+    var find = function (k) {
+      return all.filter(function (r) { return r.regulation_code === reg.code && r.pokemon_key === k; })[0];
+    };
+    var row = find(key);
+    var viaBase = false;
+    if (!row && base && /-mega/.test(key)) {
+      row = find(base);
+      viaBase = !!row;
+    }
+    if (!row || row.complete_shown < MIN_BRING_SIDES) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = '<p class="source-chip-row"><span class="source-chip">Showdown ladder replays</span></p>' +
+      "<h4>When it's on the team</h4>" +
+      '<dl class="bring-stats">' +
+      "<div><dt>Brought</dt><dd>" + esc(pct(row.bring_rate)) + "</dd></div>" +
+      "<div><dt>Led</dt><dd>" + esc(pct(row.lead_rate)) + "</dd></div>" +
+      '<div><dt>Win, brought</dt><dd data-tip="' + esc(winTip(row.wins_brought, row.brought_decided, "it was brought")) + '" tabindex="0">' +
+      esc(pct(row.win_rate_brought)) + "</dd></div>" +
+      '<div><dt>Win, benched</dt><dd data-tip="' + esc(winTip(row.wins_benched, row.benched_decided, "it stayed home")) + '" tabindex="0">' +
+      esc(pct(row.win_rate_benched)) + "</dd></div></dl>" +
+      '<p class="sub">' + (viaBase ? "Counted with " + esc(nameOf(base)) + ": team preview doesn't show the Mega Stone. " : "") +
+      "Of the ladder teams showing " + esc(viaBase ? nameOf(base) : profile.pokemon_name) + " at team preview, in " +
+      row.complete_battles.toLocaleString() + " complete battles of " + row.battles.toLocaleString() +
+      " sampled replays (" + esc(regName(reg.code)) + "). Not tournament data.</p>";
+  }
+
   App.extendTab("profile", function (profile) {
+    drawBring(profile);
     drawCounters(profile);
     drawSpreads(profile);
   });

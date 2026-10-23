@@ -169,14 +169,18 @@ def open_page(browser):
         permissions=None,
         touch: bool = False,
         service_workers: str = "block",
+        timezone_id: str | None = None,
+        locale: str | None = None,
     ):
         # sw.js (Q5) would answer requests page.route() means to intercept,
         # so workers are blocked unless a test is about them.
+        options = {"timezone_id": timezone_id, "locale": locale}
         context = browser.new_context(
             viewport={"width": width, "height": height},
             permissions=permissions or [],
             has_touch=touch,
             service_workers=service_workers,
+            **{key: value for key, value in options.items() if value},
         )
         contexts.append(context)
         if storage:

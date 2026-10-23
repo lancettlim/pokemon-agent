@@ -1,0 +1,130 @@
+{
+  "source_name": "Pokémon Showdown replays",
+  "source_url": "https://replay.pokemonshowdown.com",
+  "refresh_cadence": "daily, a capped sample (at most 150 new replays per format per run, one request a second)",
+  "records_captured": [
+    "Rated Showdown ladder battles of each registered regulation (Bo1 and Bo3), one row per side: the six at team preview, the Pokémon that entered the battle, the leads, Mega Evolutions and the result (docs/upgrade-plan-2027q2.md, S3; laundry list #27)"
+  ],
+  "fields": [
+    {
+      "name": "replay_id",
+      "type": "string",
+      "required": true,
+      "description": "Showdown's replay id (\"gen9championsvgc2026regmc-2703219567\")"
+    },
+    {
+      "name": "format_id",
+      "type": "string",
+      "required": true,
+      "description": "The ladder format, the regulation registry's munchstats_format plus \"bo3\" for the Bo3 ladder"
+    },
+    {
+      "name": "regulation_code",
+      "type": "string",
+      "required": true,
+      "description": "The registry's regulation_code for that format"
+    },
+    {
+      "name": "variant",
+      "type": "string",
+      "required": true,
+      "description": "bo1 or bo3"
+    },
+    {
+      "name": "uploaded_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "When the replay was uploaded, ISO-8601 UTC (always inside the regulation's window)"
+    },
+    {
+      "name": "rating",
+      "type": "integer",
+      "required": false,
+      "description": "The battle's ladder rating as the search lists it; empty when it lists none (a Bo3 set's first game)"
+    },
+    {
+      "name": "turns",
+      "type": "integer",
+      "required": true,
+      "description": "The last turn the log reached"
+    },
+    {
+      "name": "side",
+      "type": "string",
+      "required": true,
+      "description": "p1 or p2"
+    },
+    {
+      "name": "result",
+      "type": "string",
+      "required": true,
+      "description": "win, loss or tie, for this side"
+    },
+    {
+      "name": "team_size",
+      "type": "integer",
+      "required": false,
+      "description": "How many Pokémon each side brings (the log's teamsize, 4 in VGC)"
+    },
+    {
+      "name": "team",
+      "type": "string",
+      "required": true,
+      "description": "The six shown at team preview, pipe-delimited Showdown names in preview order. A Mega shows as its base Pokémon; a form preview hides (\"Urshifu-*\") takes the form that entered the battle, else its base name"
+    },
+    {
+      "name": "brought",
+      "type": "string",
+      "required": true,
+      "description": "Every Pokémon of the team that entered the battle, pipe-delimited in order of first appearance; an Illusion that ended is credited to the Pokémon really sent in"
+    },
+    {
+      "name": "leads",
+      "type": "string",
+      "required": true,
+      "description": "The Pokémon on the field when the battle started, pipe-delimited"
+    },
+    {
+      "name": "mega_evolved",
+      "type": "string",
+      "required": false,
+      "description": "Team members that Mega Evolved, pipe-delimited (by their preview names)"
+    },
+    {
+      "name": "source_name",
+      "type": "string",
+      "required": true,
+      "description": "Constant: Pokémon Showdown replays"
+    },
+    {
+      "name": "source_url",
+      "type": "string",
+      "required": true,
+      "description": "The replay's page on replay.pokemonshowdown.com"
+    },
+    {
+      "name": "source_record_id",
+      "type": "string",
+      "required": true,
+      "description": "<replay_id>:<side>"
+    },
+    {
+      "name": "extracted_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "ISO-8601 UTC extraction timestamp"
+    },
+    {
+      "name": "dataset_version",
+      "type": "string",
+      "required": true,
+      "description": "Dataset version this staging snapshot feeds"
+    }
+  ],
+  "known_risks": [
+    "A sample of the replays players chose to upload, not every ladder battle: uploads lean to memorable games",
+    "Brought means entered the battle: a Pokémon brought but never sent in can't be told from one left at home, so bring figures read only complete battles (both sides revealed all team_size Pokémon)",
+    "Player names are read only to tell which side won and are never stored; the source_url replay page still shows them, so staging stays unpublished and the dashboard shows aggregates only",
+    "Official events are played on the game, not Showdown: no replay belongs to an official event and none is joined to RK9 or MunchStats"
+  ]
+}

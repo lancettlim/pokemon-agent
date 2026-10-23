@@ -887,6 +887,8 @@ models:
         description: "Slots in the top cut's first round (16, or 32)."
       - name: round_label
         description: "'Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals' or 'Final'."
+      - name: vod_url
+        description: "A video of the match from the curated featured_match_vods seed (S5), with `&t=<n>s` when it starts partway in; empty for a match with none."
   - name: tournament_top_cut_paths
     description: >
       Every Masters round each top-cut team played (docs/upgrade-plan-
@@ -904,6 +906,107 @@ models:
         description: "'Day 1', 'Day 2' or 'Top cut'."
       - name: result
         description: "W, L, T or Bye, for this team."
+  - name: ladder_bring_rate
+    description: >
+      How often each Pokémon is shown at team preview, brought, led and
+      Mega Evolved on the Showdown ladder, and how its side does when it is
+      brought versus left at home (docs/upgrade-plan-2027q2.md, S3; laundry
+      list #27), from sampled rated replays (pipelines/extract/
+      showdown_replays.py). One row per regulation, variant (bo1, bo3, or
+      'all' for both) and Pokémon. Shown and led read every sampled battle;
+      brought, benched and their win rates read complete battles only (both
+      sides revealed all the Pokémon they brought), since a Pokémon brought
+      but never sent in looks benched. The Showdown ladder population, never
+      tournament data: official events aren't played on Showdown. A Mega
+      counts with its base Pokémon (team preview hides the stone). Written
+      to data/marts/ladder_bring_rate.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'pokemon_key']
+          config:
+            meta: {category: mart_quality, table_name: ladder_bring_rate}
+    columns:
+      - name: battles
+        description: Sampled battles in the regulation and variant.
+      - name: complete_battles
+        description: Of those, the battles where both sides revealed all the Pokémon they brought.
+      - name: shown
+        description: Sides that showed this Pokémon at team preview.
+      - name: shown_share
+        description: shown over every sampled side.
+      - name: led
+        description: Sides that led with it.
+      - name: lead_rate
+        description: led over shown.
+      - name: complete_shown
+        description: Sides in complete battles that showed it.
+      - name: brought
+        description: Of those, sides that brought it (it entered the battle).
+      - name: bring_rate
+        description: brought over complete_shown.
+      - name: win_rate_brought
+        description: The side's win rate when it was brought, in decided complete battles.
+      - name: win_rate_benched
+        description: The side's win rate when it stayed home, in decided complete battles.
+      - name: mega_evolved
+        description: Sides on which it Mega Evolved.
+      - name: shown_rank
+        description: Rank by shown, ties broken on pokemon_key.
+  - name: ladder_lead_pairs
+    description: >
+      The 50 pairs Showdown ladder players most often lead with per
+      regulation and variant (bo1, bo3, 'all'), from sampled rated replays
+      (docs/upgrade-plan-2027q2.md, S3; laundry list #27): how often each
+      opens a battle and that side's win rate in decided battles. The Showdown
+      ladder population, never tournament data. A Mega counts with its base
+      Pokémon. Written to data/marts/ladder_lead_pairs.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['regulation_code', 'variant', 'pokemon_key_1', 'pokemon_key_2']
+          config:
+            meta: {category: mart_quality, table_name: ladder_lead_pairs}
+    columns:
+      - name: pokemon_key_1
+        description: The pair's first Pokémon (the lower key).
+      - name: pokemon_key_2
+        description: The pair's second Pokémon.
+      - name: sides_led
+        description: Sides that opened with the pair.
+      - name: lead_share
+        description: sides_led over every sampled side that led with two Pokémon.
+      - name: win_rate
+        description: Those sides' win rate in decided battles.
+      - name: pair_rank
+        description: Rank by sides_led, ties broken on the keys.
+  - name: online_upcoming_events
+    description: >
+      Upcoming Limitless online tournaments of the regulation in force (and
+      one registered to start within 30 days), from the newest
+      limitless_play_upcoming snapshot (docs/upgrade-plan-2027q2.md, list
+      #31): one row per tournament, from three hours before the snapshot
+      was read on. Organiser-run online events, never official ones; no
+      player appears. Feeds the Events tab's "Upcoming online tournaments"
+      list, which shows local times and drops tournaments that have
+      started. Written to data/marts/online_upcoming_events.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['tournament_id']
+          config:
+            meta: {category: mart_quality, table_name: online_upcoming_events}
+    columns:
+      - name: starts_at_utc
+        description: "Scheduled start, ISO-8601 UTC (\"2026-10-23T12:00:00Z\")."
+      - name: platform
+        description: "'Switch' (the game) or 'Showdown' (Pokémon Showdown)."
+      - name: registrations
+        description: Players registered when the page was read.
+      - name: player_cap
+        description: The registration cap, empty when the organiser set none.
+      - name: registration_open
+        description: Whether registration was open when the page was read.
   - name: archetype_matchups
     description: >
       Detected archetype vs detected archetype records from decided official

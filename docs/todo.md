@@ -1060,6 +1060,24 @@ added as they ship:
 - [x] Compare tray: pin up to four Pokémon (list #34)
   Pinned from profiles, a bottom sheet on phones and a card from 721px;
   Compare now takes two to four (`#/compare/<a>,<b>,<c>,<d>`).
+- [x] "Watch on stream" links from a curated VOD seed (S5, E5)
+  `dbt/seeds/featured_match_vods.csv`: five finals, each a dedicated Play!
+  Pokémon upload checked for title and channel; `vod_url` on
+  `tournament_top_cut_matches`. Matches inside day-long streams wait for a
+  watched timestamp rather than a guessed one.
+- [x] Upcoming online events with local times (list #31)
+  `limitless_play.extract_upcoming` (one request per regulation) and
+  `online_upcoming_events`; the Events tab groups the next 14 days by the
+  visitor's local day.
+- [x] Embeddable Top 12 / usage widget with a citation (list #33)
+  `embed.html`, its own small payload; grid or list, any regulation, board,
+  language and theme; the Overview board hands out the iframe snippet.
+- [x] Showdown replay discovery: bring rate and lead pairs (S3, list #27)
+  `pipelines/extract/showdown_replays.py` samples rated ladder replays
+  daily (no player names kept); `int_ladder_battle`, `_side` and
+  `_pokemon` (roadmap Phase 4's grains) feed `ladder_bring_rate` and
+  `ladder_lead_pairs`, gated by `assert_ladder_battles_well_formed`. Ladder
+  data only: no official event is played on Showdown.
 
 ## Release readiness (v1 definition of done)
 

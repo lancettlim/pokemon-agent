@@ -1,6 +1,7 @@
 import csv
 from datetime import date
 
+import pytest
 import requests
 
 from pipelines.extract import http as extract_http
@@ -108,10 +109,13 @@ _PAIRINGS = [
 
 
 class _FakeResponse:
-    def __init__(self, payload=None, status_code: int = 200, headers: dict | None = None):
+    def __init__(
+        self, payload=None, status_code: int = 200, headers: dict | None = None, text: str = ""
+    ):
         self._payload = payload
         self.status_code = status_code
         self.headers = headers or {}
+        self.text = text
 
     def json(self):
         return self._payload
@@ -328,3 +332,102 @@ def test_a_rate_limited_call_waits_and_retries_as_one_request():
     assert len(session.requested) == 2
     # Waited out, then answered: one logical request, not a failure.
     assert (stats.attempted, stats.succeeded, stats.failed_urls) == (1, 1, [])
+
+
+# Two rows trimmed from the real upcoming page (2026-10-23, format M-C).
+_UPCOMING_PAGE = """<table class="striped upcoming-tournaments"><tr><th>Date</th></tr>
+<tr data-platform="SWITCH" data-date="2026-10-23T12:00:00.000Z" data-name="Malaysia Poke Ball League #12" data-organizer="Malaysia Poke Ball League" data-format="1" data-players="22" data-registration="2"><td class="date"><a class="time" href="/tournament/6ac9a5df8a8383117e3e85d6/details" data-time="1792756800000"></a></td><td class="organizer"><a href="/organizer/2849">Malaysia Poke Ball League</a></td><td class="registrations"><a href="/tournament/6ac9a5df8a8383117e3e85d6/registrations">22 / 32<span class="hide-md"> Registrations</span></a></td><td class="registration-link"><a class="register open" href="/tournament/6ac9a5df8a8383117e3e85d6/register">register</a></td></tr>
+<tr data-platform="SIM" data-date="2026-10-28T18:00:00.000Z" data-name="Alpensee Tour (Reg M-C) #81 &amp; Friends" data-organizer="Alpensee eSports e.V." data-format="1" data-players="0" data-registration="1"><td class="date"><a class="time" href="/tournament/6abaa2a5880ed327106dea23/details"></a></td><td class="organizer"><a href="/organizer/2812">Alpensee eSports e.V.</a></td><td class="registrations"><a href="/tournament/6abaa2a5880ed327106dea23/registrations">0<span class="hide-md"> Registrations</span></a></td><td class="registration-link"><span class="register closed" title="Registration not open">not open</span></td></tr>
+</table>"""
+
+
+class _UpcomingSession:
+    def __init__(self, page=_UPCOMING_PAGE):
+        self.requested: list[str] = []
+        self.page = page
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        self.requested.append(url)
+        return (
+            _FakeResponse(text=self.page)
+            if "/tournaments/upcoming" in url
+            else _FakeResponse(status_code=404)
+        )
+
+
+def test_parse_upcoming_reads_the_rows_data_attributes_and_links():
+    rows = limitless_play.parse_upcoming(
+        _UPCOMING_PAGE,
+        _REGULATIONS[1],
+        extracted_at_utc="2026-10-23T06:00:00+00:00",
+        dataset_version="0.0.0-dev",
+    )
+
+    first, second = rows
+    assert first["tournament_id"] == "6ac9a5df8a8383117e3e85d6"
+    assert first["starts_at_utc"] == "2026-10-23T12:00:00.000Z"
+    assert (first["platform"], first["organizer_id"]) == ("SWITCH", "2849")
+    assert (first["registrations"], first["player_cap"], first["registration_open"]) == (
+        22,
+        32,
+        True,
+    )
+    assert first["regulation_code"] == "m-c" and first["tournament_format"] == "M-C"
+    assert (
+        first["source_url"]
+        == f"{limitless_play.BASE_URL}/tournament/{first['tournament_id']}/details"
+    )
+    # Entities unescaped; no cap; registration not open yet.
+    assert second["tournament_name"] == "Alpensee Tour (Reg M-C) #81 & Friends"
+    assert (second["platform"], second["player_cap"], second["registration_open"]) == (
+        "SIM",
+        "",
+        False,
+    )
+
+
+def test_a_page_without_the_table_fails_rather_than_listing_nothing():
+    with pytest.raises(ValueError, match="upcoming-tournaments"):
+        limitless_play.parse_upcoming(
+            "<html>maintenance</html>",
+            _REGULATIONS[1],
+            extracted_at_utc="2026-10-23T06:00:00+00:00",
+            dataset_version="0.0.0-dev",
+        )
+
+
+def test_upcoming_lists_the_regulation_in_force_and_one_starting_soon():
+    m_d = Regulation("m-d", "D", "fd", "m-d", date(2026, 12, 2), date(2027, 3, 1), "M-D")
+    regulations = [*_REGULATIONS, m_d]
+
+    assert limitless_play.upcoming_regulations(regulations, date(2026, 10, 23)) == [_REGULATIONS[1]]
+    assert limitless_play.upcoming_regulations(regulations, date(2026, 11, 15)) == [
+        _REGULATIONS[1],
+        m_d,
+    ]
+
+
+def test_extract_upcoming_writes_one_request_per_regulation(tmp_path):
+    session = _UpcomingSession()
+    limiter, _ = _limiter()
+    path = tmp_path / "upcoming.csv"
+
+    count = limitless_play.extract_upcoming(
+        path,
+        session=session,
+        regulations=_REGULATIONS,
+        today=date(2026, 10, 23),
+        limiter=limiter,
+        extracted_at_utc="2026-10-23T06:00:00+00:00",
+    )
+
+    assert count == 2
+    assert session.requested == [
+        f"{limitless_play.BASE_URL}/tournaments/upcoming?game=VGC&format=M-C"
+    ]
+    rows = _read(path)
+    assert [r["tournament_id"] for r in rows] == [
+        "6ac9a5df8a8383117e3e85d6",
+        "6abaa2a5880ed327106dea23",
+    ]
+    assert list(rows[0]) == limitless_play.UPCOMING_FIELDNAMES

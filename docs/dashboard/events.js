@@ -3,7 +3,8 @@
  * app.js/teams.js and reuses window.DashboardApp.
  *
  *   #/events            every official event in the selected regulation,
- *                       then its Limitless online tournaments
+ *                       the upcoming Limitless online tournaments in the
+ *                       visitor's time zone (list #31), then the past ones
  *                       (docs/upgrade-plan-2027q2.md, S1), which link out
  *                       to play.limitlesstcg.com rather than to an event
  *                       page of ours
@@ -147,7 +148,74 @@
       note.textContent = events.length + " official event" + (events.length === 1 ? "" : "s") + " · " +
         teams.toLocaleString() + " teams in " + App.scopeLabel(App.regulationCode) + ".";
     }
+    setupUpcomingEvents();
     setupOnlineEvents();
+  }
+
+  // Upcoming online tournaments (docs/upgrade-plan-2027q2.md, list #31),
+  // in the visitor's own time zone, grouped by their local day. The list is
+  // as old as the last build, so anything that has started is dropped here.
+  var UPCOMING_DAYS = 14;
+  var UPCOMING_LIMIT = 24;
+
+  function localDayKey(date) {
+    return date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+  }
+
+  function upcomingDayLabel(date, now) {
+    var tomorrow = new Date(now.getTime());
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (localDayKey(date) === localDayKey(now)) return "Today";
+    if (localDayKey(date) === localDayKey(tomorrow)) return "Tomorrow";
+    return date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
+  }
+
+  function setupUpcomingEvents() {
+    var head = document.getElementById("upcoming-events-head");
+    var note = document.getElementById("upcoming-events-note");
+    var list = document.getElementById("upcoming-events-list");
+    if (!head || !list) return;
+    var now = new Date();
+    var horizon = now.getTime() + UPCOMING_DAYS * 864e5;
+    var rows = (marts.online_upcoming_events || []).filter(function (e) {
+      var starts = Date.parse(e.starts_at_utc);
+      return (App.regulationCode === App.ALL_SCOPE || e.regulation_code === App.regulationCode) &&
+        starts > now.getTime() && starts <= horizon;
+    }).sort(function (a, b) { return Date.parse(a.starts_at_utc) - Date.parse(b.starts_at_utc); });
+    head.hidden = note.hidden = list.hidden = !rows.length;
+    if (!rows.length) return;
+    var zone = "";
+    try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { zone = ""; }
+    var read = rows[0].extracted_at_utc ? new Date(Date.parse(rows[0].extracted_at_utc)) : null;
+    var shown = rows.slice(0, UPCOMING_LIMIT);
+    note.innerHTML = rows.length.toLocaleString() + " Limitless online tournament" + (rows.length === 1 ? "" : "s") +
+      " in the next " + UPCOMING_DAYS + " days, in your time zone" + (zone ? " (" + esc(zone) + ")" : "") + ". " +
+      "Organiser-run events; registrations as of " +
+      (read && !isNaN(read) ? esc(read.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) : "the last update") +
+      ". " + (rows.length > shown.length ? "The next " + shown.length + " are below; " : "") +
+      '<a href="https://play.limitlesstcg.com/tournaments/upcoming?game=VGC" target="_blank" rel="noopener">the full list is on Limitless</a>.';
+    var html = "";
+    var lastDay = null;
+    shown.forEach(function (e) {
+      var starts = new Date(Date.parse(e.starts_at_utc));
+      var day = localDayKey(starts);
+      if (day !== lastDay) {
+        if (lastDay !== null) html += "</ol>";
+        html += '<h4 class="upcoming-day">' + esc(upcomingDayLabel(starts, now)) + '</h4><ol class="upcoming-list">';
+        lastDay = day;
+      }
+      var seats = e.registrations == null ? "" :
+        e.registrations.toLocaleString() + (e.player_cap ? " / " + e.player_cap.toLocaleString() : "") + " registered";
+      html += '<li class="upcoming-item">' +
+        '<time class="upcoming-time" datetime="' + esc(e.starts_at_utc) + '">' +
+        esc(starts.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })) + "</time>" +
+        '<span class="upcoming-main"><a href="' + esc(e.source_url) + '" target="_blank" rel="noopener">' + esc(e.tournament_name) + "</a>" +
+        '<span class="sub">' + [e.organizer_name, e.platform].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
+        '<span class="upcoming-seats">' + esc(seats) +
+        '<span class="upcoming-reg' + (e.registration_open ? " is-open" : "") + '">' +
+        (e.registration_open ? "Registration open" : "Not open yet") + "</span></span></li>";
+    });
+    list.innerHTML = html + "</ol>";
   }
 
   // Online tournaments (S1): their own list, never mixed into the official
@@ -320,6 +388,16 @@
       App.teamCompositionHtml(m["pokemon_keys_" + n], 24) + "</div>";
   }
 
+  // A curated video of the match (featured_match_vods, S5 and E5), opening
+  // on YouTube at the match.
+  function vodLinkHtml(m) {
+    if (!m.vod_url || !/^https:\/\/www\.youtube\.com\//.test(m.vod_url)) return "";
+    var who = [m.player_name_1, m.player_name_2].filter(Boolean).join(" vs ");
+    return '<a class="bracket-vod" href="' + esc(m.vod_url) + '" target="_blank" rel="noopener"' +
+      (who ? ' aria-label="Watch ' + esc(who) + ' on YouTube"' : "") + '>' +
+      '<span aria-hidden="true">▶</span> Watch on stream</a>';
+  }
+
   function renderBracket(eventId) {
     var head = document.getElementById("event-bracket-head");
     var chip = document.getElementById("event-bracket-chip");
@@ -353,7 +431,8 @@
           r.matches.map(function (m) {
             return '<div class="bracket-match' + (m.outcome === "bye" ? " is-bye" : "") + '">' +
               bracketSideHtml(m, 1) +
-              (m.outcome === "bye" ? '<div class="bracket-side bracket-bye">Bye</div>' : bracketSideHtml(m, 2)) + "</div>";
+              (m.outcome === "bye" ? '<div class="bracket-side bracket-bye">Bye</div>' : bracketSideHtml(m, 2)) +
+              vodLinkHtml(m) + "</div>";
           }).join("") + "</div></div>";
       }).join("") + "</div>";
   }
@@ -581,7 +660,7 @@
   }
 
   renderOverviewCards();
-  App.registerTab("events", setupEvents, { extraMarts: ["online_event_summary"] });
+  App.registerTab("events", setupEvents, { extraMarts: ["online_event_summary", "online_upcoming_events"] });
   App.registerTab("event", setupEvent, {
     extraMarts: [
       "tournament_team_sheets",

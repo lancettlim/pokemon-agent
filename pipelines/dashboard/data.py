@@ -296,6 +296,31 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ),
         (),
     ),
+    # docs/upgrade-plan-2027q2.md, list #31: the Events tab's upcoming list.
+    "online_upcoming_events": (("registrations", "player_cap"), ()),
+    # docs/upgrade-plan-2027q2.md, S3 and list #27: Showdown ladder replays'
+    # bring rates and lead pairs, on the Ladder view and the profile.
+    "ladder_bring_rate": (
+        (
+            "battles",
+            "complete_battles",
+            "shown",
+            "led",
+            "complete_shown",
+            "brought",
+            "brought_decided",
+            "wins_brought",
+            "benched_decided",
+            "wins_benched",
+            "mega_evolved",
+            "shown_rank",
+        ),
+        ("shown_share", "lead_rate", "bring_rate", "win_rate_brought", "win_rate_benched"),
+    ),
+    "ladder_lead_pairs": (
+        ("sides_led", "decided", "wins", "pair_rank"),
+        ("lead_share", "win_rate"),
+    ),
     "tournament_team_results": (
         ("placement", "event_team_count", "record_wins", "record_losses", "roster_size"),
         ("win_rate",),
@@ -564,7 +589,41 @@ def _slice_ladder_spreads(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+# Replay bring rates and lead pairs (S3) ship the Bo1 and Bo3 ladders
+# pooled ("all"), which is what the views show; the per-variant rows stay in
+# data/marts/.
+LADDER_REPLAY_VARIANT = "all"
+_REPLAY_DROP = ("variant", "source_name", "source_url")
+
+
+def _slice_ladder_replays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {k: v for k, v in row.items() if k not in _REPLAY_DROP}
+        for row in rows
+        if row.get("variant") == LADDER_REPLAY_VARIANT
+    ]
+
+
+# The upcoming list (list #31) keeps the tournament link and the read time
+# (registrations are "as of" it); the rest of the provenance stays in
+# data/marts/.
+_UPCOMING_DROP = ("tournament_format", "source_name", "source_record_id", "dataset_version")
+
+
+def _slice_upcoming(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            **{k: v for k, v in row.items() if k not in _UPCOMING_DROP},
+            "registration_open": str(row.get("registration_open", "")).lower() == "true",
+        }
+        for row in rows
+    ]
+
+
 MART_SLICERS = {
+    "online_upcoming_events": _slice_upcoming,
+    "ladder_bring_rate": _slice_ladder_replays,
+    "ladder_lead_pairs": _slice_ladder_replays,
     "ladder_pokemon_usage": _slice_ladder_usage,
     "ladder_checks_counters": _slice_ladder_counters,
     "ladder_stat_point_spreads": _slice_ladder_spreads,

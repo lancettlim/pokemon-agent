@@ -109,6 +109,39 @@ resolution matched its deferral reason (see `docs/backlog.md` #25/#26):
   tournament team sheets publish none, so they never enter a tournament
   entity, a team sheet or the Builder's sets. See `docs/data-sources.md`
   §10 and `pipelines/extract/smogon_ladder.py`.
+- **Pokémon Showdown replays** (`replay.pokemonshowdown.com`) — added
+  2026-10-23 (`docs/upgrade-plan-2027q2.md`, S3; `docs/roadmap.md`, Phase
+  4). A replay's log names the six each side showed at team preview, the
+  Pokémon that entered the battle, the two that led and who won: the
+  "which four did they bring" signal no tournament source publishes. A
+  daily, paced sample of rated ladder battles per registered regulation
+  (format from the registry's `munchstats_format`, Bo1 and Bo3), one row
+  per battle side (`showdown_replays`); player names are read only to tell
+  who won and are never stored. The same **Showdown ladder population** as
+  Smogon's statistics, feeding **no release entity**: intermediate
+  `int_ladder_battle`, `int_ladder_battle_side` and
+  `int_ladder_battle_pokemon` (the roadmap's `battle`, `battle_side` and
+  `battle_pokemon` grains) and two marts, `ladder_bring_rate` and
+  `ladder_lead_pairs`. Official events are played on the game, so no
+  replay belongs to one and nothing joins RK9 or MunchStats; the
+  team-vs-team surfaces stay as they are, beside it. Bring and
+  win-when-brought figures read complete battles only (both sides revealed
+  all the Pokémon they brought). See `docs/data-sources.md` §11 and
+  `pipelines/extract/showdown_replays.py`.
+- **Limitless upcoming tournaments** (`play.limitlesstcg.com/tournaments/
+  upcoming`) — added 2026-10-23 (`docs/upgrade-plan-2027q2.md`, list #31),
+  a third pass of the Limitless online run: the scheduled online
+  tournaments of the regulation in force (and one registered to start
+  within 30 days), one request per regulation, into
+  `limitless_play_upcoming` and the `online_upcoming_events` mart. No
+  player appears. See `docs/data-sources.md` §9.
+- **Curated stream links** (`dbt/seeds/featured_match_vods.csv`) — added
+  2026-10-23 (`docs/upgrade-plan-2027q2.md`, S5 and E5): a controlled seed,
+  not an extractor, of top-cut matches with a video of them, keyed by
+  event, round and table, feeding `tournament_top_cut_matches.vod_url`.
+  Only videos that are the match itself are listed, each checked for its
+  title and channel; `assert_featured_match_vods_resolve` fails the build
+  when a row names no real match.
 
 ## Image asset source (Phase 4 addition)
 
@@ -398,6 +431,13 @@ value there (vs. as dashboard-only support data) is clearer.
   of (a new regulation's first, partial month until a full one exists); a
   month the previous snapshot holds is reused, so a daily run costs a few
   listing requests and a new month lands the day it is published
+- **Showdown ladder replays**: daily, a sample: at most 150 new rated
+  replays per regulation and ladder (Bo1, Bo3) per run at one request a
+  second, the newest first and then further back from the oldest held;
+  every battle held is kept (up to 5,000 per format, the newest), so the
+  sample grows run by run
+- **Limitless upcoming tournaments**: daily, with the online run; the
+  dashboard drops any that have started by the time it is read
 - **Versioning rule**: publish `dataset_version` on every successful refresh
   cycle with changelog notes for schema or major row-count shifts
 - **Snapshot history**: `python -m pipelines.cli extract <source>` writes

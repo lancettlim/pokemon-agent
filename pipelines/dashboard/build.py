@@ -151,8 +151,10 @@ ON_DEMAND_MARTS = (
     # view; one file holds every scope's and event's rows.
     "mega_stone_usage",
     "team_mega_count",
-    # The Events tab's online list (docs/upgrade-plan-2027q2.md, S1).
+    # The Events tab's online list (docs/upgrade-plan-2027q2.md, S1) and
+    # its upcoming tournaments (list #31).
     "online_event_summary",
+    "online_upcoming_events",
     # Event pages' Day 2 conversion, bracket and paths (E1, E2). The board's
     # Day 2 switch reads the inline KPIs instead.
     "pokemon_event_phase_usage",
@@ -163,6 +165,10 @@ ON_DEMAND_MARTS = (
     "ladder_pokemon_usage",
     "ladder_checks_counters",
     "ladder_stat_point_spreads",
+    # Showdown ladder replays (S3): bring rates and lead pairs on the Ladder
+    # view, a bring line on the profile.
+    "ladder_bring_rate",
+    "ladder_lead_pairs",
     # The Archetypes tab's matchup heatmap (list #30).
     "archetype_matchups",
 )
@@ -418,6 +424,61 @@ def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _embed_tile(tile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "k": tile.get("pokemon_key"),
+        "n": tile.get("pokemon_name"),
+        "s": tile.get("team_share"),
+    }
+
+
+def _embed_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """The embeddable widget's own payload (docs/upgrade-plan-2027q2.md,
+    list #33): every regulation's Top 12 boards as the Overview shows them
+    (All players, Day 2, Online), cut to key, name and team share, with
+    their images and localised names. About 20KB, so the widget never
+    loads the dashboard's shards."""
+    kpis_by_scope = payload.get("kpis_by_scope") or {}
+    boards: dict[str, dict[str, Any]] = {}
+    keys: set[str] = set()
+    for code in payload.get("scope_regulations") or []:
+        entry: dict[str, Any] = {}
+        official = (kpis_by_scope.get(code) or {}).get("top_12_boards") or {}
+        online = (kpis_by_scope.get(data.population_scope(code, data.ONLINE)) or {}).get(
+            "top_12_boards"
+        ) or {}
+        sources = dict(official)
+        if "online" not in sources and online.get("all"):
+            sources["online"] = online["all"]
+        for board_id, board in sources.items():
+            entry[board_id] = {
+                "label": board.get("label"),
+                "team_count": board.get("team_count"),
+                "event_count": board.get("event_count"),
+                **{
+                    group: [_embed_tile(tile) for tile in board.get(group) or []]
+                    for group in ("forms", "species")
+                },
+            }
+            for group in ("forms", "species"):
+                keys.update(t["k"] for t in entry[board_id][group] if t["k"])
+        if entry:
+            boards[code] = entry
+    art = {**(payload.get("sprites") or {}), **(payload.get("hero_art") or {})}
+    names = {
+        language: {key: by_key[key] for key in sorted(keys) if key in by_key}
+        for language, by_key in (payload.get("localised_names") or {}).items()
+    }
+    return {
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "default_regulation": data.scope_regulation(payload.get("default_scope") or data.ALL_SCOPE),
+        "site_url": SITE_URL,
+        "boards": boards,
+        "images": {key: art[key] for key in sorted(keys) if key in art},
+        "names": names,
+    }
+
+
 def _critical_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """The subset of the payload inlined into index.html. Missing keys are
     skipped rather than defaulted, so this stays correct if build() ever
@@ -638,6 +699,11 @@ def build(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text(html, encoding="utf-8")
+    # The embeddable Top 12 widget (list #33), beside the page.
+    embed = env.get_template("embed.html.jinja").render(
+        embed_json=_safe_json(_embed_payload(payload))
+    )
+    (output_dir / "embed.html").write_text(embed, encoding="utf-8")
     for script_name in SCRIPT_NAMES:
         shutil.copyfile(STATIC_DIR / script_name, output_dir / script_name)
     # The one self-hosted display font and its licence (docs/upgrade-plan-

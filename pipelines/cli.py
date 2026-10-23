@@ -39,6 +39,7 @@ from pipelines.extract import (
     pokeapi,
     pokebase,
     rk9,
+    showdown_replays,
     smogon_ladder,
 )
 from pipelines.extract import http as extract_http
@@ -66,6 +67,9 @@ _EXTRACTORS = {
     # writes smogon_ladder_counters and smogon_ladder_spreads, see
     # _run_smogon_ladder.
     "smogon_ladder": (smogon_ladder, "smogon_ladder"),
+    # Showdown ladder replays (docs/upgrade-plan-2027q2.md, S3): a capped,
+    # paced sample of rated battles, reusing every battle already held.
+    "showdown_replays": (showdown_replays, "showdown_replays"),
     "opgg": (opgg, "opgg_champions"),
     "pokebase": (pokebase, "pokebase"),
     "bulbagarden": (bulbagarden, "bulbagarden"),
@@ -94,11 +98,15 @@ _RETENTION_COUNTS = {
     "limitless": 14,
     "limitless_play": 14,
     "limitless_play_pairings": 14,
+    "limitless_play_upcoming": 14,
     # Smogon publishes monthly and a held month is reused, so a daily run
     # only re-stamps it; three snapshots (~14MB each) cover a missed run.
     "smogon_ladder": 3,
     "smogon_ladder_counters": 3,
     "smogon_ladder_spreads": 3,
+    # Each snapshot holds every battle kept (up to 5,000 per format), so a
+    # few cover a missed run.
+    "showdown_replays": 3,
     "pokebase": 14,
     "bulbagarden": 10,
 }
@@ -128,8 +136,12 @@ _ENDPOINTS = {
     "limitless_play": "https://play.limitlesstcg.com/api/tournaments?game=VGC, "
     "/api/tournaments/{id}/standings",
     "limitless_play_pairings": "https://play.limitlesstcg.com/api/tournaments/{id}/pairings",
+    "limitless_play_upcoming": "https://play.limitlesstcg.com/tournaments/upcoming"
+    "?game=VGC&format={limitless_play_format}",
     "pokebase": "https://pokebase.app/pokemon-champions/pokemon",
     "smogon_ladder": "https://www.smogon.com/stats/{month}/chaos/{metagame}[bo3]-{cutoff}.json",
+    "showdown_replays": "https://replay.pokemonshowdown.com/search.json?format={format_id}"
+    "&before={uploadtime}, /{replay_id}.json",
     "bulbagarden": "https://archives.bulbagarden.net/w/api.php (Category:Champions_menu_sprites)",
 }
 
@@ -140,6 +152,7 @@ _SOURCE_NAME_SUFFIXES = {
     "pokeapi_artwork": " (artwork)",
     "pokeapi_names": " (localised names)",
     "limitless_play_pairings": " (pairings)",
+    "limitless_play_upcoming": " (upcoming)",
 }
 
 
@@ -299,17 +312,19 @@ def live_event_ids(today=None) -> list[str]:
 
 
 def _run_limitless_play(dataset_version: str) -> int:
-    """Online tournaments in two tracked passes sharing one rate limiter:
+    """Online tournaments in three tracked passes sharing one rate limiter:
     team sheets (limitless_play), then the pairings of the same tournaments
     (limitless_play_pairings), each reusing its previous snapshot for
-    settled tournaments. Both passes carry one extraction time, so a run
-    that crosses midnight UTC still lands both under the same snapshot
-    date (staging reads snapshot_date from extracted_at_utc)."""
+    settled tournaments, then the upcoming tournaments list
+    (limitless_play_upcoming, list #31). The passes carry one extraction
+    time, so a run that crosses midnight UTC still lands them under the
+    same snapshot date (staging reads snapshot_date from extracted_at_utc)."""
     extracted_at = datetime.now(UTC)
     extracted_at_utc = extracted_at.isoformat()
     date_str = extracted_at.strftime("%Y-%m-%d")
     output_path = _dated_snapshot_path("limitless_play", date_str)
     pairings_path = _dated_snapshot_path("limitless_play_pairings", date_str)
+    upcoming_path = _dated_snapshot_path("limitless_play_upcoming", date_str)
     covered: list[dict] = []
 
     def roster() -> None:
@@ -349,6 +364,18 @@ def _run_limitless_play(dataset_version: str) -> int:
     if not ok:
         return 1
     _prune_old_snapshots("limitless_play_pairings")
+    ok = _run_tracked_extract(
+        source_name=_source_display_name(limitless_play, "limitless_play_upcoming"),
+        staging_subdir="limitless_play_upcoming",
+        output_path=upcoming_path,
+        dataset_version=dataset_version,
+        call=lambda: limitless_play.extract_upcoming(
+            upcoming_path, dataset_version=dataset_version, extracted_at_utc=extracted_at_utc
+        ),
+    )
+    if not ok:
+        return 1
+    _prune_old_snapshots("limitless_play_upcoming")
     return 0
 
 
@@ -395,12 +422,13 @@ def _run_extract(source: str, dataset_version: str) -> int:
     date_str = _snapshot_date()
     output_path = _dated_snapshot_path(staging_subdir, date_str)
     extract_kwargs = {}
-    if source in ("munchstats", "rk9"):
+    if source in ("munchstats", "rk9", "showdown_replays"):
         # backlog.md #44: reuse cached rows for an event that hasn't changed
         # since the previous snapshot, instead of re-fetching everything on
         # every scheduled run. For munchstats that's ~106k roster rows
         # behind a metadata signature check; for rk9 it's every round of a
-        # concluded event, whose pairings are immutable once uploaded.
+        # concluded event, whose pairings are immutable once uploaded; for
+        # showdown_replays every battle already sampled.
         extract_kwargs["previous_snapshot_path"] = _latest_snapshot_path(staging_subdir)
     if source == "rk9":
         # An event still running is fetched again (E4): its cached pairings

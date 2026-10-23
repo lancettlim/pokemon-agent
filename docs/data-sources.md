@@ -304,6 +304,17 @@ projects raises it (`LIMITLESS_API_KEY`). Players are handles, not legal
 names, so online teams never join RK9 or MunchStats identities and get no
 player pages.
 
+**Upcoming tournaments** (`docs/upgrade-plan-2027q2.md`, list #31): the API
+lists a tournament only once it starts, so the scheduled ones come from the
+platform's upcoming page, `GET /tournaments/upcoming?game=VGC&format=M-C`
+(the format filter is honoured: 88 M-C events of 104 VGC ones on
+2026-10-23). Each table row carries its start time, name, organiser,
+platform (`SWITCH`, or `SIM` for Showdown) and registration count as
+`data-*` attributes, plus links holding the tournament and organiser ids
+and a "22 / 32" cap; `extract_upcoming` reads only those, one request per
+regulation in force or starting within 30 days, and fails on a page
+without the table rather than reporting none. There is no robots.txt.
+
 ## 10. Smogon usage statistics (smogon.com/stats)
 **Best for:** The Showdown ladder as its own population: usage, the only
 Pokémon-vs-Pokémon battle signal any source publishes, and Stat Point
@@ -352,3 +363,20 @@ the statistic counts, and at 1760 each encounter is weighted by the chance
 its players are rated that high, so almost no pair clears the bar. They are
 read from the all-ratings files, and labelled so.
 
+## 12. Official stream videos (YouTube): a curated seed
+**Best for:** "Watch on stream" links on top-cut matches
+
+Play! Pokémon uploads each major event's Masters final as its own video,
+titled "<player> vs <player> - Pokémon VGC Masters Finals | <event>", beside
+the day-long stream VODs. A video that is the match itself can be linked at
+`t=0` and checked; a match inside a nine-hour stream needs a timestamp
+someone has watched for. `dbt/seeds/featured_match_vods.csv` (S5) holds
+only the first kind, with the timestamp column ready for the second: on
+2026-10-23 the finals of Indianapolis, Turin, NAIC, the World
+Championships and Frankfurt, each matched on both finalists' names in the
+title and checked through YouTube's oEmbed endpoint
+(`youtube.com/oembed?url=...`, title and channel). Baltimore, Brisbane,
+Recife and Louisville had no dedicated final upload to find, so they have
+no row rather than a guessed one. No API key is used; the seed is curated
+by hand, and a row that names no real top-cut match fails the build
+(`assert_featured_match_vods_resolve`).

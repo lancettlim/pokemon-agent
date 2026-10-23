@@ -57,7 +57,7 @@ def test_phones_get_the_two_lists_without_the_scatter(site_url, open_page):
 def test_profile_checks_and_counters_are_labelled_ladder(site_url, open_page):
     page = _open(open_page, site_url, "#/pokemon/kingambit/counters", "#profile-counters li")
     panel = page.locator('[data-subpanel="profile-counters"]')
-    assert panel.locator(".source-chip").text_content() == "Showdown ladder, from battle logs"
+    assert panel.locator(".source-chip").first.text_content() == "Showdown ladder, from battle logs"
     items = page.locator("#profile-counters li")
     assert items.count() == 6
     assert items.first.locator(".pokemon-link").text_content().strip() == "Garchomp"

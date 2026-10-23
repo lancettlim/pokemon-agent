@@ -72,7 +72,7 @@ jobs:
           # Daily sources are normally already in the restored cache; extract
           # any that are missing (fresh repo, evicted cache) so the build
           # never runs on a partial dataset.
-          for source in munchstats rk9 limitless limitless_play smogon_ladder opgg pokebase; do
+          for source in munchstats rk9 limitless limitless_play smogon_ladder showdown_replays opgg pokebase; do
             subdir="$source"
             [ "$source" = "rk9" ] && subdir="rk9_pairings"
             [ "$source" = "opgg" ] && subdir="opgg_champions"

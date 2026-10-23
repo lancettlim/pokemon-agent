@@ -46,11 +46,22 @@ raises the limit for public-facing projects.
 Players are identified by their Limitless handle, which is not a legal
 name: online teams never join RK9 or MunchStats identities, and the
 dashboard gives them no player pages.
+
+Upcoming tournaments (docs/upgrade-plan-2027q2.md, list #31; contract
+data/staging/limitless_play_upcoming.schema.json) are not in the API, which
+lists tournaments once they start. extract_upcoming reads the platform's
+upcoming page instead, `GET /tournaments/upcoming?game=VGC&format=<label>`,
+one request per regulation in force or registered to start within
+UPCOMING_DAYS. Its table carries each row's start time, name, organiser,
+platform and registration count as `data-*` attributes, so no layout
+parsing is needed beyond them and two links (the tournament and organiser
+ids). A page without the table raises rather than reporting no events.
 """
 
 from __future__ import annotations
 
 import csv
+import html
 import os
 import re
 import time
@@ -127,6 +138,35 @@ PAIRING_FIELDNAMES = [
     "extracted_at_utc",
     "dataset_version",
 ]
+
+
+UPCOMING_FIELDNAMES = [
+    "tournament_id",
+    "tournament_name",
+    "tournament_format",
+    "regulation_code",
+    "starts_at_utc",
+    "platform",
+    "organizer_id",
+    "organizer_name",
+    "registrations",
+    "player_cap",
+    "registration_open",
+    "source_name",
+    "source_url",
+    "source_record_id",
+    "extracted_at_utc",
+    "dataset_version",
+]
+# A regulation registered to start within this many days has its upcoming
+# events listed too, so a rollover's first weekend shows before it begins.
+UPCOMING_DAYS = 30
+_UPCOMING_TABLE = re.compile(r'<table[^>]*class="[^"]*upcoming-tournaments', re.IGNORECASE)
+_UPCOMING_ROW = re.compile(r"<tr\s+([^>]*data-date=[^>]*)>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+_ATTRIBUTE = re.compile(r'data-([a-z-]+)="([^"]*)"')
+_TOURNAMENT_LINK = re.compile(r'href="/tournament/([0-9a-f]+)/')
+_ORGANIZER_LINK = re.compile(r'href="/organizer/(\d+)"')
+_CAP = re.compile(r">\s*\d+\s*/\s*(\d+)")
 
 
 class RateLimiter:
@@ -487,3 +527,88 @@ def extract_pairings(
             )
         )
     _write(output_path, PAIRING_FIELDNAMES, rows)
+
+
+def upcoming_url(regulation: Regulation) -> str:
+    return f"{BASE_URL}/tournaments/upcoming?game={GAME}&format={regulation.limitless_play_format}"
+
+
+def parse_upcoming(
+    page: str,
+    regulation: Regulation,
+    *,
+    extracted_at_utc: str,
+    dataset_version: str,
+) -> list[dict]:
+    """The upcoming page's rows for one regulation, as staging rows."""
+    if not _UPCOMING_TABLE.search(page):
+        raise ValueError(f"no upcoming-tournaments table at {upcoming_url(regulation)}")
+    rows = []
+    for attributes, body in _UPCOMING_ROW.findall(page):
+        data = {key: html.unescape(value) for key, value in _ATTRIBUTE.findall(attributes)}
+        tournament = _TOURNAMENT_LINK.search(body)
+        if not tournament or not data.get("date"):
+            continue
+        tournament_id = tournament.group(1)
+        organizer = _ORGANIZER_LINK.search(body)
+        cap = _CAP.search(body)
+        rows.append(
+            {
+                "tournament_id": tournament_id,
+                "tournament_name": data.get("name", "").strip(),
+                "tournament_format": regulation.limitless_play_format,
+                "regulation_code": regulation.regulation_code,
+                "starts_at_utc": data["date"],
+                "platform": data.get("platform", ""),
+                "organizer_id": organizer.group(1) if organizer else "",
+                "organizer_name": data.get("organizer", "").strip(),
+                "registrations": int(data["players"]) if data.get("players", "").isdigit() else "",
+                "player_cap": int(cap.group(1)) if cap else "",
+                "registration_open": 'class="register open"' in body,
+                "source_name": SOURCE_NAME,
+                "source_url": f"{BASE_URL}/tournament/{tournament_id}/details",
+                "source_record_id": tournament_id,
+                "extracted_at_utc": extracted_at_utc,
+                "dataset_version": dataset_version,
+            }
+        )
+    return rows
+
+
+def upcoming_regulations(regulations: list[Regulation], today: date) -> list[Regulation]:
+    """The regulation in force and any registered to start within
+    UPCOMING_DAYS."""
+    soon = today + timedelta(days=UPCOMING_DAYS)
+    in_force = _regulation_in_force(regulations, today)
+    return [r for r in regulations if r is in_force or (today < r.start_date <= soon)]
+
+
+def extract_upcoming(
+    output_path: Path,
+    *,
+    dataset_version: str = DEFAULT_DATASET_VERSION,
+    session: requests.Session | None = None,
+    regulations: list[Regulation] | None = None,
+    today: date | None = None,
+    limiter=None,
+    extracted_at_utc: str | None = None,
+) -> int:
+    """Write the upcoming online tournaments of the regulations
+    upcoming_regulations picks (data/staging/limitless_play_upcoming
+    .schema.json). Returns the number of rows."""
+    http = session if session is not None else requests.Session()
+    regulations = load_regulations() if regulations is None else regulations
+    extracted_at = extracted_at_utc or datetime.now(UTC).isoformat()
+    today = today or datetime.fromisoformat(extracted_at).date()
+    limiter = limiter or _limiter
+    rows: dict[str, dict] = {}
+    for regulation in upcoming_regulations(regulations, today):
+        limiter.wait()
+        page = get_with_retry(http, upcoming_url(regulation), headers=_headers(), timeout=60).text
+        for row in parse_upcoming(
+            page, regulation, extracted_at_utc=extracted_at, dataset_version=dataset_version
+        ):
+            rows.setdefault(row["tournament_id"], row)
+    ordered = sorted(rows.values(), key=lambda r: (r["starts_at_utc"], r["tournament_id"]))
+    _write(output_path, UPCOMING_FIELDNAMES, ordered)
+    return len(ordered)

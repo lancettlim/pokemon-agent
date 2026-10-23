@@ -61,7 +61,17 @@ it measures tournament history rather than extraction history.
 
 ## Phase 4 — Battle-level analytics discovery
 
-Status: planned research, not yet implementable from the current sources.
+Status: done for the Showdown ladder (2026-10-23, `docs/upgrade-plan-
+2027q2.md` S3); official events remain team vs team. Pokémon Showdown's
+public replays met the steps below: the terms and coverage are recorded in
+`docs/data-sources.md` §11, the contract is
+`data/staging/showdown_replays.schema.json`, the grains are
+`int_ladder_battle`, `int_ladder_battle_side` and
+`int_ladder_battle_pokemon`, and `ladder_bring_rate` and
+`ladder_lead_pairs` sit beside the team-vs-team surfaces, labelled as
+ladder data. Coverage of official events is zero by construction: they are
+played on the game, not Showdown, so the steps stay open for any source
+that ever publishes their battles.
 
 The current `tournament_match` data is team-vs-team. A real Pokémon-level
 matchup product needs a source that publishes at least one of the following:

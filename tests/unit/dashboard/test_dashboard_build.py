@@ -504,3 +504,49 @@ def test_service_worker_precaches_the_shell_and_hashes_it(tmp_path):
     _build(marts_dir, normalized_dir, tmp_path / "again")
     again = (tmp_path / "again" / "sw.js").read_text(encoding="utf-8")
     assert again.split('var BUILD = "', 1)[1].split('"', 1)[0] == build_id
+
+
+def test_embed_payload_carries_each_regulations_boards_and_only_their_assets():
+    # docs/upgrade-plan-2027q2.md, list #33: the widget's own payload.
+    tile = {"pokemon_key": "rillaboom", "pokemon_name": "Rillaboom", "team_share": 0.5194}
+    board = {"label": "All players", "team_count": 3770, "event_count": 5, "forms": [tile]}
+    online = {"label": "Online", "team_count": 13418, "event_count": 234, "forms": [tile]}
+    payload = {
+        "generated_at_utc": "2026-10-23T08:00:00Z",
+        "default_scope": "m-c",
+        "scope_regulations": ["m-c", "m-d"],
+        "kpis_by_scope": {
+            "m-c": {"top_12_boards": {"all": board, "online": online}},
+            # A new regulation with online events only (S1's rollover).
+            "m-d:online": {"top_12_boards": {"all": online}},
+        },
+        "sprites": {"rillaboom": "images/rillaboom.png", "pikachu": "images/pikachu.png"},
+        "hero_art": {"rillaboom": "images/hero/rillaboom.webp"},
+        "localised_names": {"ja": {"rillaboom": "ゴリランダー", "pikachu": "ピカチュウ"}},
+    }
+
+    embed = build._embed_payload(payload)
+
+    assert embed["default_regulation"] == "m-c"
+    assert embed["site_url"] == build.SITE_URL
+    assert set(embed["boards"]["m-c"]) == {"all", "online"}
+    assert embed["boards"]["m-c"]["all"]["forms"] == [
+        {"k": "rillaboom", "n": "Rillaboom", "s": 0.5194}
+    ]
+    assert embed["boards"]["m-c"]["all"]["team_count"] == 3770
+    assert set(embed["boards"]["m-d"]) == {"online"}
+    # Hero art wins over the sprite; Pokémon off every board are left out.
+    assert embed["images"] == {"rillaboom": "images/hero/rillaboom.webp"}
+    assert embed["names"] == {"ja": {"rillaboom": "ゴリランダー"}}
+
+
+def test_build_writes_the_embed_page_beside_the_dashboard(tmp_path):
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    _populate_marts(marts_dir, normalized_dir)
+    _build(marts_dir, normalized_dir, tmp_path / "out")
+
+    html = (tmp_path / "out" / "embed.html").read_text(encoding="utf-8")
+    start = html.index("window.EMBED_DATA = ") + len("window.EMBED_DATA = ")
+    embed = json.loads(html[start : html.index("</script>", start)].rstrip().rstrip(";"))
+    assert "boards" in embed and embed["site_url"] == build.SITE_URL

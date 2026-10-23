@@ -1,5 +1,6 @@
 -- Every Showdown display name in the latest Smogon ladder snapshot
--- (docs/upgrade-plan-2027q2.md, S2) resolved to a pokemon_key. Showdown
+-- (docs/upgrade-plan-2027q2.md, S2) and the latest Showdown replay sample
+-- (S3: the names at team preview) resolved to a pokemon_key. Showdown
 -- names are the ones MunchStats uses, so munchstats_name_to_pokeapi_form
 -- resolves most of them; a name only the ladder has falls back to the slug
 -- rule that seed was built with (lowercase, apostrophes and periods
@@ -16,6 +17,8 @@ with names as (
   select distinct pokemon_name from {{ ref('int_smogon_ladder_counters_latest') }}
   union
   select distinct pokemon_name from {{ ref('int_smogon_ladder_spreads_latest') }}
+  union
+  select distinct unnest(string_split(team, '|')) from {{ ref('int_showdown_replays_latest') }}
 ),
 resolved as (
   select

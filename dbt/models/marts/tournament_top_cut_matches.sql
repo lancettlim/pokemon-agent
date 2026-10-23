@@ -64,7 +64,12 @@ select
   team2.pokemon_keys as pokemon_keys_2,
   cut_matches.winner_team_id,
   cut_matches.outcome,
-  cut_matches.is_complete
+  cut_matches.is_complete,
+  -- A curated video of the match (S5), with the start time in the link.
+  case
+    when vods.url is not null and vods.t > 0 then vods.url || '&t=' || cast(vods.t as varchar) || 's'
+    else vods.url
+  end as vod_url
 from cut_matches
 inner join {{ ref('tournament_event') }} event
   on event.event_id = cut_matches.event_id
@@ -72,4 +77,8 @@ left join teams team1
   on team1.team_id = cut_matches.team_id_1
 left join teams team2
   on team2.team_id = cut_matches.team_id_2
+left join {{ ref('featured_match_vods') }} vods
+  on vods.event_id = cut_matches.event_id
+  and vods.round_number = cut_matches.round_number
+  and vods.table_number = cut_matches.table_number
 order by cut_matches.event_id, cut_matches.round_number, cut_matches.table_number
