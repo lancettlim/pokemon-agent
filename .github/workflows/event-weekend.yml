@@ -1,0 +1,115 @@
+name: Event weekend refresh
+
+# While a tournament is running, rebuild and publish the dashboard every
+# hour (docs/upgrade-plan-2027q2.md, E4), so Swiss standings, Day 2
+# conversion and the top-cut bracket appear while people are still
+# watching. Static output on a faster schedule: no backend.
+#
+# Each hour it refreshes MunchStats, asks `pipelines.cli live-events`
+# whether any event is running or just over (dated from the day before to
+# three days after), and stops there when none is. When one is, it
+# re-extracts RK9 (the live event's pairings are fetched again rather than
+# reused), runs every release gate, renders the share cards, rebuilds the
+# site and deploys it straight to GitHub Pages. It commits nothing: the
+# weekly refresh-dashboard.yml pull request is still how data lands on
+# main, and the next push to docs/** redeploys from main as before.
+#
+# Other sources come from the staging cache scheduled-extraction.yml
+# populates, and sprites from refresh-dashboard.yml's asset cache, both
+# restored read-only. Without the asset cache the build would ship no
+# sprites, so the run stops instead.
+on:
+  schedule:
+    - cron: "23 * * * 5,6,0,1" # hourly, Friday to Monday UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Restore staging snapshot history
+        uses: actions/cache/restore@v4
+        with:
+          path: data/staging
+          key: staging-snapshots-event-weekend-noop
+          restore-keys: |
+            staging-snapshots-
+
+      - name: Restore image asset cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/assets
+          key: dashboard-assets-event-weekend-noop
+          restore-keys: |
+            dashboard-assets-
+
+      - name: Refresh MunchStats and look for a live event
+        id: live
+        run: |
+          set -uo pipefail
+          uv run python -m pipelines.cli extract munchstats
+          if ids=$(uv run python -m pipelines.cli live-events); then
+            echo "Live: $ids"
+            if ! find data/assets -name '*.png' -print -quit 2>/dev/null | grep -q .; then
+              echo "::warning::No sprite cache restored; skipping the rebuild rather than publishing a site without sprites."
+              echo "live=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "live=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "No event is running; nothing to rebuild."
+            echo "live=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Re-extract RK9 pairings
+        if: steps.live.outputs.live == 'true'
+        run: uv run python -m pipelines.cli extract rk9
+
+      - name: dbt build + validate
+        if: steps.live.outputs.live == 'true'
+        run: make validate
+
+      - name: Install Chromium for the share cards
+        if: steps.live.outputs.live == 'true'
+        run: uv run playwright install --with-deps chromium
+
+      - name: Render share cards and build the dashboard
+        if: steps.live.outputs.live == 'true'
+        run: |
+          set -euo pipefail
+          uv run python -m pipelines.cli render-share-cards
+          uv run python -m pipelines.cli build-dashboard
+
+      - uses: actions/configure-pages@v5
+        if: steps.live.outputs.live == 'true'
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.live.outputs.live == 'true'
+        with:
+          path: docs
+
+      - id: deployment
+        if: steps.live.outputs.live == 'true'
+        uses: actions/deploy-pages@v4

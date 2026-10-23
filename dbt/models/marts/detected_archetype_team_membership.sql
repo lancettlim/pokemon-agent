@@ -7,7 +7,7 @@
 -- almost equally well.
 with legal_members as (
   select distinct team_id, pokemon_key
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
 ),
 team_triples as (
   select

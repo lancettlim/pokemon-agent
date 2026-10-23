@@ -10,6 +10,16 @@
 -- rather than raw so incidental casing or padding on either feed doesn't
 -- drop an otherwise-exact match.
 --
+-- A (name, country) two entrants share is left unresolved rather than
+-- guessed (docs/upgrade-plan-2027q2.md, E2): it shows up as the same name
+-- twice in one round, or twice on the roster. Before this, both Noah
+-- Gardners (US) at Indianapolis 2026 resolved to the one who made top 16,
+-- whose bracket path then showed two round-1 matches, and head-to-head
+-- credited his team with the other's results; three events had such a
+-- pair. Only Masters pairings resolve: MunchStats has no Junior or Senior
+-- rosters, so a junior sharing a Masters player's name would otherwise
+-- take their team.
+--
 -- Unresolved players are kept with a null team_id, not dropped: the
 -- residual is real (players who dropped before submitting a team list, and
 -- the Junior/Senior divisions, which MunchStats does not scrape at all), and
@@ -20,9 +30,33 @@ with pairings as (
   select * from {{ ref('int_rk9_latest') }}
 ),
 
--- One row per (event, player). A roster has six slots per player, and in
--- principle two players in one event could share a name and country, so
--- this collapses deterministically rather than fanning the pairing rows out.
+-- (event, name, country) keys two entrants share, from either side.
+pairing_names as (
+  select event_id, division, round_number,
+    lower(trim(player1_name)) as player_join_key,
+    lower(trim(player1_country)) as country_join_key
+  from pairings
+  union all
+  select event_id, division, round_number,
+    lower(trim(player2_name)), lower(trim(player2_country))
+  from pairings
+  where nullif(trim(player2_name), '') is not null
+),
+ambiguous_names as (
+  select distinct event_id, player_join_key, country_join_key
+  from pairing_names
+  where division = 'Masters'
+  group by event_id, division, round_number, player_join_key, country_join_key
+  having count(*) > 1
+  union
+  select event_id, lower(trim(player_name)), lower(trim(player_country))
+  from {{ ref('int_munchstats_deduped') }}
+  group by event_id, lower(trim(player_name)), lower(trim(player_country))
+  having count(distinct player_id) > 1
+),
+
+-- One row per (event, player). A roster has six slots per player, so this
+-- collapses them; a name two players share is excluded above.
 roster_players as (
   select
     event_id,
@@ -42,8 +76,15 @@ roster_players as (
         order by team_id asc
       ) as _rn
     from {{ ref('int_munchstats_deduped') }}
-  )
+  ) deduped
   where _rn = 1
+    and not exists (
+      select 1
+      from ambiguous_names
+      where ambiguous_names.event_id = deduped.event_id
+        and ambiguous_names.player_join_key = lower(trim(deduped.player_name))
+        and ambiguous_names.country_join_key = lower(trim(deduped.player_country))
+    )
 )
 
 select
@@ -74,10 +115,12 @@ select
   pairings.dataset_version
 from pairings
 left join roster_players as player1
-  on player1.event_id = pairings.event_id
+  on pairings.division = 'Masters'
+  and player1.event_id = pairings.event_id
   and player1.player_join_key = lower(trim(pairings.player1_name))
   and player1.country_join_key = lower(trim(pairings.player1_country))
 left join roster_players as player2
-  on player2.event_id = pairings.event_id
+  on pairings.division = 'Masters'
+  and player2.event_id = pairings.event_id
   and player2.player_join_key = lower(trim(pairings.player2_name))
   and player2.country_join_key = lower(trim(pairings.player2_country))

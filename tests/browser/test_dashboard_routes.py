@@ -16,6 +16,7 @@ ROUTES = [
     "#/usage/win-rate",
     "#/usage/success",
     "#/usage/trends",
+    "#/usage/ladder",
     "#/speed",
     "#/pokemon/garchomp",
     "#/pokemon/garchomp/abilities",
@@ -23,7 +24,10 @@ ROUTES = [
     "#/pokemon/garchomp/cores",
     "#/pokemon/garchomp/teams",
     "#/pokemon/garchomp/pressure",
+    "#/pokemon/kingambit/counters",
+    "#/pokemon/kingambit/spreads",
     "#/compare/garchomp,kingambit",
+    "#/compare/garchomp,kingambit,incineroar,rillaboom",
     "#/matchup/rillaboom/sneasler",
     "#/matchup/garchomp/meta",
     "#/usage?window=last-1",
@@ -55,7 +59,7 @@ VIEWPORTS = [(1440, 900), (390, 844)]
 # Elements that only exist once a view has rendered data, not just its
 # static intro text.
 CONTENT_SELECTOR = (
-    ".grid-6xn-tile, tbody tr, .tier-chip, .mover-list li, .expansion-card, "
+    ".grid-6xn-tile, .board-tile, tbody tr, .tier-chip, .mover-list li, .expansion-card, "
     ".compare-card, .roster-item, .type-effect-tile, .event-card, .team-card, "
     ".set-card, .data-card"
 )

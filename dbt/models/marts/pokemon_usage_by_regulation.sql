@@ -13,11 +13,18 @@
 --
 -- usage_share/usage_rank are computed within each regulation_code, so a
 -- share is that Pokémon's standing in that regulation's own events.
+-- team_share (docs/upgrade-plan-2027q2.md, V1) is the share of the
+-- regulation's teams that brought it, the headline metric.
 with regulation_usage as (
   select regulation_scope as regulation_code, pokemon_key, usage_count
   from {{ ref('pokemon_usage_summary') }}
   where event_tier is null
-    and regulation_scope != 'all'
+    and regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
+),
+regulation_teams as (
+  select regulation_code, count(distinct team_id) as team_count
+  from {{ ref('int_champions_roster_official') }}
+  group by regulation_code
 ),
 latest_snapshot as (
   select max(snapshot_date) as snapshot_date
@@ -48,7 +55,7 @@ joined as (
 win as (
   select regulation_scope as regulation_code, pokemon_key, win_rate, record_count
   from {{ ref('pokemon_win_rate_summary') }}
-  where regulation_scope != 'all'
+  where regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 )
 select
   joined.regulation_code,
@@ -58,6 +65,7 @@ select
     joined.usage_count::double / nullif(sum(joined.usage_count) over (partition by joined.regulation_code), 0),
     4
   ) as usage_share,
+  round(joined.usage_count::double / nullif(regulation_teams.team_count, 0), 4) as team_share,
   row_number() over (
     partition by joined.regulation_code order by joined.usage_count desc, joined.pokemon_key
   ) as usage_rank,
@@ -67,4 +75,6 @@ from joined
 left join win
   on win.regulation_code = joined.regulation_code
   and win.pokemon_key = joined.pokemon_key
+left join regulation_teams
+  on regulation_teams.regulation_code = joined.regulation_code
 order by joined.regulation_code, joined.usage_count desc

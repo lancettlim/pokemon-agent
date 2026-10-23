@@ -35,6 +35,7 @@ for how those card PNGs are produced ahead of time.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from datetime import date
@@ -49,10 +50,12 @@ from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
 from pipelines.render import template as render_template
+from pipelines.render import type_glyphs
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_ICONS_DIR = STATIC_DIR / "icons"
+STATIC_FONTS_DIR = STATIC_DIR / "fonts"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "docs" / "dashboard"
 DEFAULT_ITEM_ICON_CACHE_DIR = REPO_ROOT / "data" / "assets" / "dashboard_icons"
@@ -88,14 +91,18 @@ _CRITICAL_PAYLOAD_KEYS = (
     "type_colors",
     "item_icons",
     "pokemon_names",
+    "localised_names",
+    "form_species",
     "reference_teams",
     "regulations",
     "kpis_by_scope",
     "default_scope",
+    "scope_regulations",
     "min_default_scope_teams",
     "mart_files",
     "share_cards",
     "site",
+    "type_glyphs",
 )
 
 # The marts are split into shards so the page downloads only what the view
@@ -109,7 +116,16 @@ _CRITICAL_PAYLOAD_KEYS = (
 #                             extraMarts in static/app.js)
 # The page's scripts, in load order (templates/index.html.jinja's <script>
 # tags). Each is copied verbatim next to index.html.
-SCRIPT_NAMES = ("app.js", "matchup.js", "teams.js", "expansions.js", "events.js", "players.js")
+SCRIPT_NAMES = (
+    "app.js",
+    "matchup.js",
+    "teams.js",
+    "expansions.js",
+    "events.js",
+    "players.js",
+    "ladder.js",
+    "search.js",
+)
 
 SHARD_DIR = "data"
 ON_DEMAND_MARTS = (
@@ -126,7 +142,84 @@ ON_DEMAND_MARTS = (
     "team_list_sheets",
     "player_archetype_record",
     "player_index",
+    # docs/upgrade-plan-2027q2.md: team share widened the usage marts, so
+    # two more single-view marts left core.json to hold its budget: the
+    # Players tab's region view and Top Teams' converged lists.
+    "pokemon_usage_by_country",
+    "team_list_convergence",
+    # The Mega usage panel (E3), on event pages and the Usage tab's Megas
+    # view; one file holds every scope's and event's rows.
+    "mega_stone_usage",
+    "team_mega_count",
+    # The Events tab's online list (docs/upgrade-plan-2027q2.md, S1) and
+    # its upcoming tournaments (list #31).
+    "online_event_summary",
+    "online_upcoming_events",
+    # Event pages' Day 2 conversion, bracket and paths (E1, E2). The board's
+    # Day 2 switch reads the inline KPIs instead.
+    "pokemon_event_phase_usage",
+    "tournament_top_cut_matches",
+    "tournament_top_cut_paths",
+    # The Showdown ladder lens (S2): the Usage tab's Ladder view and the
+    # profile's Checks and counters and Stat Point spreads panels.
+    "ladder_pokemon_usage",
+    "ladder_checks_counters",
+    "ladder_stat_point_spreads",
+    # Showdown ladder replays (S3): bring rates and lead pairs on the Ladder
+    # view, a bring line on the profile.
+    "ladder_bring_rate",
+    "ladder_lead_pairs",
+    # The Archetypes tab's matchup heatmap (list #30).
+    "archetype_matchups",
 )
+
+# Per-move, per-item and per-ability details (type, power, effect text...)
+# repeat on every Pokémon's row in the usage marts. The shards carry them
+# once, as <details> marts in core.json, and static/app.js joins them back
+# onto the rows ("detail_joins"): about 20KB off every regulation shard,
+# which keeps the first view inside its 500KB budget (tests/browser).
+#   mart -> (key column, details mart, detail columns)
+DETAIL_SPLITS = {
+    "pokemon_move_usage": (
+        "move_name",
+        "move_details",
+        ("move_type", "power", "accuracy", "category", "priority", "pp", "short_effect"),
+    ),
+    "pokemon_item_usage": ("item_name", "item_details", ("short_effect",)),
+    "pokemon_ability_usage": ("ability", "ability_details", ("short_effect",)),
+}
+
+# Marts the build summarises into the inline payload and no view reads raw:
+# kept out of every shard file. pokemon_regulation_movers feeds "What
+# changed" through compute_kpis' summarize_movers; pokemon_localised_names
+# becomes the inline localised_names maps (data.localised_names).
+BUILD_ONLY_MARTS = ("pokemon_regulation_movers", "pokemon_localised_names")
+
+
+def _write_service_worker(output_dir: Path, payload: dict[str, Any]) -> None:
+    """Offline at the venue (docs/upgrade-plan-2027q2.md, Q5): static/sw.js
+    with its precache list (the page, scripts, font, the core shard and the
+    default regulation's shard) and a build id hashed from those files, so a
+    rebuild that changes none of them keeps visitors' caches."""
+    files = payload.get("mart_files") or {}
+    default_shard = (files.get("scopes") or {}).get(payload.get("default_scope"))
+    precache = ["./", "index.html", *SCRIPT_NAMES]
+    precache += sorted(f"fonts/{path.name}" for path in (output_dir / "fonts").glob("*.woff2"))
+    precache += [path for path in (files.get("core"), default_shard) if path]
+    # index.html embeds the build time, so it is hashed as its inline
+    # payload without that, beside the other files' bytes.
+    critical = {k: v for k, v in _critical_payload(payload).items() if k != "generated_at_utc"}
+    digest = hashlib.sha1(json.dumps(critical, sort_keys=True, default=str).encode("utf-8"))
+    digest.update((TEMPLATES_DIR / "index.html.jinja").read_bytes())
+    for path in precache[2:]:
+        file = output_dir / path
+        if file.exists():
+            digest.update(file.read_bytes())
+    source = (STATIC_DIR / "sw.js").read_text(encoding="utf-8")
+    source = source.replace("__BUILD_ID__", digest.hexdigest()[:12]).replace(
+        "__PRECACHE__", json.dumps(precache)
+    )
+    (output_dir / "sw.js").write_text(source, encoding="utf-8")
 
 
 def _write_mart_shards(
@@ -153,8 +246,14 @@ def _write_mart_shards(
     def without_names(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [{k: v for k, v in row.items() if k not in name_fields} for row in rows]
 
+    def without_details(mart: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if mart not in DETAIL_SPLITS:
+            return rows
+        drop = DETAIL_SPLITS[mart][2]
+        return [{k: v for k, v in row.items() if k not in drop} for row in rows]
+
     def write(name: str, content: dict[str, Any]) -> str:
-        slim = {mart: without_names(rows) for mart, rows in content.items()}
+        slim = {mart: without_details(mart, without_names(rows)) for mart, rows in content.items()}
         (shard_dir / f"{name}.json").write_text(json.dumps(slim, default=str), encoding="utf-8")
         return f"{SHARD_DIR}/{name}.json"
 
@@ -164,27 +263,56 @@ def _write_mart_shards(
     scoped_names = [
         n
         for n, rows in marts.items()
-        if rows and "regulation_scope" in rows[0] and n not in ON_DEMAND_MARTS
+        if rows
+        and "regulation_scope" in rows[0]
+        and n not in ON_DEMAND_MARTS
+        and n not in BUILD_ONLY_MARTS
     ]
     core = {
         name: rows
         for name, rows in marts.items()
-        if name not in scoped_names and name not in ON_DEMAND_MARTS
+        if name not in scoped_names and name not in ON_DEMAND_MARTS and name not in BUILD_ONLY_MARTS
     }
+    detail_joins = []
+    for mart, (key, details_mart, fields) in DETAIL_SPLITS.items():
+        details: dict[Any, dict[str, Any]] = {}
+        for row in marts.get(mart, []):
+            if row.get(key) is not None and row[key] not in details:
+                details[row[key]] = {key: row[key], **{f: row.get(f) for f in fields}}
+        if details:
+            core[details_mart] = list(details.values())
+            detail_joins.append([mart, key, details_mart, list(fields)])
     index: dict[str, Any] = {
         "core": write("core", core),
         "scopes": {},
         "on_demand": {},
+        "build_only": [name for name in BUILD_ONLY_MARTS if name in marts],
         "name_fields": [list(pair) for pair in data.NAME_JOINS],
+        "detail_joins": detail_joins,
     }
+    # A population scope ("m-c:online", docs/upgrade-plan-2027q2.md, S1)
+    # whose rows a mart doesn't have (player records are official-only)
+    # carries the official scope's rows instead, listed under
+    # official_fallback so the page labels them; static/app.js's
+    # applyRegulationScope reads them under the official scope.
+    # An on-demand mart loads whole, so it only needs listing.
+    index["official_fallback"] = {}
+    scoped_on_demand = [
+        n for n in ON_DEMAND_MARTS if marts.get(n) and "regulation_scope" in marts[n][0]
+    ]
     for scope in scopes:
-        index["scopes"][scope] = write(
-            f"scope-{scope}",
-            {
-                name: [r for r in marts[name] if r.get("regulation_scope") == scope]
-                for name in scoped_names
-            },
-        )
+        content = {}
+        population_scope = data.scope_population(scope) != data.OFFICIAL
+        official = data.scope_regulation(scope)
+        for name in scoped_names + scoped_on_demand:
+            rows = [r for r in marts[name] if r.get("regulation_scope") == scope]
+            if not rows and population_scope:
+                rows = [r for r in marts[name] if r.get("regulation_scope") == official]
+                if rows:
+                    index["official_fallback"].setdefault(scope, []).append(name)
+            if name in scoped_names:
+                content[name] = rows
+        index["scopes"][scope] = write(f"scope-{scope.replace(':', '-')}", content)
     for name in ON_DEMAND_MARTS:
         if name in marts:
             index["on_demand"][name] = write(name, {name: marts[name]})
@@ -249,6 +377,20 @@ def _load_share_cards(output_dir: Path) -> dict[str, Any]:
     manifest["whats_changed"] = {
         k: v for k, v in (manifest.get("whats_changed") or {}).items() if (output_dir / v).exists()
     }
+    # Top 12 cards (V8): {"regulation"|"event": {key: {phase: {layout: path}}}}.
+    top12 = manifest.get("top12") or {}
+    manifest["top12"] = {
+        kind: {
+            key: {
+                phase: {
+                    layout: path for layout, path in layouts.items() if (output_dir / path).exists()
+                }
+                for phase, layouts in phases.items()
+            }
+            for key, phases in (top12.get(kind) or {}).items()
+        }
+        for kind in ("regulation", "event")
+    }
     if manifest.get("og_image") and not (output_dir / manifest["og_image"]).exists():
         manifest["og_image"] = None
     return manifest
@@ -257,18 +399,21 @@ def _load_share_cards(output_dir: Path) -> dict[str, Any]:
 def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
     """Open Graph title/description for link unfurls (docs/upgrade-plan-
     2027q1.md, C4), refreshed on every build from the default regulation's
-    headline: "Reg M-C: Rillaboom leads at 8.7% of roster slots across
-    3,770 teams from 5 events."""
+    headline, in team share (docs/upgrade-plan-2027q2.md, V1): "Reg M-C:
+    Rillaboom is on 51.9% of 3,770 teams from 5 events."""
     kpis = payload.get("kpis") or {}
     scope = payload.get("default_scope") or data.ALL_SCOPE
-    label = "All regulations" if scope == data.ALL_SCOPE else f"Reg {scope.upper()}"
+    regulation = data.scope_regulation(scope)
+    label = "All regulations" if regulation == data.ALL_SCOPE else f"Reg {regulation.upper()}"
+    if data.scope_population(scope) == data.ONLINE:
+        label += " online"
     top = kpis.get("top_used_pokemon")
     description = f"{label}: usage, real sets, events and teams from Pokémon Champions tournaments."
-    if top and top.get("usage_share") is not None:
+    if top and top.get("team_share") is not None:
         description = (
-            f"{label}: {top.get('pokemon_name')} leads at {top['usage_share'] * 100:.1f}% of "
-            f"roster slots across {kpis.get('team_count') or 0:,} teams from "
-            f"{kpis.get('event_count') or 0} events. Real sets, event pages and a team builder."
+            f"{label}: {top.get('pokemon_name')} is on {top['team_share'] * 100:.1f}% of "
+            f"{kpis.get('team_count') or 0:,} teams from {kpis.get('event_count') or 0} events. "
+            "Real sets, event pages and a team builder."
         )
     og_image = (payload.get("share_cards") or {}).get("og_image")
     return {
@@ -276,6 +421,61 @@ def _site_meta(payload: dict[str, Any]) -> dict[str, Any]:
         "title": f"Pokémon Champions Data — {label}",
         "description": description,
         "og_image": SITE_URL + og_image if og_image else None,
+    }
+
+
+def _embed_tile(tile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "k": tile.get("pokemon_key"),
+        "n": tile.get("pokemon_name"),
+        "s": tile.get("team_share"),
+    }
+
+
+def _embed_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """The embeddable widget's own payload (docs/upgrade-plan-2027q2.md,
+    list #33): every regulation's Top 12 boards as the Overview shows them
+    (All players, Day 2, Online), cut to key, name and team share, with
+    their images and localised names. About 20KB, so the widget never
+    loads the dashboard's shards."""
+    kpis_by_scope = payload.get("kpis_by_scope") or {}
+    boards: dict[str, dict[str, Any]] = {}
+    keys: set[str] = set()
+    for code in payload.get("scope_regulations") or []:
+        entry: dict[str, Any] = {}
+        official = (kpis_by_scope.get(code) or {}).get("top_12_boards") or {}
+        online = (kpis_by_scope.get(data.population_scope(code, data.ONLINE)) or {}).get(
+            "top_12_boards"
+        ) or {}
+        sources = dict(official)
+        if "online" not in sources and online.get("all"):
+            sources["online"] = online["all"]
+        for board_id, board in sources.items():
+            entry[board_id] = {
+                "label": board.get("label"),
+                "team_count": board.get("team_count"),
+                "event_count": board.get("event_count"),
+                **{
+                    group: [_embed_tile(tile) for tile in board.get(group) or []]
+                    for group in ("forms", "species")
+                },
+            }
+            for group in ("forms", "species"):
+                keys.update(t["k"] for t in entry[board_id][group] if t["k"])
+        if entry:
+            boards[code] = entry
+    art = {**(payload.get("sprites") or {}), **(payload.get("hero_art") or {})}
+    names = {
+        language: {key: by_key[key] for key in sorted(keys) if key in by_key}
+        for language, by_key in (payload.get("localised_names") or {}).items()
+    }
+    return {
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "default_regulation": data.scope_regulation(payload.get("default_scope") or data.ALL_SCOPE),
+        "site_url": SITE_URL,
+        "boards": boards,
+        "images": {key: art[key] for key in sorted(keys) if key in art},
+        "names": names,
     }
 
 
@@ -456,6 +656,9 @@ def build(
     )
     payload["type_icons"] = _copy_type_icons(output_dir)
     payload["type_colors"] = _type_colors()
+    # Our own white glyphs for the square type badge (V6), shared with the
+    # share-card templates.
+    payload["type_glyphs"] = type_glyphs.GLYPHS
     payload["item_icons"] = _resolve_item_icons(
         payload["marts"],
         output_dir=output_dir,
@@ -496,8 +699,18 @@ def build(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text(html, encoding="utf-8")
+    # The embeddable Top 12 widget (list #33), beside the page.
+    embed = env.get_template("embed.html.jinja").render(
+        embed_json=_safe_json(_embed_payload(payload))
+    )
+    (output_dir / "embed.html").write_text(embed, encoding="utf-8")
     for script_name in SCRIPT_NAMES:
         shutil.copyfile(STATIC_DIR / script_name, output_dir / script_name)
+    # The one self-hosted display font and its licence (docs/upgrade-plan-
+    # 2027q2.md, D4), served from fonts/ beside the page.
+    if STATIC_FONTS_DIR.exists():
+        shutil.copytree(STATIC_FONTS_DIR, output_dir / "fonts", dirs_exist_ok=True)
+    _write_service_worker(output_dir, payload)
     # backlog.md #32's JSON feed: data.json carries every non-mart key plus
     # `mart_files`, the index of the shard files holding the marts (see
     # _write_mart_shards). Together they are the complete payload, still

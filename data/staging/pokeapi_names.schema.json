@@ -1,0 +1,67 @@
+{
+  "source_name": "PokéAPI",
+  "source_url": "https://github.com/PokeAPI/pokeapi/tree/master/data/v2/csv",
+  "refresh_cadence": "weekly, with pokeapi",
+  "records_captured": [
+    "Each form's name in Japanese, Spanish, French and German (docs/upgrade-plan-2027q2.md, Q4)"
+  ],
+  "fields": [
+    {
+      "name": "form_name",
+      "type": "string",
+      "required": true,
+      "description": "The form's PokéAPI slug, matching data/staging/pokeapi.schema.json's form_name and resolving directly to pokemon_key"
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "required": true,
+      "description": "ja, es, fr or de. Portuguese isn't extracted: the Brazilian games use the English names"
+    },
+    {
+      "name": "localised_name",
+      "type": "string",
+      "required": true,
+      "description": "The form's name in the language: PokéAPI's own full form name where it has one, else composed from the species name (see name_rule)"
+    },
+    {
+      "name": "name_rule",
+      "type": "string",
+      "required": true,
+      "description": "How the name was produced: species, pokeapi_form, mega (\"Méga-Dracaufeu Y\"), form_label (species plus PokéAPI's form label), regional (\"Arcanine de Hisui\"), gender (a ♂/♀ sign), or fallback (species plus the English form label, where PokéAPI has no label in the language)"
+    },
+    {
+      "name": "source_name",
+      "type": "string",
+      "required": true,
+      "description": "Constant: PokéAPI"
+    },
+    {
+      "name": "source_url",
+      "type": "string",
+      "required": true,
+      "description": "PokéAPI's pokemon_form_names.csv on GitHub"
+    },
+    {
+      "name": "source_record_id",
+      "type": "string",
+      "required": true,
+      "description": "form_name:language"
+    },
+    {
+      "name": "extracted_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "ISO-8601 UTC extraction timestamp"
+    },
+    {
+      "name": "dataset_version",
+      "type": "string",
+      "required": true,
+      "description": "Dataset version this staging snapshot feeds"
+    }
+  ],
+  "known_risks": [
+    "PokéAPI's full form names are uneven by language (French and Japanese Megas are complete, Spanish and German sparse), so most non-default forms are composed by pokeapi.localised_name; about ten Champions-pool rows fall back to an English form label in Spanish or German"
+  ]
+}

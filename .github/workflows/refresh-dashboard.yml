@@ -10,11 +10,12 @@ name: Refresh dashboard
 # It opens a pull request rather than committing to main, so a refresh still
 # goes through review (and CI) before deploy-dashboard.yml publishes it.
 #
-# Data: the daily sources (OP.GG, MunchStats, RK9, Limitless, PokéBase) come
-# from the staging cache scheduled-extraction.yml populates, restored
-# read-only so this workflow never forks that cache's history. PokéAPI and
-# Bulbagarden are re-extracted here because the dashboard also needs their
-# image bytes (data/assets/), which that cache doesn't hold. Both extractors
+# Data: the daily sources (OP.GG, MunchStats, RK9, Limitless, Limitless
+# online, PokéBase) come from the staging cache scheduled-extraction.yml
+# populates, restored read-only so this workflow never forks that cache's
+# history. PokéAPI and Bulbagarden are re-extracted here because the
+# dashboard also needs their image bytes (data/assets/), which that cache
+# doesn't hold. Both extractors
 # skip images they already have, and data/assets/ is cached under its own
 # key, so a typical weekly run downloads only new sprites. Bulbagarden is
 # kept off scheduled-extraction.yml's daily cron (see that file's header);
@@ -71,7 +72,7 @@ jobs:
           # Daily sources are normally already in the restored cache; extract
           # any that are missing (fresh repo, evicted cache) so the build
           # never runs on a partial dataset.
-          for source in munchstats rk9 limitless opgg pokebase; do
+          for source in munchstats rk9 limitless limitless_play smogon_ladder showdown_replays opgg pokebase; do
             subdir="$source"
             [ "$source" = "rk9" ] && subdir="rk9_pairings"
             [ "$source" = "opgg" ] && subdir="opgg_champions"

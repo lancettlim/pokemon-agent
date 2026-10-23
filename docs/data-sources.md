@@ -20,6 +20,13 @@ PokéAPI maintains a complete, community-curated database of all official Pokém
 2. Copy raw file URLs and import directly into Python (pd.read_csv), Google Sheets, or Excel
 3. Link updates automatically if you reference the raw URL
 
+**Localised names (in use, `docs/upgrade-plan-2027q2.md` Q4):**
+`pokemon_species_names.csv` and `pokemon_form_names.csv`, joined through
+`pokemon.csv`, `pokemon_forms.csv` and `languages.csv`, give each form's
+name in Japanese, Spanish, French and German; `pipelines/extract/
+pokeapi.py`'s `extract_names` reads them weekly. There is no Portuguese
+entry: the Brazilian games use the English names.
+
 ## 2. OP.GG Pokémon Champions
 **Best for:** Competitive legal pool, rebalanced base stats, and custom mechanics
 
@@ -77,6 +84,14 @@ MunchStats bridges static Pokédex data with active competitive tournament metad
 1. Pull structured JSON from [github.com/PizzaTimeJoshua/munchstats](https://github.com/PizzaTimeJoshua/munchstats)
 2. Use Python: `pd.read_json(url)` or [convert.town JSON-to-CSV](https://convert.town/json-to-csv)
 3. Flatten nested team arrays into flat rows (one row per team member)
+
+**In-game ranked usage (checked 2026-10-22, `docs/upgrade-plan-2027q2.md`,
+S4): not published as data.** MunchStats' site shows the game's own Battle
+Data ranks for each ranked season, but only in its rendered pages: the
+repository's published JSON carries tournament rosters and no ranked-season
+file. The plan's rule was to ingest the ranks only from published data and
+never reverse-engineer an undocumented endpoint, so S4 is parked until
+MunchStats publishes them.
 
 ## 5. Bulbagarden Archives
 **Best for:** Pokémon sprite/menu-icon artwork for the newest Champions-format Pokémon
@@ -224,8 +239,208 @@ grounds that MunchStats reports only team-level records.
 4. `event_id` needs no mapping: MunchStats reuses RK9's own event ids, so
    this joins straight to `tournament_event.event_id`. Players resolve to
    `team_id` on (name, country) — measured at 99.8% across 24,139 Masters
-   pairing slots.
+   pairing slots. A (name, country) two entrants share (it appears twice in
+   one round, or twice on the roster) is left unresolved rather than
+   guessed, and only Masters pairings resolve: MunchStats has no Junior or
+   Senior rosters.
+5. Day 2 and the top cut are not published as fields; `int_event_phases`
+   reads them off the round structure (`docs/dashboard.md`, Sprint 13).
 
 Note the grain honestly: an outcome is **team vs team**. RK9 publishes no
 per-battle log naming which four of a team's six Pokémon were brought, or
 which knocked out which. That remains genuinely unsourced.
+
+## 9. Limitless online tournaments (play.limitlesstcg.com)
+**Best for:** A large, fast sample: hundreds of grassroots online events per
+regulation, with full sheets, records and pairings
+
+Limitless runs an online tournament platform alongside limitlessvgc.com's
+coverage of official events. Every Champions regulation sees hundreds of
+events there, many with published team sheets: in the first six weeks of
+M-C, 236 qualifying events and 13,457 published sheets, about 3.6 times
+the official sample (3,770 teams), and the first results of a new regulation arrive
+within days rather than weeks. Added 2026-10-21 (`docs/upgrade-plan-
+2027q2.md`, S1, decision D1) as its own population, never blended into the
+official figures by default.
+
+**Key coverage:**
+- Tournament name, date, format label (`M-C`), entrant count, organiser
+- Per player: handle, display name, country, placing, W-L-T, drop round,
+  and (when the organiser publishes lists) the six-Pokémon sheet with item,
+  ability, nature and moves
+- Every round's pairings and winner, Swiss and top cut (`phase`)
+
+**How to extract:** a public JSON API
+([docs](https://docs.limitlesstcg.com/developer.html)), no scraping:
+1. `GET /api/tournaments?game=VGC&limit=500&page=N` — newest first; page
+   until the listing passes the lookback date.
+2. `GET /api/tournaments/{id}/standings` — players, placings, records and
+   `decklist` (the sheet; absent when unpublished).
+3. `GET /api/tournaments/{id}/pairings` — `round`, `phase`, `table`,
+   `player1`, `player2` (absent for a bye) and `winner` (a handle, `0` for
+   a tie, `-1` for no result).
+4. Keep a tournament when its `format` is a registered
+   `limitless_play_format` (`dbt/seeds/champions_regulations.csv`), it has
+   at least 16 players, and its name isn't a Monotype event (house rules on
+   top of the format would skew usage).
+5. Resolve the regulation from the label, unless the tournament is dated
+   after that regulation ended and fewer than 95% of its slots are legal
+   under it: organisers keep the old label for weeks after a rollover (31
+   "M-B" tournaments ran in September 2026, after M-C began; 29 had
+   Rillaboom, legal only in M-C, on half their teams), so such a
+   tournament takes the regulation in force on its date. The two that
+   really were M-B (98–99% legal in it) keep their label.
+   `assert_online_regulation_legality` fails the build if fewer than 95% of
+   a regulation's online slots are legal in it.
+6. Resolve species slugs with limitlessvgc.com's seeds
+   (`limitless_slug_to_pokeapi_form`, then
+   `limitless_mega_item_to_pokeapi_form` for a Mega Stone holder), falling
+   back to the PokéAPI form of the same name.
+
+**Limits and identity:** 50 requests per 5 minutes without a key
+(`pipelines/extract/limitless_play.py` paces every call through one
+sliding-window limiter and waits out a 429); a key for public-facing
+projects raises it (`LIMITLESS_API_KEY`). Players are handles, not legal
+names, so online teams never join RK9 or MunchStats identities and get no
+player pages.
+
+**Upcoming tournaments** (`docs/upgrade-plan-2027q2.md`, list #31): the API
+lists a tournament only once it starts, so the scheduled ones come from the
+platform's upcoming page, `GET /tournaments/upcoming?game=VGC&format=M-C`
+(the format filter is honoured: 88 M-C events of 104 VGC ones on
+2026-10-23). Each table row carries its start time, name, organiser,
+platform (`SWITCH`, or `SIM` for Showdown) and registration count as
+`data-*` attributes, plus links holding the tournament and organiser ids
+and a "22 / 32" cap; `extract_upcoming` reads only those, one request per
+regulation in force or starting within 30 days, and fails on a page
+without the table rather than reporting none. There is no robots.txt.
+
+## 10. Smogon usage statistics (smogon.com/stats)
+**Best for:** The Showdown ladder as its own population: usage, the only
+Pokémon-vs-Pokémon battle signal any source publishes, and Stat Point
+spreads
+
+Smogon publishes, on the first of each month, usage statistics for every
+Pokémon Showdown ladder, computed from every rated battle. September
+2026's Champions Reg M-C file covers 1,631,943 Bo1 battles and 277
+Pokémon at the 1760 cutoff. Added 2026-10-23 (`docs/upgrade-plan-2027q2.md`,
+S2, decisions D2 and D3) as a separate `ladder` population, never blended
+into tournament figures. Credit: Smogon University and Pokémon Showdown.
+
+**Key coverage (per Pokémon, per file):**
+- `usage`: weighted share of teams, the same unit as tournament team share
+- `Checks and Counters`: per opponent, `n` (encounters where the pair met
+  and one was KO'd or switched out), `p` (the share in which this Pokémon
+  was the one) and `d` (its standard deviation). Smogon ranks by `p - 4d`
+- `Spreads`: nature and Stat Points (`Adamant:32/32/0/0/2/0`, HP/Atk/Def/
+  SpA/SpD/Spe), weighted. Every spread fits Champions' 66 points with at
+  most 32 in one stat
+- Abilities, items, moves and teammates, which tournament sheets already
+  cover, are not extracted
+
+**How to extract:** static files, no API:
+1. `GET /stats/` lists the months; `GET /stats/<YYYY-MM>/chaos/` lists a
+   month's files.
+2. A file is `<metagame>[bo3]-<cutoff>.json`. The metagame is the
+   regulation registry's `munchstats_format`
+   (`gen9championsvgc2026regmc`), so nothing hardcodes a regulation.
+   Cutoffs 0, 1500, 1630 and 1760 exist; 1760 (rating-weighted toward the
+   strongest players) and 0 (every battle) are kept, Bo1 and Bo3.
+3. For each regulation take the newest month it was in force for at least
+   half of: August 2026 for M-B, which ended on 9 September, and
+   September for M-C, which began on the 9th. A month never changes after
+   publication, so a file the previous snapshot holds is reused.
+4. Resolve names with `munchstats_name_to_pokeapi_form` (Showdown and
+   MunchStats share names), then the slug rule that seed was built with,
+   then `smogon_name_to_pokeapi_form` for the two names neither handles.
+   All 333 names in the September 2026 files resolve.
+
+**Checks and counters at 1760:** the rating-weighted files carry almost
+none (13 pairs in September's M-C file, against 35,013 at cutoff 0).
+Smogon lists a pair only above about 20 encounters (the smallest `n` in
+either file is 21), a doubles battle rarely reaches the one-on-one moments
+the statistic counts, and at 1760 each encounter is weighted by the chance
+its players are rated that high, so almost no pair clears the bar. They are
+read from the all-ratings files, and labelled so.
+
+## 11. Pokémon Showdown replays (replay.pokemonshowdown.com)
+**Best for:** "Which four did they bring": team preview, the Pokémon that
+entered each battle, leads and results, for the Showdown ladder
+
+Tournament sources are team vs team; no one publishes which four of an
+official team's six were brought to a game. Showdown's replays do, for the
+ladder. Added 2026-10-23 (`docs/upgrade-plan-2027q2.md`, S3; the
+`docs/roadmap.md` Phase 4 steps) as part of the same `ladder` population as
+Smogon's statistics, feeding marts only. Credit: Pokémon Showdown, and the
+players who upload their battles.
+
+**How to extract:** public JSON, no key:
+1. `GET /search.json?format=gen9championsvgc2026regmc[bo3]` lists the
+   newest 51 public replays of a format (id, upload time, rating);
+   `&before=<uploadtime>` pages back. The format is the registry's
+   `munchstats_format`, so nothing hardcodes a regulation.
+2. `GET /<id>.json` is one replay with its log: `|poke|` (the six at team
+   preview), `|switch|`/`|drag|`/`|replace|` (each Pokémon that entered;
+   `replace` ends an Illusion), `|detailschange|` (Mega Evolution),
+   `|turn|`, `|rated|` and `|win|`. Bo3 logs also carry open team sheets
+   (`|showteam|`); they aren't read, so Bo1 and Bo3 rows mean the same.
+3. Keep rated battles uploaded while the regulation was in force. Player
+   names are read only to tell which side won; nothing stores them.
+
+**Terms:** Showdown publishes no terms for its replay server, and its
+privacy policy covers cookies, bans and chat logging, not replays. A replay
+is public because a player chose to upload it (private and
+password-protected ones aren't listed). The extractor treats them as such:
+one request a second, a capped sample rather than a mirror, no player
+names kept, aggregates only on the site, and credit on every view.
+
+**Volume and sampling:** about 2,000 Bo1 and 800 Bo3 Reg M-C replays a day
+in October 2026, one request each. Each daily run fetches at most 150 new
+replays per regulation and ladder, newest first and then back from the
+oldest held, keeping up to 5,000 battles per format. The first sample
+(2026-10-23, 300 per format) kept 1,558 of 1,800 fetched as rated and
+readable: 522 Reg M-C battles from 22 and 23 October, and M-A's and M-B's
+last day in force. 81% of sides revealed all four Pokémon they brought;
+365 of the 522 M-C battles had both sides do so.
+
+**Coverage against RK9 and MunchStats (Phase 4 step 3):** none, by
+construction. Official events are played on the game itself, not on
+Showdown, and a replay names no event, so no official match has a replay
+and nothing is joined. The battle-level marts are the ladder's, labelled so,
+beside the unchanged team-vs-team surfaces.
+
+**Names:** team preview uses Showdown's names, resolved by the same
+`int_smogon_ladder_names` as the statistics. Four names needed seed rows
+(`Maushold-Four`, `Meowstic-F`, and the cosmetic `Sinistcha-Masterpiece`
+and `Polteageist-Antique`), and cosmetic patterns with many names
+(Vivillon, Florges, Alcremie, Furfrou) take their species by rule: 18,696
+of 18,696 preview slots resolve (98.9% before).
+`assert_showdown_replay_name_coverage` warns under 99%.
+
+**Known limits:**
+- Brought means entered the battle: a Pokémon brought but never sent in
+  looks benched, most often on the winning side. Bring rates and
+  win-when-brought figures read only complete battles (both sides revealed
+  all four); leads read every battle.
+- Megas show at team preview as their base Pokémon (Bo1 hides the stone),
+  so a Mega counts with its base.
+- Uploads are self-selected and lean to memorable games; the sample is of
+  the replays, not of every ladder battle.
+
+## 12. Official stream videos (YouTube): a curated seed
+**Best for:** "Watch on stream" links on top-cut matches
+
+Play! Pokémon uploads each major event's Masters final as its own video,
+titled "<player> vs <player> - Pokémon VGC Masters Finals | <event>", beside
+the day-long stream VODs. A video that is the match itself can be linked at
+`t=0` and checked; a match inside a nine-hour stream needs a timestamp
+someone has watched for. `dbt/seeds/featured_match_vods.csv` (S5) holds
+only the first kind, with the timestamp column ready for the second: on
+2026-10-23 the finals of Indianapolis, Turin, NAIC, the World
+Championships and Frankfurt, each matched on both finalists' names in the
+title and checked through YouTube's oEmbed endpoint
+(`youtube.com/oembed?url=...`, title and channel). Baltimore, Brisbane,
+Recife and Louisville had no dedicated final upload to find, so they have
+no row rather than a guessed one. No API key is used; the seed is curated
+by hand, and a row that names no real top-cut match fails the build
+(`assert_featured_match_vods_resolve`).

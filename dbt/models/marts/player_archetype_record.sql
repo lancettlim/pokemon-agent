@@ -29,8 +29,11 @@ sides as (
   from decided
 ),
 teams as (
+  -- Official scopes only (docs/upgrade-plan-2027q2.md, S1): online
+  -- handles get no player pages and never join official identities.
   select distinct team_id, player_id, regulation_scope
   from {{ ref('int_champions_roster_scoped') }}
+  where scope_population = 'official'
 ),
 archetypes as (
   select team_id, archetype_key

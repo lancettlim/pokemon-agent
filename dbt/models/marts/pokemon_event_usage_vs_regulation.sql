@@ -8,13 +8,15 @@
 -- One row per event x Pokémon used anywhere in that event's regulation,
 -- including Pokémon absent from the event (usage_count 0), so a Pokémon
 -- the field dropped at one event still shows as under-performing there.
--- Shares are of roster slots, the same unit as pokemon_usage_summary.
+-- usage shares are of roster slots, the same unit as
+-- pokemon_usage_summary.usage_share; the team_share columns are of teams,
+-- the headline unit (docs/upgrade-plan-2027q2.md, V1).
 -- wins/losses are the reported records of the event's teams that brought
 -- the Pokémon. Small events make noisy deltas: consumers should hide them
 -- below a minimum event_team_count, as the dashboard does.
 with legal_slots as (
   select roster.*
-  from {{ ref('int_champions_roster') }} roster
+  from {{ ref('int_champions_roster_official') }} roster
   inner join {{ ref('pokemon_stat_champions') }} champions
     on champions.pokemon_key = roster.pokemon_key
     and champions.is_legal = true
@@ -40,13 +42,17 @@ event_usage as (
   group by event_id, pokemon_key
 ),
 regulation_usage as (
-  select regulation_scope as regulation_code, pokemon_key, usage_count, usage_share
+  select regulation_scope as regulation_code, pokemon_key, usage_count, usage_share, team_share
   from {{ ref('pokemon_usage_summary') }}
   where event_tier is null
-    and regulation_scope != 'all'
+    and regulation_scope in (select regulation_code from {{ ref('champions_regulations') }})
 ),
 grid as (
-  select events.*, regulation_usage.pokemon_key, regulation_usage.usage_share as regulation_usage_share
+  select
+    events.*,
+    regulation_usage.pokemon_key,
+    regulation_usage.usage_share as regulation_usage_share,
+    regulation_usage.team_share as regulation_team_share
   from events
   inner join regulation_usage
     on regulation_usage.regulation_code = events.regulation_code
@@ -67,6 +73,14 @@ select
       - grid.regulation_usage_share,
     4
   ) as usage_share_delta,
+  round(coalesce(event_usage.usage_count, 0)::double / grid.event_team_count, 4)
+    as event_team_share,
+  grid.regulation_team_share,
+  round(
+    coalesce(event_usage.usage_count, 0)::double / grid.event_team_count
+      - grid.regulation_team_share,
+    4
+  ) as team_share_delta,
   event_usage.total_wins,
   event_usage.total_losses
 from grid

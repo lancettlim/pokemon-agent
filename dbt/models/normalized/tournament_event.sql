@@ -16,6 +16,13 @@
 -- the champions_regulations seed. It is null for standard-VGC events, which
 -- have no Champions regulation. assert_champions_formats_registered fails
 -- the build if a Champions-format event resolves to no regulation.
+--
+-- Online events (docs/upgrade-plan-2027q2.md, S1) join from Limitless'
+-- online platform with event_tier 'Online', their own population: every
+-- roster-derived mart keeps them out of the official figures unless a view
+-- asks for them (int_champions_roster's population column). Their
+-- event_format is Limitless' label ("M-C"), resolved through the seed's
+-- limitless_play_format.
 with events as (
   select distinct
     event_id,
@@ -44,3 +51,17 @@ select
 from events
 left join {{ ref('champions_regulations') }} regulation
   on regulation.munchstats_format = events.event_format
+union all
+select distinct
+  event_id,
+  tournament_name as event_name,
+  event_date,
+  'Online' as event_tier,
+  tournament_format as event_format,
+  regulation_code,
+  source_name,
+  source_url,
+  tournament_id as source_record_id,
+  extracted_at_utc,
+  dataset_version
+from {{ ref('int_limitless_play_mapped') }}

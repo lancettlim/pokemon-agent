@@ -10,21 +10,39 @@ name: Scheduled extraction
 # scheduled run costs a few hundred requests rather than a full crawl —
 # see those extractors' docstrings.
 #
+# limitless_play (Limitless online tournaments, docs/upgrade-plan-2027q2.md,
+# S1) reads a public JSON API that allows 50 requests per 5 minutes without
+# a key. Its first backfill of a regulation takes about an hour; after that
+# each run re-fetches only tournaments from the last two days. A
+# LIMITLESS_API_KEY repository secret, when set, raises the limit.
+#
+# smogon_ladder (Showdown ladder statistics, S2) is published monthly. It
+# runs daily anyway because a month it already holds is reused from the
+# previous snapshot: a run that finds nothing new costs a few listing
+# requests, and a new month lands the day Smogon publishes it.
+#
+# showdown_replays (Showdown ladder replays, S3) samples at most 150 new
+# rated replays per regulation and ladder each run, one request a second
+# (about 15 minutes at most), keeping every battle already held.
+#
 # data/staging/ is gitignored (pipelines/cli.py's snapshot history — see
 # backlog.md #1 — would otherwise grow unboundedly in git history), so
 # runner-to-runner persistence goes through actions/cache instead: each run
 # saves under a unique key and restores from the most recent prior save via
 # restore-keys, which is the standard pattern for a cache that needs to keep
 # growing (a cache entry is immutable once created, so a fixed key could
-# only ever be written once).
+# only ever be written once). The save is its own step that runs even when
+# a source fails: each source extracts independently, and one failure
+# (an API outage, a rate limit) must not throw away the other sources'
+# snapshots for the day. The job still fails at the end, naming them.
 on:
   schedule:
-    - cron: "0 6 * * *" # daily 06:00 UTC: OP.GG, MunchStats, PokéBase, RK9, Limitless
+    - cron: "0 6 * * *" # daily 06:00 UTC: OP.GG, MunchStats, PokéBase, RK9, Limitless, Limitless online, Smogon ladder
     - cron: "0 7 * * 1" # weekly, Monday 07:00 UTC: PokéAPI
   workflow_dispatch:
     inputs:
       source:
-        description: "Source to extract (pokeapi | opgg | munchstats | rk9 | limitless | pokebase | bulbagarden | all); defaults to the triggering schedule's normal set"
+        description: "Source to extract (pokeapi | opgg | munchstats | rk9 | limitless | limitless_play | smogon_ladder | showdown_replays | pokebase | bulbagarden | all); defaults to the triggering schedule's normal set"
         required: false
         default: ""
 
@@ -46,7 +64,7 @@ jobs:
         run: uv sync
 
       - name: Restore staging snapshot history
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: data/staging
           key: staging-snapshots-${{ github.run_id }}
@@ -61,17 +79,32 @@ jobs:
           elif [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
             echo "sources=pokeapi" >> "$GITHUB_OUTPUT"
           else
-            echo "sources=opgg munchstats rk9 limitless pokebase" >> "$GITHUB_OUTPUT"
+            echo "sources=opgg munchstats rk9 limitless limitless_play smogon_ladder showdown_replays pokebase" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run extraction
+        id: extract
+        env:
+          LIMITLESS_API_KEY: ${{ secrets.LIMITLESS_API_KEY }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          failed=""
           for source in ${{ steps.sources.outputs.sources }}; do
             echo "::group::extract $source"
-            uv run python -m pipelines.cli extract "$source"
+            if ! uv run python -m pipelines.cli extract "$source"; then
+              echo "::error::extract $source failed; the other sources still run and save"
+              failed="$failed $source"
+            fi
             echo "::endgroup::"
           done
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+
+      - name: Save staging snapshot history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/staging
+          key: staging-snapshots-${{ github.run_id }}
 
       # Keep refresh health inspectable even though raw snapshots remain in
       # the cache rather than git. This artifact is deliberately metadata
@@ -85,3 +118,9 @@ jobs:
           path: reports/validation/extraction_summary.json
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Fail if any source failed
+        if: steps.extract.outputs.failed != ''
+        run: |
+          echo "::error::Extraction failed for:${{ steps.extract.outputs.failed }} (see extract groups above)"
+          exit 1

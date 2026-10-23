@@ -36,6 +36,13 @@ color, spacing, or radius value that already has a token — add one instead.
 | `--panel-dark` | `#12131a` | Broadcast color-block section/page header background (see "Broadcast color-block header" below) |
 | `--accent-red` / `--accent-red-bg` | `#e3323c` / `#fce7e8` | Broadcast accent: active tab, `.grid-6xn` leader tile |
 | `--accent-gold` | `#f4b942` | Broadcast accent: reserved for #1-rank/MVP highlighting |
+| `--board-field` / `--board-field-ink` | `#ea0028` / `#84010c` | Broadcast (2027 Q2, V7): the Top 12 board's red field and the darker ink its CSS halftone and slashes are drawn in |
+| `--board-surface` | `#fff` | The white board the tiles sit on |
+| `--board-tile` / `--board-scrim` | `#7f2629` / `#572931` | A board tile's maroon, and the darker scrim under its number and name |
+| `--board-gold` | `#ffc549` | The one number a board tile carries, and the band's regulation block |
+| `--series-red`/`-blue`/`-green`/`-yellow` | `#e3323c` / `#2b6fd6` / `#2e9a4f` / `#f2c230` | A four-colour categorical palette (blue marks Online, green marks Ladder). A palette only: never drawn as the championship series' arc device |
+| `--phase-chip` | `#111` | The phase chip's black |
+| `--font-display` | Oswald (self-hosted) | The one display face (D4): board numerals and headlines only |
 | `--type-<name>` (18) | see below | Per-type color, one per Pokémon type; fills the type pills only (see "Type colors") |
 | `--type-unknown` | `#6B7280` | Fallback when a type is absent or unrecognized |
 
@@ -307,9 +314,10 @@ move-type or item icon), a label, a **bolded** headline value
 and an optional `subFn` second line (a description, a sample-size note, a
 secondary stat). The #1 tile gets `.is-leader` (`--accent-red` border/
 text). Fixed 6 columns on desktop (`repeat(6, 1fr)`, not auto-fill/
-auto-fit), collapsing to 3 at 720px and 2 at 480px.
+auto-fit), with `minmax(0, 1fr)` tracks: 6 on desktop, 4 on tablets, 3
+on large phones and 2 on phones (see "Responsive behavior").
 
-Used by: Overview's Top 12, Usage's usage-share and win-rate grids,
+Used by: Usage's usage-share and win-rate grids,
 Pokémon Profile's Items/Ability/Moves/Team-Cores sections, Speed Tiers,
 Matchup's co-usage panel, and Top Teams' leaderboard. Any new "top N by
 metric" visual should use this — there is no other charting/ranking
@@ -630,6 +638,244 @@ own size ("vs Reg M-B (1 event, 395 teams)") and offers "Early vs recent
 events" within the selected regulation. A thin baseline (fewer than two
 events, or under 300 teams) opens on early vs recent.
 
+### Top 12 board (2027 Q2, V2)
+
+The Overview's hero, after the official "Top 12 Pokémon" card
+(docs/upgrade-plan-2027q2.md, R1). `renderBoard()` in `app.js` draws it
+from the inline KPIs (`compute_kpis`' `top_12_boards`), so it paints with
+no data fetch.
+
+- **Layout.** A red `--board-field` with a CSS halftone frames a white
+  board. On desktop, six tiles, a title band, then six more tiles. The
+  band is first in the DOM (a screen reader hears the title and sample
+  first) and placed on row 2 with `grid-row: 2`; the tiles flow around it.
+  From 1023px down the band moves to the top, with 4 columns of tiles on
+  tablets and large phones and 3 on phones. On phones the board is full
+  bleed, so a tile is never narrower than 104px at 360px.
+- **Tile.** Hero art (the 256px HOME render) breaks the tile's top edge;
+  the team share sits in `--board-gold` display numerals on a darker
+  scrim, the type emblems after it (top-right on phones) and the name
+  under it. A form in parentheses shrinks, and on a phone moves to its own
+  line; it is never cut off. Position is rank: the numeral is small and
+  quiet, and the tile's `aria-label` says "1. Rillaboom, on 51.9% of teams
+  (1,958 of 3,770 teams)". A tile links to the profile; the first six
+  load eagerly, the rest lazily.
+- **Band.** Three blocks: the title ("Top 12 Pokémon · by share of
+  teams") on a `.broadcast-band`, the regulation and sample on gold, and
+  the scope: a phase chip and the switches. The player-scope switch (All
+  players / Day 2 / Online) shows only the scopes the build produced; the
+  Species / Forms toggle folds each Mega into the Pokémon holding its
+  stone (the official grouping) and is remembered per browser.
+- **One number per tile.** Win rate, slot share and sample live in the
+  tooltip, the profile and the Usage table, never on the tile.
+
+### Team strip (2027 Q2, V3)
+
+`teamStripHtml(slots, opts)` in `app.js` is every team on the site: Top
+Teams, event top 8, player pages, Copy and play, the Overview's winner,
+the Builder's preview, saved teams, and (as its own markup) the PNG team
+cards. It replaced `teamCompositionHtml`, which drew sprites only and is
+now a thin entry point onto the strip for cores and table cells.
+
+- **Six square tiles**, the held item in a white circle at each tile's
+  top-right corner and a Mega badge (a four-colour circle with an "M", our
+  own mark) under it on the Mega holder: the item is the team, as in the
+  game's battle UI and the broadcast (R2).
+- **A tile whose set is known opens it** on tap or click: a popover with
+  the item, ability, Stat Alignment and moves, and a link to the profile.
+  Without a set, the tile is a plain link to the profile.
+- **One row of six**, 64px tiles on desktop, 56px on tablets and about 45px
+  on a 360px phone (team card grids bleed into the panel's padding there).
+  A container query wraps the strip to 3 × 2 wherever a tile would fall
+  under the 44px tap minimum.
+- **Compact strips** (`opts.compact`, or `teamCompositionHtml` at 32px or
+  less) draw small inline sprites for table cells and saved-team rows,
+  where the row is the tap target; they carry no badges.
+
+### Square type badge (2027 Q2, V6)
+
+`typeBadgeSquare(type, size)` (and `typeIconsHtml(t1, t2, size, true)`)
+draws the type's colour as a rounded square with a white glyph on it.
+The 18 glyphs are our own simple shapes, defined once in
+`pipelines/render/type_glyphs.py`: `build.py` ships them to the page as
+`type_glyphs` and the share-card templates call `square_badge_html`, so the
+site and its PNG cards draw the same badge. Never the official icons.
+Broadcast components (the board, team cards' PNGs) use square badges;
+dense tables keep the round emblems.
+
+### Player line and scoreboard row (2027 Q2, V4)
+
+`playerLineHtml(player)` reads "NAME [CC] [W–L]": the name in caps (a
+link to the player page), then the country and record as chips, in that
+order (rule 5). A team card's line drops the record chip, since its
+headline is the record. `scoreboardRowHtml(match)` sets two player lines
+against each other with each side's score, the winner bold and red-scored,
+as one line on wider screens and two stacked lines on a phone. Match views
+built on it are labelled team vs team.
+
+### Mega usage panel (2027 Q2, E3)
+
+`renderMegaPanel(els, where, label)` shows which Mega Stones teams carry:
+a stacked bar and list of the share of teams with zero, one, two or more
+Mega forms, then a data table of each Mega with its stone and team share.
+It reads `mega_stone_usage` and `team_mega_count` (on demand) and serves
+the Usage tab's Megas view (`#/usage/megas`, the regulation) and every
+event page (the event's teams). Below 1024px the two halves stack.
+
+### Phase chip (2027 Q2, V5)
+
+`.phase-chip` is a small black italic all-caps chip saying what a view
+covers: "ALL PLAYERS", "DAY 2", "TOP 8", "SWISS R9", "ONLINE" (blue,
+`.is-online`), "OFFICIAL + ONLINE" (`.is-combined`), "LADDER" (green,
+`.is-ladder`). Every event-scoped view
+and card carries one: a team card says the phase its finish reached
+(`placementPhase`: Champion, Top 8, Top 16 or Swiss; a converged list,
+Day 2), and event sections say "All players" where they cover the whole
+field. On phones they wrap; they never truncate.
+
+### Population switch and banner (2027 Q2, S1)
+
+The header carries two selects: the regulation ("M-C", "All") and the
+events it covers, **Official / Online / All**. Official is always the
+default; a regulation without online data greys out the other two. Both
+reload the page with `?reg=<scope>` (`m-c`, `m-c:online`,
+`m-c:combined`). At phone width the bar packs tighter (8px gaps, 4px
+select padding) so both fit beside the brand from 360px.
+
+Whenever the page shows online events, `#population-banner` says so under
+the header: a blue `ONLINE` chip (or the half-black, half-blue
+`.is-combined` "OFFICIAL + ONLINE" chip), the sample ("13,418 teams from
+234 Limitless online tournaments in Reg M-C"), and a link back to official
+events when the regulation has any. It is blue, the Online chip's colour, not the warning amber: it
+describes the data rather than warning about it. During a rollover that
+opened on online events, the rollover banner says why instead, and this
+one stays hidden.
+
+A view built on official events only (event pages, players, Top Teams,
+head-to-head, archetypes, "What changed") shows `.official-only-note` on a
+population scope: an `OFFICIAL` phase chip and one sentence. Templates
+mark the spot with `<div data-official-only="…" hidden>`; scripts call
+`App.officialOnlyNoteHtml(sentence)`, which is empty on an official scope.
+A data table passes `officialOnly: true` instead: it gets the note (unless
+its panel already has one) and its "Copy with citation" names the
+official sample. The event window's choices sit under an "Official
+events" heading. On the official scope, the Top 12 board's switch reads
+"Official | Online", not "All players", once an Online board exists.
+
+### Top-cut bracket and path (2027 Q2, E2)
+
+An event page's bracket (`.bracket`) is one column per round from 1024px
+(`.bracket-round`, its title above evenly spaced matches) and round tabs
+(a `.segmented` control) below it, one round at a time. A match
+(`.bracket-match`) is two stacked sides, each a player button over the
+team's compact strip, with W or L at the right; the winner's name is bold.
+A top seed's bye is one side and an italic "Bye". The chip says how many
+players made the cut ("13 PLAYERS"), the note how many seeds had byes.
+Picking a player opens `.path-panel` under the bracket: every round they
+played, as round number, a W/L/T/Bye badge, the phase chip and the
+opponent's player line and strip. Both say "team vs team".
+
+### Day 2 conversion (2027 Q2, E1)
+
+A data table of field share, Day 2 share and conversion ("×1.30", green at
+×1.10 and up, red at ×0.90 and down). The ratio shows "—" when either side
+has under 100 teams, and the note says it is held back.
+
+### Share controls and toast (2027 Q2, V8 and M4)
+
+`App.shareCardControlsHtml(card, title)` renders "Share", only where the
+browser can share files (it hands the 4:5 and 9:16 PNGs to the system
+share sheet), and "Download card" (the 16:9 PNG) everywhere, both 44px
+tall. The board puts them under its tiles, an event page in its header.
+`App.showToast(message)` shows one line above the phone's bottom bar for
+2.6s; a copy on a touch screen confirms with it, since there is no hover
+feedback. It respects `prefers-reduced-motion`.
+
+### Ladder lens (2027 Q2, S2)
+
+Showdown ladder data is a population of its own, so every view of it opens
+with a `.source-chip`, a blue pill naming the source ("Showdown ladder,
+from battle logs"; "Showdown ladder; tournament sheets don't publish
+spreads"). A ladder figure sits beside the tournament figure it compares
+with and is never added to it.
+
+- **Ladder vs tournament scatter** (`.ladder-svg`, 768px and up): ladder
+  share of teams against official tournament share on one square-root
+  scale, so the many Pokémon under 5% stay apart and equal shares stay on
+  the dashed diagonal. One dot per Pokémon (r 5, a 2px surface ring),
+  coloured by the gap: `--series-blue` played more on the ladder,
+  `--series-red` more at tournaments, `--muted` within 2 pts (the pair
+  passes the palette validator in light and dark). Each dot sits in a
+  44px transparent target with a tooltip naming both shares, and links to
+  the profile. The three widest gaps each way are named beside their dots,
+  placed clear of each other. A legend sits under the plot.
+- **Ladder lists** (`.ladder-list`, every width; all a phone shows): "Played
+  more on the ladder" and "Played more at tournaments", ten each, among
+  Pokémon on 2% of teams on either side. A row is the Pokémon link and
+  the gap in pts, with "Ladder 20.6% · Tournaments 15.0%" under the name.
+  They are the scatter's text equivalent.
+- **Checks and counters** (`.counter-list`): rows of sprite and name, the
+  KO-or-switch rate (tooltip: the encounter count and what the rate
+  means) and n; two columns from 768px, one below. Six show, then "Show
+  all".
+- **Stat Point spreads** (`.spread-list`): nature in bold, the non-zero
+  Stat Points ("32 HP / 32 Atk / 2 SpD"), the share, and a thin bar of the
+  share under the row.
+
+### Global search, name language, offline banner (2027 Q2, Q3–Q5)
+
+- **Search sheet** (`.search-sheet`): an input over grouped results
+  (Pokémon, Players, Events, six each), each row a sprite, flag or trophy,
+  the name and a muted detail line; the active row is light blue. Arrow
+  keys move, Enter opens, Escape closes and returns focus. Full screen on
+  phones with the keyboard up; from 768px a 640px panel 64px from the top
+  over a dimmed page. The empty state lists recent picks under "Recent".
+- **Name language** is a labelled select in the ⋯ menu, never a flag.
+  Localised names are names only: labels, numbers and copy stay English.
+- **Offline banner** (`.offline-banner`) reuses the staleness banner and
+  names the build date of the saved data.
+
+### Builder warnings and rank change (2027 Q2, list #19 and #22)
+
+`.builder-warnings` is an amber list above the Builder's slots, one ⚠ line
+per broken rule (item clause, species clause), each naming the Pokémon.
+Usage's Rank column reuses the rank-movement badge (▲ green, ▼ red, ±0)
+with a "New" badge for a Pokémon absent before; its tooltip names the
+baseline ("#5 before Louisville → #2 now").
+
+### Speed line, matchup heatmap, compare tray (2027 Q2, list #24, #30, #34)
+
+- **Speed line** (`.speed-line`, 768px and up): a navy axis with Speed
+  ticks and a bold "Moves first" arrow at the end that moves first (it
+  flips under Trick Room). Your team's 40px sprites sit above it with a
+  blue ring, the most-used Pokémon below; a sprite that would overlap one
+  already placed drops a 44px lane. Below 768px, `.speed-line-list`: rank,
+  Pokémon link and Speed, with "Your team" and "Speed tie" chips on a
+  second line.
+- **Matchup heatmap** (`.archetype-heatmap`): rows and columns are
+  archetypes as three 24px sprites; cells are the row's win rate in ink
+  over a diverging tint (`--series-blue` above even, `--series-red` below,
+  none within a couple of points or under 20 matches), the record in the
+  tooltip. Phones get a select and a list. Always labelled team vs team.
+- **Compare tray** (`.compare-tray`): pinned sprites with a small × to
+  unpin, "Compare" (from two) and "Clear"; a full-width sheet over the
+  bottom bar on phones, a 240px card bottom-right from 721px, and the page
+  keeps room for it. The profile's "Pin to compare" is a toggle button.
+
+### Segmented control (2027 Q2)
+
+`.segmented` holds two to four mutually exclusive `<button
+aria-pressed>`s (the board's scope and grouping, an event's round tabs).
+Controls go inside a view's band, never in a new sticky row. On phones a
+segmented control in a band fills its width and each button is 44px tall.
+
+### Broadcast band (2027 Q2, V7)
+
+`.broadcast-band` is a dark panel with a 115° slash in the field red and
+gold and a white halftone, all drawn in CSS. It is our own pattern, not
+the official key graphic, and heads the board's title block and the event
+and player pages.
+
 ### Copy with citation (2027 Q1, C4)
 
 Every data table has "Copy with citation": its rows in the current order
@@ -724,6 +970,15 @@ natural/alphabetical order, since there's no usage-relevance ranking that
 applies to a tier name.
 
 ### Percentages, not raw counts
+
+**Usage is team share** (docs/upgrade-plan-2027q2.md, V1/D5): the share
+of teams in scope that brought a Pokémon, `usage_count / scope_team_count`,
+the unit the official usage card, Pikalytics and Smogon report. Every
+usage tile, table, delta and share card leads with it (`team_share`,
+`team_share_delta`, `event_team_share`, ...). The older share of roster
+slots (`usage_share`, about one sixth of team share) stays in the marts
+and in each figure's tooltip ("1,958 of 3,770 teams · 8.7% of roster
+slots"), so a screenshot from before the change can still be reconciled.
 
 The dashboard shows **percentages/shares, not raw counts**, wherever a
 share metric exists (dashboard "focus on percentages" ask):
@@ -1050,13 +1305,49 @@ mart for analysis.
 
 ## Responsive behavior
 
-Breakpoints match `docs/dashboard.md`'s existing convention: 720px (KPI
-grid drops to 2 columns, `.grid-6xn` drops to 3 columns, Team Builder's
-two-column grid collapses to one column and its team-slot grid drops to 2
-columns, the Matchup tab's attacker/defender panels stack) and 480px (KPI
-cards stack vertically, `.grid-6xn` drops to 2 columns, filter selects go
-full-width). Tables scroll horizontally inside `.table-scroll` rather than
-reflowing — existing, unchanged convention.
+Adopted from docs/upgrade-plan-2027q2.md (M2), and enforced by
+`tests/browser/test_responsive_matrix.py` (M1), which opens every route
+at 360, 390, 768, 1024 and 1440px, plus 430, 721 and an 844×390
+landscape phone.
+
+- **Four tiers**: phone ≤480px, large phone 481–720px, tablet
+  721–1023px, desktop ≥1024px. There are no other breakpoints: the old
+  600px (data tables) and 900px (Overview, event performers) breakpoints
+  folded into 720px and 1023px.
+- **No horizontal page scroll** at any width from 360px up
+  (`scrollWidth <= innerWidth`). Only an element that scrolls itself may
+  be wider than its box: `.table-scroll`, a tab row, or a data table's
+  `.data-table-scroll` frame, which scrolls on tablets (with U7's edge
+  fades) and gives way to two-line rows on phones.
+- **Every grid has a column count per tier**, with `minmax(0, 1fr)`
+  tracks, never a fixed `repeat(6, 1fr)` above 720px: `.grid-6xn` is
+  6 / 4 / 3 / 2, the Top 12 board 6 / 4 / 4 / 3, team card grids and the
+  starter strip 3 / 2 / 2 / 1.
+- **Tap targets are at least 44px** on phones (nav items, sub-tabs,
+  chips, segmented controls, board tiles, team-strip tiles, the ⋯ menu),
+  and every hover affordance has a tap equivalent: a tooltip opens on tap,
+  and a tile's detail is in its `aria-label` and its destination.
+- **Fields are at least 16px** below 1024px, so iOS Safari doesn't zoom
+  on focus (one rule outranks component fonts such as `.combo-input`).
+- **The sticky chrome** is at most 120px tall on phones (the 56px top bar
+  plus the bottom section bar) and 200px elsewhere. New controls go
+  inside a view's band, never in a new sticky row.
+- **The header fits from 721px**: on tablets the brand drops its suffix,
+  the sections tighten and the regulation select shows only its code
+  ("M-C"); "Reg" shows beside it on desktop.
+- **A combobox's hidden `<select>`** is pinned to its host's corner
+  (`.combo-host`); left at its static position it sat past a phone's
+  right edge (the 2026-10-21 review's finding 1).
+- **Bottom bars respect `env(safe-area-inset-bottom)`**; on landscape
+  phones (`max-height: 500px`) nothing but the top bar sticks.
+- **Images keep their intrinsic size.** Hero art is a 256px WebP of about
+  16KB, right for a ~96px tile at 2–3× density, so phones need no smaller
+  variant; below-the-fold board tiles lazy-load.
+- **The display font** loads with `font-display: swap` and a size-adjusted
+  local fallback, so the swap doesn't move the layout.
+
+Each new component lists its layout per tier in docs/upgrade-plan-2027q2.md's
+M3 table before it is built.
 
 ## Backlog: not yet buildable
 

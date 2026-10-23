@@ -58,9 +58,13 @@ resolution matched its deferral reason (see `docs/backlog.md` #25/#26):
   moves and nothing else. Verified directly against RK9's and Limitless'
   team-list pages: no EV or IV data on either. The moveset half was
   already covered by MunchStats and Limitless at 100% for Champions
-  events. Treat EV/IV spreads as structurally unavailable rather than
-  pending. (Victory Road is also unreachable from this project's egress —
-  see `docs/data-sources.md` — but that is incidental to the conclusion.)
+  events. Treat tournament EV/IV spreads as structurally unavailable
+  rather than pending. (Victory Road is also unreachable from this
+  project's egress — see `docs/data-sources.md` — but that is incidental to
+  the conclusion.) The Showdown ladder's Stat Point spreads, added
+  2026-10-23 (see "Added sources"), don't change this: they are what ladder
+  players ran, a different population, and never enter a tournament
+  entity.
 
 ## Added sources (post-v1)
 
@@ -71,6 +75,73 @@ resolution matched its deferral reason (see `docs/backlog.md` #25/#26):
   MunchStats does, so no event-level mapping is needed. See
   `docs/data-sources.md` for the extraction technique and
   `docs/backlog.md` #27 for why this was previously believed impossible.
+- **Limitless online tournaments** (`play.limitlesstcg.com/api`) — added
+  2026-10-21 (`docs/upgrade-plan-2027q2.md`, S1, decision D1). Hundreds of
+  grassroots Champions events run on Limitless' online platform every
+  regulation, each with full team sheets, W-L-T records and round-by-round
+  pairings: about three times the official sample, and data for a new
+  regulation within days of its start. They join `tournament_event`,
+  `tournament_team`, `tournament_team_member` and `tournament_match` as
+  **their own population**, `event_tier = 'Online'`, with every id prefixed
+  `LP-` so it can never collide with an RK9 or MunchStats id. Players are
+  Limitless handles, not legal names: online teams never join official
+  identities, and no player-level output covers them. Official figures stay
+  exactly what they were: every unscoped roster-derived mart reads
+  `int_champions_roster_official`, and population-aware marts give online
+  events their own `regulation_scope` values (`m-c:online`, `all:online`)
+  plus `:combined` scopes for both together (see "Key rules"). Events under
+  16 players and Monotype events are skipped. See `docs/data-sources.md`
+  §9 for the API, and `pipelines/extract/limitless_play.py`.
+- **Smogon usage statistics** (`smogon.com/stats`) — added 2026-10-23
+  (`docs/upgrade-plan-2027q2.md`, S2, decisions D2 and D3). Smogon's
+  monthly statistics for Pokémon Showdown's Champions ladder, per
+  registered regulation (the file is named by the registry's
+  `munchstats_format`), Bo1 and Bo3, at rating cutoffs 1760 and 0. Three
+  staging tables come from the same files: usage per Pokémon
+  (`smogon_ladder`), checks and counters (`smogon_ladder_counters`: per
+  pair, how often the Pokémon was KO'd or switched out, from the battle
+  logs) and Stat Point spreads (`smogon_ladder_spreads`). The ladder is
+  **its own population**, anyone on Showdown weighted toward the
+  strongest players, and **feeds no release entity**: it lands in three
+  marts only (`ladder_pokemon_usage`, `ladder_checks_counters`,
+  `ladder_stat_point_spreads`), shown beside tournament figures and never
+  added to them. Its spreads are the one place Stat Points appear (D3):
+  tournament team sheets publish none, so they never enter a tournament
+  entity, a team sheet or the Builder's sets. See `docs/data-sources.md`
+  §10 and `pipelines/extract/smogon_ladder.py`.
+- **Pokémon Showdown replays** (`replay.pokemonshowdown.com`) — added
+  2026-10-23 (`docs/upgrade-plan-2027q2.md`, S3; `docs/roadmap.md`, Phase
+  4). A replay's log names the six each side showed at team preview, the
+  Pokémon that entered the battle, the two that led and who won: the
+  "which four did they bring" signal no tournament source publishes. A
+  daily, paced sample of rated ladder battles per registered regulation
+  (format from the registry's `munchstats_format`, Bo1 and Bo3), one row
+  per battle side (`showdown_replays`); player names are read only to tell
+  who won and are never stored. The same **Showdown ladder population** as
+  Smogon's statistics, feeding **no release entity**: intermediate
+  `int_ladder_battle`, `int_ladder_battle_side` and
+  `int_ladder_battle_pokemon` (the roadmap's `battle`, `battle_side` and
+  `battle_pokemon` grains) and two marts, `ladder_bring_rate` and
+  `ladder_lead_pairs`. Official events are played on the game, so no
+  replay belongs to one and nothing joins RK9 or MunchStats; the
+  team-vs-team surfaces stay as they are, beside it. Bring and
+  win-when-brought figures read complete battles only (both sides revealed
+  all the Pokémon they brought). See `docs/data-sources.md` §11 and
+  `pipelines/extract/showdown_replays.py`.
+- **Limitless upcoming tournaments** (`play.limitlesstcg.com/tournaments/
+  upcoming`) — added 2026-10-23 (`docs/upgrade-plan-2027q2.md`, list #31),
+  a third pass of the Limitless online run: the scheduled online
+  tournaments of the regulation in force (and one registered to start
+  within 30 days), one request per regulation, into
+  `limitless_play_upcoming` and the `online_upcoming_events` mart. No
+  player appears. See `docs/data-sources.md` §9.
+- **Curated stream links** (`dbt/seeds/featured_match_vods.csv`) — added
+  2026-10-23 (`docs/upgrade-plan-2027q2.md`, S5 and E5): a controlled seed,
+  not an extractor, of top-cut matches with a video of them, keyed by
+  event, round and table, feeding `tournament_top_cut_matches.vod_url`.
+  Only videos that are the match itself are listed, each checked for its
+  title and channel; `assert_featured_match_vods_resolve` fails the build
+  when a row names no real match.
 
 ## Image asset source (Phase 4 addition)
 
@@ -143,13 +214,24 @@ from PokéAPI's community sprites GitHub repo instead — see
   - **Join keys**: `event_id`
   - **Required fields**: `event_id`, `event_name`, `event_date`, `source_name`,
     `source_url`, `source_record_id`, `extracted_at_utc`, `dataset_version`
-  - **Optional fields**: `event_tier` (tournament tier, e.g. International/
-    Regional/Special — nullable since MunchStats doesn't report it for
-    every event), `event_format` (MunchStats format string),
+  - **Optional fields**: `event_tier` (tournament tier: Worlds/
+    International/Special/Regional from MunchStats — nullable since
+    MunchStats doesn't report it for every event — or `Online` for a
+    Limitless online tournament, which is always set), `event_format`
+    (MunchStats format string, or Limitless' online label such as `M-C`),
     `regulation_code` (Champions regulation set, e.g. `m-c`, resolved
-    from `event_format` via `dbt/seeds/champions_regulations.csv`; null
-    only for standard-VGC events. Every Champions-format event must
-    resolve, enforced by `assert_champions_formats_registered`)
+    from `event_format` via `dbt/seeds/champions_regulations.csv`'s
+    `munchstats_format` or `limitless_play_format`; null only for
+    standard-VGC events. Every Champions-format event must resolve,
+    enforced by `assert_champions_formats_registered`. An online event
+    dated after its label's regulation ended, with fewer than 95% of its
+    slots legal under the label, takes the regulation in force on its date
+    instead, because organisers keep old labels after a rollover;
+    `assert_online_regulation_legality` checks the result)
+  - **Populations**: `event_tier = 'Online'` marks the online population
+    (`LP-<tournament id>` event ids). Consumers must not blend it into
+    official figures unless they say so; the marts' `regulation_scope`
+    values carry the split (see "Key rules")
 - `tournament_team`
   - **Purpose**: team-level tournament metadata
   - **Primary key**: `team_id`
@@ -161,6 +243,13 @@ from PokéAPI's community sprites GitHub repo instead — see
     nullable since MunchStats doesn't report it for every player),
     `record_wins`, `record_losses` (win-rate proxy — nullable since
     MunchStats doesn't report a record for every player)
+  - **Online teams**: `LP-<tournament>-<handle>`, one per player per
+    online tournament whose sheet was published; `player_id` is
+    `LP-<handle>`, a Limitless handle that never joins an official
+    identity. Limitless leaves a dropped player's placing blank (about a
+    quarter of online teams), so `placement` places a drop after every
+    finisher of its tournament, by record, as RK9's standings rank one
+    (`int_limitless_play_mapped.placement_is_derived` marks them)
 - `tournament_team_member`
   - **Purpose**: one row per Pokémon on a normalized tournament team
   - **Primary key**: `team_member_id`
@@ -182,8 +271,12 @@ from PokéAPI's community sprites GitHub repo instead — see
     `source_record_id`, `extracted_at_utc`, `dataset_version`
   - **Optional fields**: `table_number` (a bye is assigned none);
     `player_id_1`/`team_id_1`/`player_id_2`/`team_id_2` (null for a bye's
-    absent opponent, and for the Junior/Senior divisions, which MunchStats
-    does not scrape rosters for); `winner_team_id` (null for a tie or bye)
+    absent opponent, for the Junior/Senior divisions, which MunchStats
+    does not scrape rosters for, and for an online player whose sheet the
+    organiser didn't publish); `winner_team_id` (null for a tie or bye)
+  - **Divisions**: `Masters`/`Senior`/`Junior` from RK9; `Online` for a
+    Limitless online pairing, whose `outcome` can also be `no_result`
+    (the platform recorded none; `is_complete` false)
   - **Grain caveat, which every consumer must state**: an outcome is *team
     vs team*, not Pokémon vs Pokémon. No source publishes a per-battle log
     naming which four of a team's six Pokémon were brought or which
@@ -305,6 +398,16 @@ value there (vs. as dashboard-only support data) is clearer.
   and published release versions.
 - Rows that cannot be mapped to a stable `pokemon_key` may remain in staging but
   must not ship in release outputs without an explicit confidence override.
+- **Populations** (`docs/upgrade-plan-2027q2.md`, S1): official events
+  (MunchStats/RK9) and Limitless online events are never blended by
+  default. `int_champions_roster` carries a `population` column
+  (`official`/`online`); unscoped roster-derived marts read
+  `int_champions_roster_official`; regulation-scoped marts read
+  `int_champions_roster_scoped`, whose `regulation_scope` is the
+  regulation code for official rows (`m-c`, `all`, unchanged), suffixed
+  `:online` for online rows (`m-c:online`, `all:online`), and `:combined`
+  for both together, which exists only for a regulation with online rows.
+  Player-level marts are official-only (`scope_population = 'official'`).
 
 ### Refresh policy
 
@@ -313,6 +416,28 @@ value there (vs. as dashboard-only support data) is clearer.
   see "PokéAPI high-resolution artwork" below)
 - **OP.GG Pokémon Champions**: daily change check, publish on change detection
 - **MunchStats**: daily check with publish after new tournament/event detection
+- **Event weekends**: an event dated from the day before to three days
+  ago is live: MunchStats and RK9 fetch it again on every run instead of
+  reusing their cached copy, and `.github/workflows/event-weekend.yml`
+  rebuilds and publishes the dashboard hourly while one is
+  (`docs/upgrade-plan-2027q2.md`, E4)
+- **Limitless online tournaments**: daily. The lookback is the regulation
+  in force; a tournament more than two days old that the previous
+  snapshot holds is reused rather than re-fetched (the API allows 50
+  requests per 5 minutes without a key, so a first backfill of a
+  regulation takes about an hour and later runs a few minutes)
+- **Smogon usage statistics**: published monthly, extracted daily. Each
+  regulation's month is the newest one it was in force for at least half
+  of (a new regulation's first, partial month until a full one exists); a
+  month the previous snapshot holds is reused, so a daily run costs a few
+  listing requests and a new month lands the day it is published
+- **Showdown ladder replays**: daily, a sample: at most 150 new rated
+  replays per regulation and ladder (Bo1, Bo3) per run at one request a
+  second, the newest first and then further back from the oldest held;
+  every battle held is kept (up to 5,000 per format, the newest), so the
+  sample grows run by run
+- **Limitless upcoming tournaments**: daily, with the online run; the
+  dashboard drops any that have started by the time it is read
 - **Versioning rule**: publish `dataset_version` on every successful refresh
   cycle with changelog notes for schema or major row-count shifts
 - **Snapshot history**: `python -m pipelines.cli extract <source>` writes
@@ -512,6 +637,30 @@ Every release entry must summarize:
   - Sustained/scheduled automated access rate-limiting or ToS posture not
     independently verified beyond a one-off extract
 
+### PokéAPI localised names
+
+A third PokéAPI path (`docs/upgrade-plan-2027q2.md`, Q4), from PokéAPI's
+own source CSVs on GitHub rather than its JSON API: five files
+(`languages`, `pokemon`, `pokemon_forms`, `pokemon_species_names`,
+`pokemon_form_names`) instead of about 600 calls.
+
+- **Records to capture**
+  - Each form's name in Japanese, Spanish, French and German
+    (`data/staging/pokeapi_names.schema.json`), with the rule that
+    produced it
+- **Scope**
+  - Every form the same run's pokeapi snapshot holds; weekly, with it
+- **Composition**
+  - PokéAPI has every species' localised name but full form names only
+    unevenly (French and Japanese Megas, a few Spanish and German ones), so
+    `pipelines/extract/pokeapi.py`'s `localised_name` composes the rest
+    from the species name and each language's convention ("Méga-Dracaufeu
+    Y", "Hisui-Arkani", "ウインディ（ヒスイのすがた）"). About ten Champions-pool
+    rows fall back to an English form label in Spanish or German
+- **Feeds** `pokemon_localised_names`, a mart, not a release entity; the
+  dashboard's name-language switch. Portuguese uses the English names, as
+  the Brazilian games do
+
 ### PokéAPI high-resolution artwork
 
 A second PokéAPI extraction path, distinct from the identity/stat one above
@@ -561,6 +710,11 @@ JSON API.
   was 317/359 titles, 88.3%).
 - Any unmapped or low-confidence rows must be documented in the manifest and
   excluded from release tables unless explicitly approved.
+- Smogon ladder names should resolve to a `pokemon_key` for at least 99%
+  of usage rows (`assert_smogon_ladder_name_coverage`, 333 of 333 names
+  when the source was added). It is a mart check, not a release gate:
+  ladder data feeds no release entity, so an unmapped name drops that
+  Pokémon from the ladder views rather than stopping a release.
 
 ## Phased execution roadmap
 
@@ -580,6 +734,12 @@ of every phase.
   - `>=95%` of PokéBase legal-pool rows mapped to canonical `pokemon_id`
   - `>=85%` of Bulbagarden sprite titles mapped to `pokemon_asset`
     `menu_sprite` rows
+  - `>=85%` of staged Limitless online team-sheet slots mapped to a
+    `pokemon_key` (`assert_limitless_play_slug_mapping_coverage`), the
+    same bar as limitlessvgc.com's slugs, which the platform shares
+  - `>=95%` of each regulation's online team-sheet slots legal in it
+    (`assert_online_regulation_legality`), which catches a mislabelled
+    online event (67–85%); correctly resolved data sits at 98.7–99.9%
   - `>=95%` of `pokemon_asset` `menu_sprite` rows also having a
     `home_render` row. The threshold is higher than Bulbagarden's 85%
     because none of what justifies that lower floor applies: that gate's

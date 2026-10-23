@@ -335,6 +335,7 @@ def extract(
     session: requests.Session | None = None,
     previous_snapshot_path: Path | None = None,
     format_filter: Collection[str] | None = CHAMPIONS_FORMATS,
+    refresh_event_ids: Collection[str] = (),
 ) -> None:
     """Fetch RK9 round-by-round pairings and write one row per match to
     output_path as CSV matching data/staging/rk9_pairings.schema.json,
@@ -351,6 +352,9 @@ def extract(
     concluded event are immutable. Reused rows are re-stamped with this
     run's extracted_at_utc/dataset_version, matching the convention
     munchstats.py and bulbagarden.py already set for skipped work.
+    `refresh_event_ids` are fetched again regardless: events still running
+    (docs/upgrade-plan-2027q2.md, E4), whose cached pairings stop at
+    whatever round was live when they were cached.
     """
     http = session if session is not None else requests.Session()
     if event_ids is None:
@@ -366,7 +370,7 @@ def extract(
     rows: list[dict] = []
     for event_id in event_ids:
         cached_rows = cached_rows_by_event.get(event_id)
-        if cached_rows:
+        if cached_rows and event_id not in refresh_event_ids:
             rows.extend(
                 {
                     **row,

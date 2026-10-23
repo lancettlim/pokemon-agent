@@ -17,7 +17,17 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from dashboard_fixture import write_fixture_manifest, write_fixture_marts
+from dashboard_fixture import (
+    ONLINE_SCOPES,
+    write_fixture_archetype_matchups,
+    write_fixture_event_phase_marts,
+    write_fixture_ladder_marts,
+    write_fixture_manifest,
+    write_fixture_marts,
+    write_fixture_mega_marts,
+    write_fixture_name_marts,
+    write_fixture_share_cards,
+)
 
 from pipelines.dashboard import build
 from pipelines.regulations import Regulation, load_regulations
@@ -30,12 +40,22 @@ _PREINSTALLED_CHROMIUM = "/opt/pw-browsers/chromium"
 BUILD_DAY = date(2026, 10, 19)
 
 
-def _build_site(root: Path, regulations: list[Regulation] | None = None) -> Path:
+def _build_site(
+    root: Path,
+    regulations: list[Regulation] | None = None,
+    online_scopes: tuple[str, ...] = ONLINE_SCOPES,
+) -> Path:
     marts_dir = root / "marts"
     normalized_dir = root / "normalized"
-    write_fixture_marts(marts_dir, normalized_dir)
+    write_fixture_marts(marts_dir, normalized_dir, online_scopes)
+    write_fixture_mega_marts(marts_dir)
+    write_fixture_event_phase_marts(marts_dir)
+    write_fixture_ladder_marts(marts_dir)
+    write_fixture_name_marts(marts_dir)
+    write_fixture_archetype_matchups(marts_dir)
     write_fixture_manifest(root / "manifests")
     output_dir = root / "site"
+    write_fixture_share_cards(output_dir)
     build.build(
         marts_dir=marts_dir,
         normalized_dir=normalized_dir,
@@ -103,6 +123,20 @@ def rollover_site_url(tmp_path_factory, serve) -> str:
 
 
 @pytest.fixture(scope="session")
+def online_rollover_site_url(tmp_path_factory, serve) -> str:
+    """The rollover registry, with online events already played under M-D
+    (docs/upgrade-plan-2027q2.md, S1): official M-D has nothing yet, online
+    M-D has enough to open on."""
+    return serve(
+        _build_site(
+            tmp_path_factory.mktemp("dashboard-online-rollover"),
+            regulations_with_next_set(),
+            online_scopes=("m-d:online", "all:online"),
+        )
+    )
+
+
+@pytest.fixture(scope="session")
 def browser():
     sync_api = pytest.importorskip("playwright.sync_api")
     launch_kwargs = {}
@@ -134,11 +168,19 @@ def open_page(browser):
         storage=None,
         permissions=None,
         touch: bool = False,
+        service_workers: str = "block",
+        timezone_id: str | None = None,
+        locale: str | None = None,
     ):
+        # sw.js (Q5) would answer requests page.route() means to intercept,
+        # so workers are blocked unless a test is about them.
+        options = {"timezone_id": timezone_id, "locale": locale}
         context = browser.new_context(
             viewport={"width": width, "height": height},
             permissions=permissions or [],
             has_touch=touch,
+            service_workers=service_workers,
+            **{key: value for key, value in options.items() if value},
         )
         contexts.append(context)
         if storage:

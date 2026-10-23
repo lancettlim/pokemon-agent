@@ -34,6 +34,8 @@ DEFAULT_MANIFESTS_DIR = REPO_ROOT / "releases" / "manifests"
 _STAGING_LABELS = {
     "bulbagarden": "Bulbagarden Archives",
     "limitless": "Limitless VGC",
+    "limitless_play": "Limitless Online",
+    "limitless_play_pairings": "Limitless Online (pairings)",
     "munchstats": "MunchStats",
     "opgg_champions": "OP.GG Pokémon Champions",
     "pokeapi": "PokéAPI",
@@ -41,14 +43,21 @@ _STAGING_LABELS = {
     "pokeapi_artwork": "PokéAPI (artwork)",
     "pokeapi_item": "PokéAPI (item detail)",
     "pokeapi_move": "PokéAPI (move detail)",
+    "pokeapi_names": "PokéAPI (localised names)",
     "pokebase": "PokéBase",
     "rk9_pairings": "RK9.gg",
+    "smogon_ladder": "Smogon usage statistics",
+    "smogon_ladder_counters": "Smogon usage statistics (checks and counters)",
+    "smogon_ladder_spreads": "Smogon usage statistics (Stat Point spreads)",
 }
 
 # mart_name -> (int_fields, float_fields) for numeric coercion; every other
 # column is left as a string.
 MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
-    "pokemon_usage_summary": (("usage_count", "usage_rank"), ("usage_share",)),
+    "pokemon_usage_summary": (
+        ("usage_count", "usage_rank", "scope_team_count"),
+        ("usage_share", "team_share"),
+    ),
     "legality_summary_by_regulation": (
         ("legal_pokemon_count", "cumulative_legal_pokemon_count"),
         (),
@@ -77,13 +86,13 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
             "usage_count",
             "record_count",
         ),
-        ("usage_share", "win_rate"),
+        ("usage_share", "team_share", "win_rate"),
     ),
     "top_tournament_teams": (
         ("record_wins", "record_losses", "placement", "team_rank"),
         ("win_rate",),
     ),
-    "pokemon_usage_by_event_date": (("usage_count", "usage_rank"), ("usage_share",)),
+    "pokemon_usage_by_event_date": (("usage_count", "usage_rank"), ("usage_share", "team_share")),
     "pokemon_head_to_head": (
         ("matches_played", "wins", "losses", "matchup_rank"),
         ("win_rate", "wilson_lower_bound"),
@@ -100,11 +109,17 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     ),
     "pokemon_placement_weighted_usage": (
         ("usage_count", "top_cut_usage_count", "weighted_usage_rank"),
-        ("top_cut_usage_share", "placement_weighted_score", "weighted_usage_share"),
+        (
+            "top_cut_usage_share",
+            "placement_weighted_score",
+            "weighted_usage_share",
+            "top_cut_team_share",
+            "weighted_team_share",
+        ),
     ),
     "pokemon_usage_by_regulation": (
         ("usage_count", "usage_rank", "record_count"),
-        ("usage_share", "win_rate"),
+        ("usage_share", "team_share", "win_rate"),
     ),
     "pokemon_build_concentration": (
         ("item_count", "ability_count"),
@@ -130,6 +145,9 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
             "win_rate",
             "previous_win_rate",
             "win_rate_delta",
+            "team_share",
+            "previous_team_share",
+            "team_share_delta",
         ),
     ),
     "pokemon_team_core_triple_usage": (
@@ -177,11 +195,11 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
             "usage_count",
             "record_count",
         ),
-        ("usage_share", "win_rate"),
+        ("usage_share", "team_share", "win_rate"),
     ),
     "pokemon_usage_by_country": (
-        ("usage_count", "country_usage_rank"),
-        ("usage_share",),
+        ("usage_count", "country_usage_rank", "country_team_count"),
+        ("usage_share", "team_share"),
     ),
     "player_signature_pokemon": (
         ("player_team_count", "usage_count", "player_pokemon_rank"),
@@ -216,6 +234,93 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ),
         (),
     ),
+    # docs/upgrade-plan-2027q2.md, E1 and E2: Day 2 conversion, the bracket
+    # and each top-cut team's path.
+    "pokemon_event_phase_usage": (
+        ("team_count", "phase_team_count", "field_usage_count", "field_team_count", "usage_rank"),
+        ("team_share", "field_team_share", "conversion"),
+    ),
+    "tournament_top_cut_matches": (
+        (
+            "round_number",
+            "bracket_round",
+            "top_cut_size",
+            "bracket_size",
+            "table_number",
+            "placement_1",
+            "placement_2",
+        ),
+        (),
+    ),
+    "tournament_top_cut_paths": (("round_number", "table_number", "opponent_placement"), ()),
+    # docs/upgrade-plan-2027q2.md, list #30: the Archetypes tab's matchup
+    # heatmap, cut to the archetypes the tab lists (build_payload).
+    "archetype_matchups": (("matches", "wins", "losses"), ("win_rate",)),
+    # docs/upgrade-plan-2027q2.md, Q4: names in four more languages, folded
+    # into the inline payload (localised_names) rather than shipped raw.
+    "pokemon_localised_names": ((), ()),
+    # docs/upgrade-plan-2027q2.md, S2: the Showdown ladder lens, its own
+    # population. Sliced (MART_SLICERS) to the rows the views read.
+    "ladder_pokemon_usage": (
+        ("cutoff", "battles", "raw_count", "ladder_rank", "tournament_rank"),
+        ("ladder_usage", "tournament_team_share", "ladder_gap"),
+    ),
+    "ladder_checks_counters": (
+        ("cutoff", "battles", "encounters", "counter_rank"),
+        ("ko_or_switch_rate", "std_dev", "score"),
+    ),
+    "ladder_stat_point_spreads": (
+        (
+            "cutoff",
+            "battles",
+            "sp_hp",
+            "sp_atk",
+            "sp_def",
+            "sp_spa",
+            "sp_spd",
+            "sp_spe",
+            "spread_rank",
+        ),
+        ("share",),
+    ),
+    # docs/upgrade-plan-2027q2.md, S1: the Events tab's online list.
+    "online_event_summary": (
+        (
+            "registered_player_count",
+            "team_count",
+            "match_count",
+            "winner_count",
+            "winner_record_wins",
+            "winner_record_losses",
+            "recency_rank",
+        ),
+        (),
+    ),
+    # docs/upgrade-plan-2027q2.md, list #31: the Events tab's upcoming list.
+    "online_upcoming_events": (("registrations", "player_cap"), ()),
+    # docs/upgrade-plan-2027q2.md, S3 and list #27: Showdown ladder replays'
+    # bring rates and lead pairs, on the Ladder view and the profile.
+    "ladder_bring_rate": (
+        (
+            "battles",
+            "complete_battles",
+            "shown",
+            "led",
+            "complete_shown",
+            "brought",
+            "brought_decided",
+            "wins_brought",
+            "benched_decided",
+            "wins_benched",
+            "mega_evolved",
+            "shown_rank",
+        ),
+        ("shown_share", "lead_rate", "bring_rate", "win_rate_brought", "win_rate_benched"),
+    ),
+    "ladder_lead_pairs": (
+        ("sides_led", "decided", "wins", "pair_rank"),
+        ("lead_share", "win_rate"),
+    ),
     "tournament_team_results": (
         ("placement", "event_team_count", "record_wins", "record_losses", "roster_size"),
         ("win_rate",),
@@ -235,9 +340,19 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     ),
     "pokemon_event_usage_vs_regulation": (
         ("usage_count", "event_slot_count", "event_team_count", "total_wins", "total_losses"),
-        ("event_usage_share", "regulation_usage_share", "usage_share_delta"),
+        (
+            "event_usage_share",
+            "regulation_usage_share",
+            "usage_share_delta",
+            "event_team_share",
+            "regulation_team_share",
+            "team_share_delta",
+        ),
     ),
     "player_archetype_record": (("matches_played", "wins", "losses"), ("win_rate",)),
+    # docs/upgrade-plan-2027q2.md, E3: the Mega usage panel.
+    "mega_stone_usage": (("team_count", "scope_team_count", "usage_rank"), ("team_share",)),
+    "team_mega_count": (("mega_count", "team_count"), ("team_share",)),
 }
 
 # Two of the marts above are far larger than anything the dashboard can
@@ -422,7 +537,101 @@ def _better_placement(current: int | None, placement: int | None) -> int | None:
     return placement if current is None else min(current, placement)
 
 
+# The ladder lens (docs/upgrade-plan-2027q2.md, S2) ships what its views
+# show: usage for every ladder and cutoff (the Ladder view's switches),
+# each Pokémon's top LADDER_COUNTERS checks on the Bo1 ladder, and its top
+# LADDER_SPREADS spreads among 1760+ Bo1 players. The full marts stay in
+# data/marts/. Columns the views don't read are dropped: every row of a
+# regulation shares one file, which the page names by its month.
+LADDER_VARIANT = "bo1"
+LADDER_TOP_CUTOFF = 1760
+LADDER_COUNTERS = 12
+LADDER_SPREADS = 6
+_LADDER_DROP = {
+    "ladder_pokemon_usage": ("ladder_name", "source_name", "source_url"),
+    "ladder_checks_counters": (
+        "variant",
+        "cutoff",
+        "battles",
+        "std_dev",
+        "score",
+        "source_name",
+        "source_url",
+    ),
+    "ladder_stat_point_spreads": ("variant", "cutoff", "battles", "source_name", "source_url"),
+}
+
+
+def _trim(mart_name: str, row: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in row.items() if k not in _LADDER_DROP[mart_name]}
+
+
+def _slice_ladder_usage(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_trim("ladder_pokemon_usage", row) for row in rows]
+
+
+def _slice_ladder_counters(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        _trim("ladder_checks_counters", row)
+        for row in rows
+        if row.get("variant") == LADDER_VARIANT
+        and (row.get("counter_rank") or 0) <= LADDER_COUNTERS
+    ]
+
+
+def _slice_ladder_spreads(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        _trim("ladder_stat_point_spreads", row)
+        for row in rows
+        if row.get("variant") == LADDER_VARIANT
+        and row.get("cutoff") == LADDER_TOP_CUTOFF
+        and (row.get("spread_rank") or 0) <= LADDER_SPREADS
+    ]
+
+
+# Replay bring rates and lead pairs (S3) ship the Bo1 and Bo3 ladders
+# pooled ("all"), which is what the views show; the per-variant rows stay in
+# data/marts/.
+# Bring rates on fewer complete sides than LADDER_REPLAY_MIN_SIDES are
+# noise the views don't show (static/ladder.js's MIN_BRING_SIDES), so they
+# aren't shipped.
+LADDER_REPLAY_VARIANT = "all"
+LADDER_REPLAY_MIN_SIDES = 30
+_REPLAY_DROP = ("variant", "source_name", "source_url")
+
+
+def _slice_ladder_replays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {k: v for k, v in row.items() if k not in _REPLAY_DROP}
+        for row in rows
+        if row.get("variant") == LADDER_REPLAY_VARIANT
+        and (row.get("complete_shown") is None or row["complete_shown"] >= LADDER_REPLAY_MIN_SIDES)
+    ]
+
+
+# The upcoming list (list #31) keeps the tournament link and the read time
+# (registrations are "as of" it); the rest of the provenance stays in
+# data/marts/.
+_UPCOMING_DROP = ("tournament_format", "source_name", "source_record_id", "dataset_version")
+
+
+def _slice_upcoming(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            **{k: v for k, v in row.items() if k not in _UPCOMING_DROP},
+            "registration_open": str(row.get("registration_open", "")).lower() == "true",
+        }
+        for row in rows
+    ]
+
+
 MART_SLICERS = {
+    "online_upcoming_events": _slice_upcoming,
+    "ladder_bring_rate": _slice_ladder_replays,
+    "ladder_lead_pairs": _slice_ladder_replays,
+    "ladder_pokemon_usage": _slice_ladder_usage,
+    "ladder_checks_counters": _slice_ladder_counters,
+    "ladder_stat_point_spreads": _slice_ladder_spreads,
     "pokemon_set_variants": _slice_set_variants,
     "tournament_team_results": _slice_team_results,
     "pokemon_team_synergy": _slice_team_synergy,
@@ -551,13 +760,17 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
 def _coerce(
     row: dict[str, str], *, int_fields: tuple[str, ...], float_fields: tuple[str, ...]
 ) -> dict[str, Any]:
+    # Only columns the CSV has: a mart built before a column existed (an
+    # older snapshot, a test fixture) doesn't gain it as null.
     coerced: dict[str, Any] = dict(row)
     for field in int_fields:
-        value = coerced.get(field)
-        coerced[field] = int(value) if value not in (None, "") else None
+        if field in coerced:
+            value = coerced[field]
+            coerced[field] = int(value) if value not in (None, "") else None
     for field in float_fields:
-        value = coerced.get(field)
-        coerced[field] = float(value) if value not in (None, "") else None
+        if field in coerced:
+            value = coerced[field]
+            coerced[field] = float(value) if value not in (None, "") else None
     return coerced
 
 
@@ -684,7 +897,55 @@ NAME_JOINS = (
     ("pokemon_key_b", "pokemon_name_b"),
     ("pokemon_key_c", "pokemon_name_c"),
     ("top_extension_pokemon_key", "top_extension_pokemon_name"),
+    ("counter_pokemon_key", "counter_pokemon_name"),
 )
+
+
+def _used_pokemon_keys(marts: dict[str, list[dict[str, Any]]]) -> set[str]:
+    """Every Pokémon the marts mention: each key column NAME_JOINS knows
+    and the pipe-delimited rosters."""
+    used: set[str] = set()
+    key_fields = [key for key, _name in NAME_JOINS]
+    for mart_name, mart_rows in marts.items():
+        if mart_name == "pokemon_localised_names":
+            continue
+        for row in mart_rows:
+            for field in key_fields:
+                if row.get(field):
+                    used.add(row[field])
+            if row.get("pokemon_keys"):
+                used.update(k for k in str(row["pokemon_keys"]).split("|") if k)
+    return used
+
+
+def localised_names(
+    rows: list[dict[str, Any]], marts: dict[str, list[dict[str, Any]]]
+) -> dict[str, dict[str, str]]:
+    """language -> {pokemon_key: name} (docs/upgrade-plan-2027q2.md, Q4),
+    for the Pokémon the marts mention. The inline payload carries these
+    four maps, so a page in Japanese paints its first view with no fetch."""
+    used = _used_pokemon_keys(marts)
+    names: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if row.get("pokemon_key") in used and row.get("localised_name"):
+            names.setdefault(row["language"], {})[row["pokemon_key"]] = row["localised_name"]
+    return names
+
+
+def form_species(normalized_dir: Path, marts: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
+    """pokemon_key -> species pokemon_key for every form the marts mention
+    whose key isn't its species' own ("charizard-mega-y" -> "charizard",
+    "rotom-wash" -> "rotom"). The Team Builder's species clause reads it
+    (docs/upgrade-plan-2027q2.md, list #22): a species and its Mega or
+    regional form can't share a team."""
+    used = _used_pokemon_keys(marts)
+    return {
+        row["pokemon_key"]: row["pokemon_name"]
+        for row in _read_csv_rows(normalized_dir / "pokemon.csv")
+        if row["pokemon_key"] in used
+        and row.get("pokemon_name")
+        and row["pokemon_name"] != row["pokemon_key"]
+    }
 
 
 def _join_pokemon_names(
@@ -704,6 +965,34 @@ def _join_pokemon_names(
 
 
 ALL_SCOPE = "all"
+
+# Populations (docs/upgrade-plan-2027q2.md, S1). A scope is a regulation
+# ("m-c", or "all") with an optional population suffix: "m-c" is official
+# events only, "m-c:online" Limitless online events only, "m-c:combined"
+# both. Official stays the default everywhere; the marts carry all three
+# (int_champions_roster_scoped).
+OFFICIAL = "official"
+ONLINE = "online"
+COMBINED = "combined"
+POPULATIONS = (OFFICIAL, ONLINE, COMBINED)
+
+
+def scope_regulation(scope: str) -> str:
+    """The regulation part of a scope: "m-c:online" -> "m-c"."""
+    return scope.split(":", 1)[0]
+
+
+def scope_population(scope: str) -> str:
+    """The population part of a scope: "m-c" -> "official"."""
+    _, _, population = scope.partition(":")
+    return population or OFFICIAL
+
+
+def population_scope(regulation: str, population: str) -> str:
+    """The scope for a regulation and a population: ("m-c", "online") ->
+    "m-c:online"; official scopes carry no suffix."""
+    return regulation if population == OFFICIAL else f"{regulation}:{population}"
+
 
 # Below this many teams on either side, a regulation-to-regulation delta is
 # mostly noise, so the "What changed" panel shows counts but no deltas.
@@ -743,10 +1032,19 @@ def _tier_rank(tier: str | None) -> int:
 
 
 def _events_in_scope(marts: dict[str, list[dict[str, Any]]], scope: str) -> list[dict[str, Any]]:
-    events = marts.get("tournament_event_summary", [])
-    if scope == ALL_SCOPE:
+    """The events behind a scope's figures: official events
+    (tournament_event_summary), online ones (online_event_summary) or
+    both, in the scope's regulation (every regulation for "all")."""
+    population = scope_population(scope)
+    events: list[dict[str, Any]] = []
+    if population in (OFFICIAL, COMBINED):
+        events += marts.get("tournament_event_summary", [])
+    if population in (ONLINE, COMBINED):
+        events += marts.get("online_event_summary", [])
+    regulation = scope_regulation(scope)
+    if regulation == ALL_SCOPE:
         return list(events)
-    return [e for e in events if e.get("regulation_code") == scope]
+    return [e for e in events if e.get("regulation_code") == regulation]
 
 
 def _truthy(value: Any) -> bool:
@@ -838,9 +1136,12 @@ def short_event_name(event_name: str | None) -> str:
     return short or event_name
 
 
-def _latest_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _latest_event(
+    events: list[dict[str, Any]], sheets: list[dict[str, Any]] | None = None
+) -> dict[str, Any] | None:
     """The newest event in a scope, for the Overview's "Latest event" card
-    (docs/upgrade-plan-2027q1.md, C1)."""
+    (docs/upgrade-plan-2027q1.md, C1), with the winner's sheet when it is
+    published, so the card's team strip can show held items (V3)."""
     if not events:
         return None
     newest = max(events, key=lambda e: (e.get("event_date") or "", e.get("event_id") or ""))
@@ -857,9 +1158,22 @@ def _latest_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
         "winner_record_losses",
         "winner_pokemon_keys",
     )
+    winner_sets = sorted(
+        (
+            row
+            for row in sheets or []
+            if newest.get("winner_team_id") and row.get("team_id") == newest["winner_team_id"]
+        ),
+        key=lambda row: row.get("slot_number") or 0,
+    )
     return {
         **{key: newest.get(key) for key in keys},
         "short_name": short_event_name(newest.get("event_name")),
+        "winner_team_id": newest.get("winner_team_id"),
+        "winner_sets": [
+            {k: row.get(k) for k in ("pokemon_key", "item_name", "ability", "nature", "moves")}
+            for row in winner_sets
+        ],
     }
 
 
@@ -882,6 +1196,9 @@ def _mover_row(row: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "pokemon_key",
         "pokemon_name",
+        "team_share",
+        "previous_team_share",
+        "team_share_delta",
         "usage_share",
         "previous_usage_share",
         "usage_share_delta",
@@ -896,9 +1213,10 @@ def summarize_movers(
     movers_rows: list[dict[str, Any]], regulation_code: str
 ) -> dict[str, Any] | None:
     """Risers, fallers and new arrivals for one regulation against the one
-    before it (pokemon_regulation_movers). `reliable` is false when either
-    side has fewer than MIN_MOVER_TEAMS teams; the UI then shows the sample
-    sizes and new arrivals but holds back the deltas."""
+    before it (pokemon_regulation_movers), by team share
+    (docs/upgrade-plan-2027q2.md, V1). `reliable` is false when either side
+    has fewer than MIN_MOVER_TEAMS teams; the UI then shows the sample sizes
+    and new arrivals but holds back the deltas."""
     rows = [r for r in movers_rows if r.get("regulation_code") == regulation_code]
     if not rows:
         return None
@@ -907,16 +1225,16 @@ def summarize_movers(
     is_new = [r for r in rows if str(r.get("is_new_to_format")).lower() == "true"]
     carried = [r for r in rows if str(r.get("is_new_to_format")).lower() != "true"]
     risers = sorted(
-        (r for r in carried if (r.get("usage_share_delta") or 0) > 0),
-        key=lambda r: -(r.get("usage_share_delta") or 0),
+        (r for r in carried if (r.get("team_share_delta") or 0) > 0),
+        key=lambda r: -(r.get("team_share_delta") or 0),
     )
     fallers = sorted(
-        (r for r in carried if (r.get("usage_share_delta") or 0) < 0),
-        key=lambda r: r.get("usage_share_delta") or 0,
+        (r for r in carried if (r.get("team_share_delta") or 0) < 0),
+        key=lambda r: r.get("team_share_delta") or 0,
     )
     arrivals = sorted(
         (r for r in is_new if (r.get("usage_count") or 0) > 0),
-        key=lambda r: -(r.get("usage_share") or 0),
+        key=lambda r: -(r.get("team_share") or 0),
     )
     return {
         "regulation_code": regulation_code,
@@ -935,9 +1253,10 @@ def summarize_movers(
 # -- so the "What changed" panel defaults to comparing the selected
 # regulation's own early and recent events instead.
 MIN_BASELINE_EVENTS = 2
-# A Pokémon below this share on both sides of an early-vs-recent comparison
-# isn't a mover worth listing, whatever its delta.
-MIN_WINDOW_MOVER_SHARE = 0.005
+# A Pokémon on fewer than this share of teams on both sides of an
+# early-vs-recent comparison isn't a mover worth listing, whatever its
+# delta. (0.5% of roster slots before team share became the unit.)
+MIN_WINDOW_MOVER_SHARE = 0.03
 
 
 def summarize_event_window_movers(
@@ -945,9 +1264,10 @@ def summarize_event_window_movers(
 ) -> dict[str, Any] | None:
     """Risers and fallers between a regulation's early and recent events
     (C4): the newest half of its events (by date) against the rest, with
-    shares of roster slots summed over each side from
-    pokemon_event_usage_vs_regulation. None with fewer than two events.
-    `reliable` follows the same MIN_MOVER_TEAMS floor as summarize_movers."""
+    team shares summed over each side from pokemon_event_usage_vs_regulation
+    (and the slot shares beside them, for tooltips). None with fewer than
+    two events. `reliable` follows the same MIN_MOVER_TEAMS floor as
+    summarize_movers."""
     ordered = sorted(events, key=lambda e: (e.get("event_date") or "", e.get("event_id") or ""))
     if len(ordered) < 2:
         return None
@@ -955,9 +1275,10 @@ def summarize_event_window_movers(
     early_ids = [e["event_id"] for e in ordered[: len(ordered) - recent_count]]
     recent_ids = [e["event_id"] for e in ordered[len(ordered) - recent_count :]]
 
-    def side(ids: list[str]) -> tuple[dict[str, int], int]:
+    def side(ids: list[str]) -> tuple[dict[str, int], int, int]:
         usage: dict[str, int] = {}
         slots: dict[str, int] = {}
+        teams: dict[str, int] = {}
         for row in event_usage_rows:
             if row.get("event_id") not in ids:
                 continue
@@ -965,36 +1286,42 @@ def summarize_event_window_movers(
                 row.get("usage_count") or 0
             )
             slots[row["event_id"]] = row.get("event_slot_count") or 0
-        return usage, sum(slots.values())
+            teams[row["event_id"]] = row.get("event_team_count") or 0
+        return usage, sum(slots.values()), sum(teams.values())
 
-    early_usage, early_slots = side(early_ids)
-    recent_usage, recent_slots = side(recent_ids)
-    if not early_slots or not recent_slots:
+    early_usage, early_slots, early_team_total = side(early_ids)
+    recent_usage, recent_slots, recent_team_total = side(recent_ids)
+    if not early_slots or not recent_slots or not early_team_total or not recent_team_total:
         return None
     names = {r["pokemon_key"]: r.get("pokemon_name") for r in event_usage_rows}
     rows = []
     for key in set(early_usage) | set(recent_usage):
-        early_share = early_usage.get(key, 0) / early_slots
-        recent_share = recent_usage.get(key, 0) / recent_slots
+        early_share = early_usage.get(key, 0) / early_team_total
+        recent_share = recent_usage.get(key, 0) / recent_team_total
         if max(early_share, recent_share) < MIN_WINDOW_MOVER_SHARE:
             continue
+        early_slot_share = early_usage.get(key, 0) / early_slots
+        recent_slot_share = recent_usage.get(key, 0) / recent_slots
         rows.append(
             {
                 "pokemon_key": key,
                 "pokemon_name": names.get(key) or key,
-                "usage_share": round(recent_share, 4),
-                "previous_usage_share": round(early_share, 4),
-                "usage_share_delta": round(recent_share - early_share, 4),
+                "team_share": round(recent_share, 4),
+                "previous_team_share": round(early_share, 4),
+                "team_share_delta": round(recent_share - early_share, 4),
+                "usage_share": round(recent_slot_share, 4),
+                "previous_usage_share": round(early_slot_share, 4),
+                "usage_share_delta": round(recent_slot_share - early_slot_share, 4),
             }
         )
     by_id = {e["event_id"]: e for e in ordered}
     early_teams = sum(by_id[i].get("team_count") or 0 for i in early_ids)
     recent_teams = sum(by_id[i].get("team_count") or 0 for i in recent_ids)
     risers = sorted(
-        (r for r in rows if r["usage_share_delta"] > 0), key=lambda r: -r["usage_share_delta"]
+        (r for r in rows if r["team_share_delta"] > 0), key=lambda r: -r["team_share_delta"]
     )
     fallers = sorted(
-        (r for r in rows if r["usage_share_delta"] < 0), key=lambda r: r["usage_share_delta"]
+        (r for r in rows if r["team_share_delta"] < 0), key=lambda r: r["team_share_delta"]
     )
     return {
         "early_events": [short_event_name(by_id[i].get("event_name")) for i in early_ids],
@@ -1041,6 +1368,171 @@ def _current_regulation_kpi(
     }
 
 
+# The Overview's Top 12 board (docs/upgrade-plan-2027q2.md, V2).
+TOP_BOARD_SIZE = 12
+BOARD_LABELS = {OFFICIAL: "All players", ONLINE: "Online", COMBINED: "Official + online"}
+# What a population scope takes from its regulation's official scope
+# rather than computing over online events: "What changed" and the event
+# window compare official events, and online events have no team sheets
+# or event pages of ours for the starter teams and the latest-event card.
+OFFICIAL_ONLY_KPIS = ("movers", "window_movers", "starter_teams", "latest_event")
+
+
+def species_group_key(pokemon_key: str) -> str:
+    """The Pokémon a team brings for a Mega Evolution, which is how the
+    official "Top 12 Pokémon" card groups usage (docs/upgrade-plan-2027q2.md,
+    R1): charizard-mega-y -> charizard, meowstic-male-mega -> meowstic-male.
+    Every other form keeps its own key, as on that card: "Basculegion
+    (Male)" and "Floette (Eternal Flower)" stay apart. A team holds one Mega
+    Stone per species at most, so summing a group's team counts never
+    counts a team twice."""
+    parts = pokemon_key.split("-")
+    if "mega" not in parts:
+        return pokemon_key
+    index = parts.index("mega")
+    rest = parts[index + 1 :]
+    # A lone trailing letter is the X/Y/Z variant of the Mega.
+    if len(rest) == 1 and len(rest[0]) == 1:
+        rest = []
+    return "-".join(parts[:index] + rest)
+
+
+def _board_tile(row: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pokemon_key": row["pokemon_key"],
+        "pokemon_name": row.get("pokemon_name")
+        or profile.get("pokemon_name")
+        or row["pokemon_key"],
+        "team_share": row.get("team_share"),
+        "usage_count": row.get("usage_count"),
+        "usage_share": row.get("usage_share"),
+        "team_total": row.get("scope_team_count"),
+        "type_1": profile.get("type_1"),
+        "type_2": profile.get("type_2"),
+    }
+
+
+def top_board(
+    usage_rows: list[dict[str, Any]],
+    profile_by_key: dict[str, dict[str, Any]],
+    grouping: str = "forms",
+    size: int = TOP_BOARD_SIZE,
+) -> list[dict[str, Any]]:
+    """The `size` most-used Pokémon of one scope's overall usage rows
+    (pokemon_usage_summary, event_tier null), by team share. "forms" ranks
+    every pokemon_key; "species" folds each Mega Evolution into the Pokémon
+    that holds its stone (species_group_key) first. A species tile takes the
+    base form's name, art and types, and lists the forms it folded in
+    (form_keys) for its tooltip."""
+    if grouping == "forms":
+        ranked = sorted(usage_rows, key=lambda r: (r.get("usage_rank") or 10**9, r["pokemon_key"]))
+        return [_board_tile(r, profile_by_key.get(r["pokemon_key"], {})) for r in ranked[:size]]
+    groups: dict[str, dict[str, Any]] = {}
+    for row in usage_rows:
+        group = species_group_key(row["pokemon_key"])
+        entry = groups.setdefault(group, {"usage_count": 0, "forms": [], "team_total": 0})
+        entry["usage_count"] += row.get("usage_count") or 0
+        entry["forms"].append(row)
+        entry["team_total"] = row.get("scope_team_count") or entry["team_total"]
+    tiles = []
+    for group, entry in groups.items():
+        forms = sorted(entry["forms"], key=lambda r: -(r.get("usage_count") or 0))
+        art_key = group if group in profile_by_key else forms[0]["pokemon_key"]
+        profile = profile_by_key.get(art_key, {})
+        tile = _board_tile(
+            {
+                "pokemon_key": art_key,
+                "pokemon_name": profile.get("pokemon_name") or display_name(group),
+                "team_share": (
+                    round(entry["usage_count"] / entry["team_total"], 4)
+                    if entry["team_total"]
+                    else None
+                ),
+                "usage_count": entry["usage_count"],
+                "usage_share": round(sum(r.get("usage_share") or 0 for r in forms), 4),
+                "scope_team_count": entry["team_total"],
+            },
+            profile,
+        )
+        tile["form_keys"] = "|".join(r["pokemon_key"] for r in forms)
+        tiles.append(tile)
+    tiles.sort(key=lambda t: (-(t["usage_count"] or 0), t["pokemon_key"]))
+    return tiles[:size]
+
+
+def _latest_event_date(
+    marts: dict[str, list[dict[str, Any]]], events: list[dict[str, Any]], official: bool
+) -> str | None:
+    """The newest tournament behind a scope's figures. An official scope
+    reads the official usage-by-date mart; a population scope (S1) also
+    counts its own online events, so the staleness banner describes the
+    population on screen rather than the official one."""
+    official_latest = max(
+        (
+            r["event_date"]
+            for r in marts.get("pokemon_usage_by_event_date", [])
+            if r.get("event_date")
+        ),
+        default=None,
+    )
+    if official:
+        return official_latest
+    dates = [str(e["event_date"]) for e in events if e.get("event_date")]
+    return max(dates, default=None)
+
+
+def day2_board(
+    phase_rows: list[dict[str, Any]], scope: str, profile_by_key: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The Top 12 board's Day 2 switch (docs/upgrade-plan-2027q2.md, V2 and
+    E1): the scope's most-used Pokémon among teams that reached Day 2, from
+    pokemon_event_phase_usage's regulation grain. Each tile also carries its
+    conversion (Day 2 share over field share) when both sides are big
+    enough to trust. None when the scope has no event with a Day 2."""
+    rows = [
+        r
+        for r in phase_rows
+        if r.get("scope_kind") == "regulation"
+        and r.get("scope_code") == scope
+        and r.get("phase") == "day2"
+    ]
+    if not rows:
+        return None
+    regulation = scope_regulation(scope)
+    events = {
+        r.get("event_id")
+        for r in phase_rows
+        if r.get("scope_kind") == "event"
+        and r.get("phase") == "day2"
+        and (regulation == ALL_SCOPE or r.get("scope_code") == regulation)
+    }
+    usage_rows = [
+        {
+            "pokemon_key": r["pokemon_key"],
+            "pokemon_name": r.get("pokemon_name"),
+            "usage_rank": r.get("usage_rank"),
+            "team_share": r.get("team_share"),
+            "usage_count": r.get("team_count"),
+            "usage_share": None,
+            "scope_team_count": r.get("phase_team_count"),
+        }
+        for r in rows
+    ]
+    conversion = {
+        r["pokemon_key"]: r.get("conversion") for r in rows if _truthy(r.get("is_reliable"))
+    }
+    board = {
+        "label": "Day 2",
+        "team_count": rows[0].get("phase_team_count"),
+        "event_count": len(events),
+        "forms": top_board(usage_rows, profile_by_key, "forms"),
+        "species": top_board(usage_rows, profile_by_key, "species"),
+    }
+    for tile in board["forms"]:
+        tile["conversion"] = conversion.get(tile["pokemon_key"])
+    return board
+
+
 def compute_kpis(
     marts: dict[str, list[dict[str, Any]]],
     today: date | None = None,
@@ -1074,42 +1566,41 @@ def compute_kpis(
     # relying on an arbitrary record_count cutoff.
     top_win_rate = min(win_rate_rows, key=lambda r: r["wilson_rank"], default=None)
 
-    # Overview tab spotlight grid (docs/design-system.md's "3-tier tab
-    # layout convention"): drawn from the overall usage ranking, sliced to
-    # a 6-wide-grid-friendly 12 -- the old Top 30 ranked list was removed
-    # (dashboard "remove top 30 in overview" ask) since the grid tier
-    # already covers the headline Pokémon and a full Usage-tab table
-    # exists for raw drill-down. pokemon_usage_summary itself has no
-    # win_rate column, so it's joined in here (win_rate stays None if the
-    # Pokémon has no recorded win/loss data) -- otherwise every spotlight
-    # card would show a uniform, uninformative "no win rate" placeholder.
-    # Types are joined in for the same reason win_rate is, plus one more:
-    # Overview is the only tab that renders without waiting for the marts
-    # fetch (build.py's critical payload), so it cannot look types up
-    # client-side through pokemon_champions_profile the way every other
-    # grid does. Without this the spotlight grid would be the one
-    # Pokémon-keyed grid with no type accent.
-    win_rate_by_key = {r["pokemon_key"]: r["win_rate"] for r in win_rate_rows}
+    # The Overview's Top 12 board (docs/upgrade-plan-2027q2.md, V2) replaced
+    # the spotlight grid that used to be built here. Types are joined in
+    # because the Overview renders before any marts are fetched (build.py's
+    # critical payload), so it can't look them up client-side.
     profile_by_key = {r["pokemon_key"]: r for r in marts.get("pokemon_champions_profile", [])}
-    ranked_usage = sorted(usage_rows, key=lambda r: r["usage_rank"])
-    ranked_usage = [
-        {
-            **r,
-            "win_rate": win_rate_by_key.get(r["pokemon_key"]),
-            "type_1": profile_by_key.get(r["pokemon_key"], {}).get("type_1"),
-            "type_2": profile_by_key.get(r["pokemon_key"], {}).get("type_2"),
-        }
-        for r in ranked_usage
-    ]
-    top_12_pokemon = ranked_usage[:12]
 
     # docs/upgrade-plan-2027q1.md, U2: "5 events · 3,770 teams" tells every
     # reader how much data the page rests on, so it replaced the
     # distinct-Pokémon count as the first KPI.
     events = _events_in_scope(marts, scope)
+    # The Overview's Top 12 board (docs/upgrade-plan-2027q2.md, V2), one
+    # per player scope: "all" here, the scope's own population;
+    # compute_kpis_by_scope adds Online beside an official scope's, and Day
+    # 2 joins as its data arrives. Each holds the Forms and Species
+    # groupings, so the toggle needs no fetch.
+    team_count = sum(e.get("team_count") or 0 for e in events)
+    boards = {
+        "all": {
+            "label": BOARD_LABELS[scope_population(scope)],
+            "team_count": team_count,
+            "event_count": len(events),
+            "forms": top_board(usage_rows, profile_by_key, "forms"),
+            "species": top_board(usage_rows, profile_by_key, "species"),
+        }
+    }
+    # "What changed" compares official events only: a population scope
+    # borrows its regulation's official summary (compute_kpis_by_scope).
+    regulation = scope_regulation(scope)
+    official = scope_population(scope) == OFFICIAL
+    day2 = day2_board(marts.get("pokemon_event_phase_usage", []), scope, profile_by_key)
+    if official and day2:
+        boards["day2"] = day2
     movers = (
         None
-        if scope == ALL_SCOPE
+        if regulation == ALL_SCOPE or not official
         else summarize_movers(marts.get("pokemon_regulation_movers", []), scope)
     )
     if movers is not None:
@@ -1127,20 +1618,21 @@ def compute_kpis(
         "latest_snapshot_date": latest_snapshot_date,
         "legal_pool_by_regulation": legal_pool_by_regulation,
         "scope": scope,
+        "population": scope_population(scope),
         "event_count": len(events),
-        "team_count": sum(e.get("team_count") or 0 for e in events),
-        "latest_event": _latest_event(events),
+        "team_count": team_count,
+        "latest_event": _latest_event(events, marts.get("tournament_team_sheets")),
         "starter_teams": starter_teams(marts, scope),
         "current_regulation": _current_regulation_kpi(
             legal_pool_by_regulation,
             today,
-            None if scope == ALL_SCOPE else scope,
+            None if regulation == ALL_SCOPE else regulation,
             regulations,
         ),
         "movers": movers,
         "window_movers": (
             None
-            if scope == ALL_SCOPE
+            if regulation == ALL_SCOPE or not official
             else summarize_event_window_movers(
                 marts.get("pokemon_event_usage_vs_regulation", []), events
             )
@@ -1148,18 +1640,11 @@ def compute_kpis(
         # Newest tournament the marts cover. The staleness banner compares
         # this against the viewer's own clock (static/app.js), so a site
         # nobody has rebuilt still says it's out of date.
-        "latest_event_date": max(
-            (
-                r["event_date"]
-                for r in marts.get("pokemon_usage_by_event_date", [])
-                if r.get("event_date")
-            ),
-            default=None,
-        ),
+        "latest_event_date": _latest_event_date(marts, events, official),
         "distinct_pokemon_used": len(usage_rows),
         "top_used_pokemon": top_used,
         "top_win_rate_pokemon": top_win_rate,
-        "top_12_pokemon": top_12_pokemon,
+        "top_12_boards": boards,
     }
 
 
@@ -1170,16 +1655,23 @@ def default_scope_for(
 ) -> str:
     """The scope the page opens on (docs/upgrade-plan-2027q1.md, U3): the
     regulation in force today when it has at least MIN_DEFAULT_SCOPE_TEAMS
-    teams on record; otherwise the newest earlier regulation with data (the
-    first weeks of a new set); otherwise the newest regulation with data;
-    otherwise "all". static/app.js re-applies this against the viewer's
-    date, so a page built before a rollover still opens correctly after it."""
+    official teams on record; otherwise its online events when they have
+    that many (docs/upgrade-plan-2027q2.md, S1: online data arrives within
+    days of a new set, official results weeks later); otherwise the newest
+    earlier regulation with data (the first weeks of a new set); otherwise
+    the newest regulation with data; otherwise "all". static/app.js
+    re-applies this against the viewer's date, so a page built before a
+    rollover still opens correctly after it."""
     with_data = [r for r in regulations if r.regulation_code in by_scope]
     in_force = regulation_in_force(regulations, today)
     if in_force is not None:
         kpis = by_scope.get(in_force.regulation_code)
         if kpis and (kpis.get("team_count") or 0) >= MIN_DEFAULT_SCOPE_TEAMS:
             return in_force.regulation_code
+        online_scope = population_scope(in_force.regulation_code, ONLINE)
+        online = by_scope.get(online_scope)
+        if online and (online.get("team_count") or 0) >= MIN_DEFAULT_SCOPE_TEAMS:
+            return online_scope
         earlier = [r for r in with_data if r.start_date < in_force.start_date]
         if earlier:
             return earlier[-1].regulation_code
@@ -1195,16 +1687,38 @@ def compute_kpis_by_scope(
     today: date | None = None,
     regulations: list[Regulation] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], str]:
-    """KPIs for every regulation with usage data plus "all", and the scope
-    the page should open on (see default_scope_for)."""
+    """KPIs for every regulation with usage data plus "all", in each
+    population with data (official first, then ":online" and
+    ":combined"), and the scope the page should open on (see
+    default_scope_for)."""
     regulations = load_regulations() if regulations is None else regulations
     usage_scopes = {r.get("regulation_scope") for r in marts.get("pokemon_usage_summary", [])}
-    with_data = [r for r in regulations if r.regulation_code in usage_scopes]
-    scopes = [r.regulation_code for r in with_data] + [ALL_SCOPE]
+    codes = [r.regulation_code for r in regulations] + [ALL_SCOPE]
+    scopes = [
+        scope
+        for population in POPULATIONS
+        for scope in (population_scope(code, population) for code in codes)
+        if scope in usage_scopes or scope == ALL_SCOPE
+    ]
     by_scope = {
         scope: compute_kpis(marts_for_scope(marts, scope), today, scope, regulations)
         for scope in scopes
     }
+    for scope, kpis in by_scope.items():
+        official = by_scope.get(scope_regulation(scope))
+        if scope_population(scope) == OFFICIAL:
+            # The board's Online switch (V2) on the official scope.
+            online = by_scope.get(population_scope(scope, ONLINE))
+            if online:
+                kpis["top_12_boards"]["online"] = online["top_12_boards"]["all"]
+        else:
+            # A new regulation's online events can arrive before its first
+            # official result (S1's rollover): then these panels are empty,
+            # never computed from online events, which have no event pages.
+            empty = {"starter_teams": []}
+            for key in OFFICIAL_ONLY_KPIS:
+                kpis[key] = official[key] if official else empty.get(key)
+            kpis["official_team_count"] = official["team_count"] if official else 0
     return by_scope, default_scope_for(by_scope, regulations, today or date.today())
 
 
@@ -1318,6 +1832,13 @@ def build_payload(
     pokemon_names = load_pokemon_names(normalized_dir)
     marts = _join_pokemon_names(marts, pokemon_names)
     marts["tournament_top_cut_teams"] = top_cut_teams(marts.get("tournament_team_results", []))
+    # Only pairs among the archetypes the tab lists (_slice_detected_archetypes).
+    listed = {row["archetype_key"] for row in marts.get("detected_archetype_summary", [])}
+    marts["archetype_matchups"] = [
+        row
+        for row in marts.get("archetype_matchups", [])
+        if row.get("archetype_key") in listed and row.get("opponent_archetype_key") in listed
+    ]
     marts["player_index"] = player_index(
         marts.get("tournament_team_results", []), marts.get("tournament_event_summary", [])
     )
@@ -1331,6 +1852,14 @@ def build_payload(
         "kpis": kpis_by_scope[default_scope],
         "kpis_by_scope": kpis_by_scope,
         "default_scope": default_scope,
+        # The header's regulation select: every regulation with data in any
+        # population, in registry order, "all" last. A new set's online
+        # events can arrive before its first official result (S1).
+        "scope_regulations": [
+            code
+            for code in [r.regulation_code for r in regulations] + [ALL_SCOPE]
+            if any(scope_regulation(scope) == code for scope in kpis_by_scope)
+        ],
         "provenance": load_provenance(reports_dir, staging_dir, manifests_dir),
         "marts": marts,
         # Full pokemon_key -> display name map, needed client-side wherever
@@ -1339,6 +1868,11 @@ def build_payload(
         # and the pokepaste import/export + Matchup tab's ad-hoc species
         # lookups (docs/design-system.md's Top Teams / Matchup tabs).
         "pokemon_names": pokemon_names,
+        # The same names in Japanese, Spanish, French and German (Q4), for
+        # the header's name-language switch.
+        "localised_names": localised_names(marts.get("pokemon_localised_names", []), marts),
+        # Form -> species, for the Team Builder's species clause (#22).
+        "form_species": form_species(normalized_dir, marts),
         # The regulation registry, so the page can work out which set is in
         # force on the day it's viewed, not the day it was built.
         "regulations": [

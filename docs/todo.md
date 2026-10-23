@@ -929,6 +929,156 @@ table tracks sprint progress.
   (the staleness banner repeating the rollover banner) is fixed. The drift
   alarm was also probed by withholding M-C.
 
+## 2027 Q2 upgrade plan — "Broadcast grade"
+
+The entries proposed in `docs/upgrade-plan-2027q2.md`, promoted here on
+acceptance (backlog → todo). Decisions D1–D5 were taken as the plan
+recommends. Each entry names its plan item; the plan's Status table tracks
+sprint progress.
+
+- [x] Responsive test matrix: every route at 360/390/768/1024/1440, spot checks at 430/721/landscape; width, tap-target, input-size and chrome-height assertions; screenshots as a CI artifact (M1).
+  `tests/browser/test_responsive_matrix.py` runs the full sweep under CI
+  (or `DASHBOARD_FULL_MATRIX=1`) and a three-route smoke otherwise; a
+  failure names the overflowing element. `ci.yml` uploads every
+  screenshot as the `dashboard-screenshots` artifact.
+- [x] Responsive rules in `docs/design-system.md`: four tiers, per-tier column counts, no page scroll, 44px targets, controls inside bands (M2).
+- [x] Fix `#/pokemon/<key>` overflow at every phone width, and the header, `.grid-6xn` and table overflow at 721–807px (Q1).
+  The profile's 34px came from the combobox's hidden `<select>`, now
+  pinned to its host's corner. The tablet header drops the brand suffix and
+  shows the regulation as "M-C"; `.grid-6xn` is 6/4/3/2 columns with
+  shrinkable tracks; wide tables scroll inside their own frame on tablets.
+  Every route now fits from 360px up, on the fixture and on real data.
+- [x] Speed Tiers and glossary: Stat Points and Stat Alignment instead of EVs (Q2).
+  The figures were already right: Champions' (base + SP + 20) × nature
+  with 32 SP equals the old 252-EV/31-IV formula, so `matchup.js` now
+  computes it in Stat Point terms and only the words changed.
+- [x] `team_share` on the usage marts; team share as the headline metric site-wide (V1).
+  Rillaboom reads 51.9% of M-C teams (1,958 of 3,770), not 8.7% of
+  roster slots. `pokemon_usage_summary` gains `team_share` and
+  `scope_team_count`; the regulation, movers, event, date, country,
+  profile, speed and placement marts gain team-share columns, and
+  `assert_team_share_bounded` gates them. Slot share stays in every
+  tooltip; a one-time Overview notice announces the change.
+- [x] Top 12 board on Overview: 6+band+6, hero art, gold numerals, Species/Forms toggle, scope switch (V2).
+- [x] Broadcast tokens and header band in the design system (V7).
+  Board, scrim, gold and series tokens with dark values; the
+  `.broadcast-band` slash and halftone; Oswald (OFL) as the one
+  self-hosted display face (D4), a 28KB Latin subset.
+- [ ] Every new component built to its M3 per-tier layout (V2–V8, E1–E3, S2, Q3)
+- [x] Phone sharing through the Web Share API, and a 9:16 story card (M4)
+  "Share" hands the 4:5 and 9:16 Top 12 cards to the share sheet where the
+  browser can share files; "Download card" saves the 16:9 one; a copy on a
+  touch screen confirms with a toast.
+- [x] Team strip v2 with item and Mega badges, replacing `teamCompositionHtml` everywhere, PNG cards included (V3)
+  `teamStripHtml` in `static/app.js`; a tile with a known set opens it in a
+  popover. `teamCompositionHtml` is now the strip's compact entry point.
+  The PNG template draws the item and Mega badges on each sprite.
+- [x] Scoreboard rows (V4), phase chips (V5), square type badges (V6)
+  The 18 square-badge glyphs are our own (`pipelines/render/type_glyphs.py`),
+  shared by the page and the PNG cards. Scoreboard rows carry E2's bracket.
+- [x] Mega usage panel on event and regulation views (E3)
+  `mega_stone_usage` and `team_mega_count`, each with a regulation and an
+  event grain, behind `#/usage/megas` and every event page.
+- [x] `limitless_play` extractor, `event_tier = 'online'`, Official/Online/All scope, rollover fallback to Online (S1, after D1)
+  The tier value is `Online`, capitalised like the official tiers. 13,418
+  online M-C teams from 234 tournaments (two genuine M-B events keep their
+  label), gated by `assert_limitless_play_slug_mapping_coverage` (99.8%)
+  and `assert_online_regulation_legality` (98.7%); official figures are
+  unchanged (Rillaboom 1,958 of 3,770). An old format label after a
+  rollover, dropped players' blank placings and hand-typed Mega Stones
+  are resolved in `int_limitless_play_mapped`. Apply for a Limitless API
+  key as a public-facing project (`LIMITLESS_API_KEY`) to lift the rate
+  limit.
+- [x] `pokemon_event_phase_usage` mart and the Day 2 conversion board (E1)
+  Day 2 and the top cut come from RK9's round structure
+  (`int_event_phases`), checked against Limitless' Day 2 lists by
+  `assert_day2_matches_limitless_lists` (Worlds 57 and 57, NAIC 156 and
+  156). The board gains a Day 2 switch; event pages a conversion table.
+- [x] Top-cut bracket and player path on event pages (E2)
+  `tournament_top_cut_matches` and `tournament_top_cut_paths`. Brackets
+  admit every qualifying record and pad with byes, so the chip counts
+  players. Shared names no longer resolve to one roster in
+  `int_rk9_mapped`.
+- [x] Top 12 share cards, 16:9, 4:5 and 9:16, per regulation and event; becomes the OG image (V8)
+  The default regulation and its newest eight events in every format,
+  other regulations in 16:9; about forty quantized PNGs.
+- [x] Event-weekend hourly refresh of RK9 pairings (E4)
+  `.github/workflows/event-weekend.yml` plus `pipelines.cli live-events`;
+  MunchStats and RK9 now re-fetch a live event instead of reusing it.
+- [x] Smogon ladder extractor; `ladder_pokemon_usage`, `ladder_checks_counters`; profile panel and ladder-vs-tournament view (S2, after D2)
+  `pipelines/extract/smogon_ladder.py` takes each regulation's newest
+  mostly-in-force month (M-A June, M-B August, M-C September 2026), Bo1
+  and Bo3, cutoffs 1760 and 0; all 333 Showdown names resolve
+  (`assert_smogon_ladder_name_coverage`). Checks and counters come from
+  the all-ratings files, since Smogon publishes almost none at 1760.
+  `#/usage/ladder` and the profile's Counters panel, both labelled ladder.
+- [x] Stat Point spreads from the ladder, labelled ladder-only (D3)
+  `ladder_stat_point_spreads` and the profile's Spreads panel; CLAUDE.md's
+  rule now says tournament data has no spreads and ladder data may show
+  them. `assert_ladder_stat_points_bounded` checks 66 total, 32 per stat.
+- [x] Check MunchStats for published in-game Battle Data ranks (S4)
+  Not published: the ranks are only in MunchStats' rendered pages, not its
+  JSON. Parked until they are (`docs/data-sources.md` §4).
+
+The plan's "later" items (`docs/upgrade-plan-2027q2.md`, sections 3 and 4),
+added as they ship:
+
+- [x] Global search for Pokémon, players and events: `/`, Ctrl/⌘+K, a full-screen sheet on phones (Q3)
+  `static/search.js`. The header button shows from 1024px (narrower headers
+  have no room); below that it is the ⋯ menu's first item. Recent picks per
+  browser; English names match on a localised page.
+- [x] Localised Pokémon names: Japanese, Spanish, Portuguese, French, German (Q4)
+  `pokeapi.extract_names` reads PokéAPI's source CSVs (five requests) and
+  composes the form names PokéAPI lacks; `pokemon_localised_names` feeds
+  the inline `localised_names` maps. Portuguese uses the English names, as
+  the Brazilian games do. Names only. Every legal-pool Pokémon has all four
+  (`assert_localised_names_cover_the_legal_pool`).
+- [x] Offline at the venue: a service worker (Q5)
+  `sw.js`, network first for pages, scripts and shards and cache first for
+  images; whatever a visitor opened works offline, with a banner saying so.
+- [x] Rank-change column on Usage (list #19)
+  Against the regulation before its newest event, or before an event
+  window; official events only.
+- [x] Builder legality warnings: item clause, species clause, dropped Pokémon (list #22)
+  The legal pool was already enforced on add; a saved team that loses
+  Pokémon to a regulation change now says so. `form_species` gives the
+  species clause each form's species.
+- [x] Open Team Sheet image export from the Builder (list #21)
+  "Download team sheet image": each Pokémon's ability, item and moves on a
+  1200×760 canvas PNG, in the page's name language.
+- [x] Builder threat list with checks and counters (list #23)
+  A "Ladder checks on your team" column: the team members among each
+  threat's strongest Showdown ladder checks. The threats are now really the
+  most-used Pokémon (they had been sorted on a field the rows lack).
+- [x] Speed line with Tailwind and Trick Room toggles (list #24)
+  Your Builder team over the 16 most-used Pokémon on Speed Tiers; a list in
+  move order on phones.
+- [x] Archetype matchup heatmap, team vs team (list #30)
+  `archetype_matchups` from decided official matches between primary
+  archetype teams; a heatmap of the top ten from 768px, one archetype's
+  list below.
+- [x] Compare tray: pin up to four Pokémon (list #34)
+  Pinned from profiles, a bottom sheet on phones and a card from 721px;
+  Compare now takes two to four (`#/compare/<a>,<b>,<c>,<d>`).
+- [x] "Watch on stream" links from a curated VOD seed (S5, E5)
+  `dbt/seeds/featured_match_vods.csv`: five finals, each a dedicated Play!
+  Pokémon upload checked for title and channel; `vod_url` on
+  `tournament_top_cut_matches`. Matches inside day-long streams wait for a
+  watched timestamp rather than a guessed one.
+- [x] Upcoming online events with local times (list #31)
+  `limitless_play.extract_upcoming` (one request per regulation) and
+  `online_upcoming_events`; the Events tab groups the next 14 days by the
+  visitor's local day.
+- [x] Embeddable Top 12 / usage widget with a citation (list #33)
+  `embed.html`, its own small payload; grid or list, any regulation, board,
+  language and theme; the Overview board hands out the iframe snippet.
+- [x] Showdown replay discovery: bring rate and lead pairs (S3, list #27)
+  `pipelines/extract/showdown_replays.py` samples rated ladder replays
+  daily (no player names kept); `int_ladder_battle`, `_side` and
+  `_pokemon` (roadmap Phase 4's grains) feed `ladder_bring_rate` and
+  `ladder_lead_pairs`, gated by `assert_ladder_battles_well_formed`. Ladder
+  data only: no official event is played on Showdown.
+
 ## Release readiness (v1 definition of done)
 
 All release gates pass as of this writing (see

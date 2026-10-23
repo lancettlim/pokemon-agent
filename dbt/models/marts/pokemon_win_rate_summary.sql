@@ -57,6 +57,6 @@ select
   win_rate,
   record_count,
   round(greatest(wilson_lower_bound_raw, 0), 4) as wilson_lower_bound,
-  row_number() over (partition by regulation_scope order by wilson_lower_bound_raw desc) as wilson_rank
+  row_number() over (partition by regulation_scope order by wilson_lower_bound_raw desc, pokemon_key) as wilson_rank
 from scored
 order by regulation_scope, wilson_lower_bound desc

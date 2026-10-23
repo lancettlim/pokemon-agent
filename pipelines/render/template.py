@@ -68,6 +68,12 @@ def _make_environment() -> Environment:
     )
     env.filters["data_uri"] = _data_uri
     env.filters["type_color"] = _type_color
+    # V6's square type badge (docs/upgrade-plan-2027q2.md), our own glyphs.
+    # Imported here, not at module top: type_glyphs reads TYPE_COLORS from
+    # this module.
+    from pipelines.render.type_glyphs import square_badge_html
+
+    env.globals["square_badge"] = square_badge_html
     return env
 
 

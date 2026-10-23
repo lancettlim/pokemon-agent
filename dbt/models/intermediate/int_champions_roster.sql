@@ -21,6 +21,12 @@
 --
 -- Joins team and event alongside the member row so downstream marts get
 -- placement/record/tier/date/regulation without repeating the same joins.
+--
+-- population (docs/upgrade-plan-2027q2.md, S1) tells official events
+-- (MunchStats/RK9) from Limitless online events ('online'). They are
+-- different populations and are never blended by default: unscoped marts
+-- read int_champions_roster_official, and int_champions_roster_scoped
+-- gives each population its own regulation_scope partitions.
 select
   member.team_member_id,
   member.team_id,
@@ -43,7 +49,8 @@ select
   event.event_date,
   event.event_tier,
   event.event_format,
-  event.regulation_code
+  event.regulation_code,
+  case when event.event_tier = 'Online' then 'online' else 'official' end as population
 from {{ ref('tournament_team_member') }} member
 inner join {{ ref('tournament_team') }} team
   on team.team_id = member.team_id

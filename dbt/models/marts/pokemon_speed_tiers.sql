@@ -5,8 +5,8 @@
 -- a +1/+2 stat-stage boost, a Choice Scarf, or a team-wide Tailwind (and
 -- a scarfed Pokémon under its own team's Tailwind, a common real
 -- combination). One row per currently legal Pokémon, built on top of
--- pokemon_champions_profile's max_investment_speed (Level 50, 252 EVs, a
--- beneficial nature, 31 IV -- see that model's schema.yml entry for the
+-- pokemon_champions_profile's max_investment_speed (Level 50, 32 Stat
+-- Points, a beneficial Stat Alignment -- see that model's schema.yml entry for the
 -- documented convention and formula).
 --
 -- The stage/item multipliers themselves (+1 stage and Choice Scarf are
@@ -38,6 +38,7 @@ select
   floor(max_investment_speed * 3.0) as scarf_tailwind_speed,
   usage_count,
   usage_share,
+  team_share,
   win_rate,
   record_count
 from {{ ref('pokemon_champions_profile') }}

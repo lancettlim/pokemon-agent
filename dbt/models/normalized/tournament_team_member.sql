@@ -4,6 +4,9 @@
 -- mapping rule: "Map roster Pokémon names to canonical pokemon_id and
 -- pokemon_key"). Rows whose name doesn't resolve are dropped — per
 -- dataset-spec.md, unmapped rows must not ship in release outputs.
+--
+-- Online team sheets (docs/upgrade-plan-2027q2.md, S1) follow, already
+-- resolved by int_limitless_play_mapped.
 select
   source.source_record_id as team_member_id,
   source.team_id,
@@ -26,3 +29,22 @@ inner join {{ ref('munchstats_name_to_pokeapi_form') }} seed_map
   on seed_map.munchstats_pokemon_name = source.pokemon_name
 inner join {{ ref('pokemon') }} pokemon
   on pokemon.form_name = seed_map.pokeapi_form_name
+union all
+select
+  source_record_id as team_member_id,
+  team_id,
+  event_id,
+  pokemon_key,
+  pokemon_id,
+  slot_number,
+  item_name,
+  ability,
+  tera_type,
+  nature,
+  moves,
+  source_name,
+  source_url,
+  source_record_id,
+  extracted_at_utc,
+  dataset_version
+from {{ ref('int_limitless_play_mapped') }}

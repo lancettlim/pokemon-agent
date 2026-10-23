@@ -244,3 +244,20 @@ def test_extract_retries_transient_failure_then_succeeds(tmp_path, monkeypatch):
     output_path = tmp_path / "rk9.csv"
     rk9.extract(output_path, session=_FakeSession(fail_count=1), dataset_version="9.9.9")
     assert _read(output_path)
+
+
+def test_a_live_event_is_fetched_again_despite_the_cache(tmp_path):
+    # docs/upgrade-plan-2027q2.md, E4: an event still running has cached
+    # pairings that stop at whatever round was live, so it is re-fetched.
+    previous = tmp_path / "previous.csv"
+    rk9.extract(previous, session=_FakeSession(), dataset_version="0.0.1")
+    cached_events = {row["event_id"] for row in _read(previous)}
+    session = _FakeSession()
+    rk9.extract(
+        tmp_path / "rk9.csv",
+        session=session,
+        dataset_version="9.9.9",
+        previous_snapshot_path=previous,
+        refresh_event_ids=cached_events,
+    )
+    assert len(session.requested_urls) > 1

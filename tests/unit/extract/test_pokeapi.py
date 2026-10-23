@@ -505,3 +505,91 @@ def test_extract_items_skips_unresolvable_item_name(tmp_path):
 
     assert len(rows) == 1
     assert rows[0]["item_name"] == "Choice Band"
+
+
+# --- localised names (docs/upgrade-plan-2027q2.md, Q4) ---
+
+_NAME_CSVS = {
+    "languages": "id,iso639,iso3166,identifier,official,order\n"
+    "1,ja,jp,ja-hrkt,1,1\n5,fr,fr,fr,1,8\n6,de,de,de,1,9\n7,es,es,es,1,10\n9,en,us,en,1,7\n11,ja,jp,ja,1,2\n",
+    "pokemon": "id,identifier,species_id,height,weight,base_experience,order,is_default\n"
+    "6,charizard,6,17,905,267,7,1\n10035,charizard-mega-y,6,17,1005,285,9,0\n"
+    "59,arcanine,59,19,1550,194,90,1\n10230,arcanine-hisui,59,20,1680,194,91,0\n"
+    "414,mothim,414,9,233,148,500,1\n",
+    "pokemon_forms": "id,identifier,form_identifier,pokemon_id,introduced_in_version_group_id,"
+    "is_default,is_battle_only,is_mega,form_order,order\n"
+    "6,charizard,,6,1,1,0,0,1,7\n10061,charizard-mega-y,mega-y,10035,15,1,1,1,3,9\n"
+    "59,arcanine,,59,1,1,0,0,1,90\n10399,arcanine-hisui,hisui,10230,24,1,0,0,2,91\n"
+    "491,mothim-plant,plant,414,8,1,0,0,1,500\n",
+    "pokemon_species_names": "pokemon_species_id,local_language_id,name,genus\n"
+    "6,11,リザードン,\n6,5,Dracaufeu,\n6,6,Glurak,\n6,7,Charizard,\n"
+    "59,11,ウインディ,\n59,5,Arcanin,\n59,6,Arkani,\n59,7,Arcanine,\n"
+    "414,11,ガーメイル,\n414,5,Papilord,\n414,6,Moterpel,\n414,7,Mothim,\n",
+    "pokemon_form_names": "pokemon_form_id,local_language_id,form_name,pokemon_name\n"
+    "10061,11,メガリザードンＹ,\n10061,5,Méga-Dracaufeu Y,Méga-Dracaufeu Y\n"
+    "10399,11,ヒスイのすがた,\n491,9,Plant Cloak,\n",
+}
+
+
+class _CsvSession:
+    def __init__(self):
+        self.requested = []
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        self.requested.append(url)
+        name = url.rsplit("/", 1)[-1].removesuffix(".csv")
+        response = _FakeResponse(None)
+        response.text = _NAME_CSVS[name]
+        return response
+
+
+def test_localised_name_composes_megas_regionals_and_labels():
+    def name(language, species, **form):
+        return pokeapi.localised_name(language, species, **form)[0]
+
+    assert name("es", "Charizard", form_identifier="mega-y", is_mega=True) == "Mega-Charizard Y"
+    assert name("de", "Glurak", form_identifier="mega-y", is_mega=True) == "Mega-Glurak Y"
+    assert name("ja", "ライチュウ", form_identifier="mega-y", is_mega=True) == "メガライチュウY"
+    assert name("fr", "Arcanin", form_identifier="hisui", is_mega=False) == "Arcanin de Hisui"
+    assert name("de", "Arkani", form_identifier="hisui", is_mega=False) == "Hisui-Arkani"
+    assert (
+        name("ja", "ウインディ", form_identifier="hisui", is_mega=False, form_name="ヒスイのすがた")
+        == "ウインディ（ヒスイのすがた）"
+    )
+    # A label that already holds the species name is the whole name.
+    assert (
+        name("es", "Rotom", form_identifier="wash", is_mega=False, form_name="Rotom Lavado")
+        == "Rotom Lavado"
+    )
+    assert name("de", "Salmagnis", form_identifier="male", is_mega=False) == "Salmagnis ♂"
+    assert name("es", "Maushold", form_identifier="family-of-three", is_mega=False) == (
+        "Maushold (Family Of Three)"
+    )
+
+
+def test_extract_names_writes_each_form_in_four_languages(tmp_path):
+    output = tmp_path / "names.csv"
+    session = _CsvSession()
+
+    pokeapi.extract_names(
+        output,
+        ["charizard", "charizard-mega-y", "arcanine-hisui", "mothim", "not-a-pokemon"],
+        session=session,
+        dataset_version="0.4.0",
+    )
+
+    assert len(session.requested) == 5
+    with output.open(newline="", encoding="utf-8") as fh:
+        rows = {(r["form_name"], r["language"]): r for r in csv.DictReader(fh)}
+    assert rows[("charizard", "ja")]["localised_name"] == "リザードン"
+    assert rows[("charizard-mega-y", "fr")]["localised_name"] == "Méga-Dracaufeu Y"
+    assert rows[("charizard-mega-y", "fr")]["name_rule"] == "pokeapi_form"
+    assert rows[("charizard-mega-y", "ja")]["localised_name"] == "メガリザードンＹ"
+    assert rows[("charizard-mega-y", "de")]["localised_name"] == "Mega-Glurak Y"
+    assert rows[("arcanine-hisui", "ja")]["localised_name"] == "ウインディ（ヒスイのすがた）"
+    assert rows[("arcanine-hisui", "es")]["localised_name"] == "Arcanine de Hisui"
+    # A single-form species' labelled default form is the species name.
+    assert rows[("mothim", "fr")]["localised_name"] == "Papilord"
+    assert not any(form == "not-a-pokemon" for form, _ in rows)
+    assert {r["dataset_version"] for r in rows.values()} == {"0.4.0"}
+    assert rows[("charizard", "de")]["source_record_id"] == "charizard:de"

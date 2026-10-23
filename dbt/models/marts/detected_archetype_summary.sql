@@ -16,7 +16,7 @@ team_context as (
     min(placement) as placement,
     min(record_wins) as record_wins,
     min(record_losses) as record_losses
-  from {{ ref('int_champions_roster') }}
+  from {{ ref('int_champions_roster_official') }}
   group by team_id
 ),
 total_teams as (
@@ -59,7 +59,7 @@ extension_counts as (
     member.pokemon_key,
     count(distinct assigned.team_id) as extension_team_count
   from assigned
-  inner join {{ ref('int_champions_roster') }} member
+  inner join {{ ref('int_champions_roster_official') }} member
     on member.team_id = assigned.team_id
   inner join anchors on anchors.archetype_key = assigned.archetype_key
   where member.pokemon_key not in (

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -72,12 +72,15 @@ def get_with_retry(
     *,
     attempts: int = DEFAULT_RETRY_ATTEMPTS,
     backoff_seconds: float = DEFAULT_RETRY_BACKOFF_SECONDS,
+    on_rate_limited: Callable[[requests.Response], None] | None = None,
     **kwargs,
 ) -> requests.Response:
     """GET url, retrying transient failures (connection errors, timeouts, 5xx
     responses) with exponential backoff. A 4xx response fails immediately --
     retrying a client error just burns the backoff window on a request that
-    will never succeed.
+    will never succeed -- except a 429 when `on_rate_limited` is given: it
+    is called with the response (to wait out the server's window) and the
+    request is retried, still one logical request in the stats.
 
     Raises the last exception once `attempts` is exhausted.
     """
@@ -91,6 +94,11 @@ def get_with_retry(
                 _stats_stack[-1].succeeded += 1
             return response
         except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status == 429 and on_rate_limited is not None and attempt < attempts - 1:
+                on_rate_limited(exc.response)
+                last_exc = exc
+                continue
             if exc.response is not None and exc.response.status_code < 500:
                 if _stats_stack:
                     _stats_stack[-1].attempted += 1

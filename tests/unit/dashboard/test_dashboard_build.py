@@ -1,5 +1,6 @@
 import csv
 import json
+import time
 
 from pipelines.dashboard import build
 
@@ -162,10 +163,34 @@ def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_pat
     for path in sorted(paths):
         for name, rows in json.loads((output_dir / path).read_text(encoding="utf-8")).items():
             reassembled.setdefault(name, []).extend(rows)
-    assert set(reassembled) == set(payload["marts"]) | {"data_dictionary", "release_tables"}
+    # Build-only marts (summarised into the KPIs) ship in no shard, but the
+    # dictionary still describes them.
+    build_only = set(files["build_only"])
+    assert build_only == set(build.BUILD_ONLY_MARTS) & set(payload["marts"])
+    # Move, item and ability details ride once in core.json (DETAIL_SPLITS),
+    # and joining them back gives each row its details again.
+    joins = files["detail_joins"]
+    assert set(reassembled) == (set(payload["marts"]) - build_only) | {
+        "data_dictionary",
+        "release_tables",
+    } | {details for _mart, _key, details, _fields in joins}
     assert {entry["table"] for entry in reassembled["data_dictionary"]} == set(payload["marts"])
     for name, rows in payload["marts"].items():
-        assert len(reassembled[name]) == len(rows), name
+        if name not in build_only:
+            assert len(reassembled[name]) == len(rows), name
+    assert {mart for mart, *_ in joins} == {
+        "pokemon_move_usage",
+        "pokemon_item_usage",
+        "pokemon_ability_usage",
+    } & set(n for n, rows in payload["marts"].items() if rows)
+    for mart, key, details, fields in joins:
+        by_key = {d[key]: d for d in reassembled[details]}
+        full_by_key = {row[key]: row for row in payload["marts"][mart]}
+        for slim in reassembled[mart]:
+            assert not set(fields) & set(slim)
+            assert {f: by_key[slim[key]][f] for f in fields} == {
+                f: full_by_key[slim[key]].get(f) for f in fields
+            }
 
     html = (output_dir / "index.html").read_text(encoding="utf-8")
     embedded = _embedded_payload(html)
@@ -361,7 +386,7 @@ def test_site_meta_describes_the_default_regulation(tmp_path):
     payload = {
         "default_scope": "m-c",
         "kpis": {
-            "top_used_pokemon": {"pokemon_name": "Rillaboom", "usage_share": 0.0866},
+            "top_used_pokemon": {"pokemon_name": "Rillaboom", "team_share": 0.5194},
             "team_count": 3770,
             "event_count": 5,
         },
@@ -370,7 +395,7 @@ def test_site_meta_describes_the_default_regulation(tmp_path):
     meta = build._site_meta(payload)
     assert meta["title"] == "Pokémon Champions Data — Reg M-C"
     assert meta["description"].startswith(
-        "Reg M-C: Rillaboom leads at 8.7% of roster slots across 3,770 teams from 5 events."
+        "Reg M-C: Rillaboom is on 51.9% of 3,770 teams from 5 events."
     )
     assert meta["og_image"] == build.SITE_URL + "images/cards/og.png"
 
@@ -403,3 +428,125 @@ def test_an_on_demand_mart_with_a_scope_column_ships_whole_not_per_scope(tmp_pat
         (tmp_path / index["on_demand"]["player_archetype_record"]).read_text(encoding="utf-8")
     )
     assert len(whole["player_archetype_record"]) == 2
+
+
+def test_a_population_scope_falls_back_to_official_rows_it_lacks(tmp_path):
+    # docs/upgrade-plan-2027q2.md, S1: online handles have no player
+    # records, so the online scope reads the official ones, and says so.
+    marts = {
+        "player_archetype_record": [{"player_id": "P1", "regulation_scope": "m-c"}],
+        "pokemon_usage_summary": [
+            {"pokemon_key": "a", "regulation_scope": "m-c"},
+            {"pokemon_key": "b", "regulation_scope": "m-c:online"},
+        ],
+        "pokemon_set_variants": [{"pokemon_key": "a", "regulation_scope": "m-c"}],
+    }
+    index = build._write_mart_shards(marts, {"m-c": {}, "m-c:online": {}}, tmp_path)
+    # No colon in a published file name.
+    assert index["scopes"]["m-c:online"] == "data/scope-m-c-online.json"
+    online = json.loads((tmp_path / index["scopes"]["m-c:online"]).read_text(encoding="utf-8"))
+    assert [r["pokemon_key"] for r in online["pokemon_usage_summary"]] == ["b"]
+    assert [r["regulation_scope"] for r in online["pokemon_set_variants"]] == ["m-c"]
+    assert sorted(index["official_fallback"]["m-c:online"]) == [
+        "player_archetype_record",
+        "pokemon_set_variants",
+    ]
+    assert "m-c" not in index["official_fallback"]
+
+
+def test_share_card_manifest_keeps_only_top12_cards_on_disk(tmp_path):
+    # docs/upgrade-plan-2027q2.md, V8: a card the renderer listed but didn't
+    # write is dropped, so the page never offers a broken download.
+    cards = tmp_path / "images" / "cards"
+    cards.mkdir(parents=True)
+    (cards / "a.png").write_bytes(b"png")
+    manifest = {
+        "teams": {},
+        "whats_changed": {},
+        "top12": {
+            "regulation": {
+                "m-c": {
+                    "all": {"landscape": "images/cards/a.png", "story": "images/cards/missing.png"}
+                }
+            }
+        },
+        "og_image": None,
+    }
+    (cards / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    loaded = build._load_share_cards(tmp_path)
+    assert loaded["top12"]["regulation"]["m-c"]["all"] == {"landscape": "images/cards/a.png"}
+    assert loaded["top12"]["event"] == {}
+
+
+def test_service_worker_precaches_the_shell_and_hashes_it(tmp_path):
+    # docs/upgrade-plan-2027q2.md, Q5: sw.js lists the page, scripts, the
+    # core shard and the default regulation's shard, and its build id only
+    # changes when one of them does.
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    output_dir = tmp_path / "out"
+    _populate_marts(marts_dir, normalized_dir)
+
+    payload = _build(marts_dir, normalized_dir, output_dir)
+    worker = (output_dir / "sw.js").read_text(encoding="utf-8")
+
+    assert "__BUILD_ID__" not in worker and "__PRECACHE__" not in worker
+    precache = json.loads(worker.split("var PRECACHE = ", 1)[1].split(";", 1)[0])
+    assert precache[:2] == ["./", "index.html"]
+    assert set(build.SCRIPT_NAMES) <= set(precache)
+    assert payload["mart_files"]["core"] in precache
+    assert payload["mart_files"]["scopes"][payload["default_scope"]] in precache
+    build_id = worker.split('var BUILD = "', 1)[1].split('"', 1)[0]
+
+    # A second build, a second later, stamps a new generated_at_utc into
+    # index.html; the id ignores it.
+    time.sleep(1.05)
+    _build(marts_dir, normalized_dir, tmp_path / "again")
+    again = (tmp_path / "again" / "sw.js").read_text(encoding="utf-8")
+    assert again.split('var BUILD = "', 1)[1].split('"', 1)[0] == build_id
+
+
+def test_embed_payload_carries_each_regulations_boards_and_only_their_assets():
+    # docs/upgrade-plan-2027q2.md, list #33: the widget's own payload.
+    tile = {"pokemon_key": "rillaboom", "pokemon_name": "Rillaboom", "team_share": 0.5194}
+    board = {"label": "All players", "team_count": 3770, "event_count": 5, "forms": [tile]}
+    online = {"label": "Online", "team_count": 13418, "event_count": 234, "forms": [tile]}
+    payload = {
+        "generated_at_utc": "2026-10-23T08:00:00Z",
+        "default_scope": "m-c",
+        "scope_regulations": ["m-c", "m-d"],
+        "kpis_by_scope": {
+            "m-c": {"top_12_boards": {"all": board, "online": online}},
+            # A new regulation with online events only (S1's rollover).
+            "m-d:online": {"top_12_boards": {"all": online}},
+        },
+        "sprites": {"rillaboom": "images/rillaboom.png", "pikachu": "images/pikachu.png"},
+        "hero_art": {"rillaboom": "images/hero/rillaboom.webp"},
+        "localised_names": {"ja": {"rillaboom": "ゴリランダー", "pikachu": "ピカチュウ"}},
+    }
+
+    embed = build._embed_payload(payload)
+
+    assert embed["default_regulation"] == "m-c"
+    assert embed["site_url"] == build.SITE_URL
+    assert set(embed["boards"]["m-c"]) == {"all", "online"}
+    assert embed["boards"]["m-c"]["all"]["forms"] == [
+        {"k": "rillaboom", "n": "Rillaboom", "s": 0.5194}
+    ]
+    assert embed["boards"]["m-c"]["all"]["team_count"] == 3770
+    assert set(embed["boards"]["m-d"]) == {"online"}
+    # Hero art wins over the sprite; Pokémon off every board are left out.
+    assert embed["images"] == {"rillaboom": "images/hero/rillaboom.webp"}
+    assert embed["names"] == {"ja": {"rillaboom": "ゴリランダー"}}
+
+
+def test_build_writes_the_embed_page_beside_the_dashboard(tmp_path):
+    marts_dir = tmp_path / "marts"
+    normalized_dir = tmp_path / "normalized"
+    _populate_marts(marts_dir, normalized_dir)
+    _build(marts_dir, normalized_dir, tmp_path / "out")
+
+    html = (tmp_path / "out" / "embed.html").read_text(encoding="utf-8")
+    start = html.index("window.EMBED_DATA = ") + len("window.EMBED_DATA = ")
+    embed = json.loads(html[start : html.index("</script>", start)].rstrip().rstrip(";"))
+    assert "boards" in embed and embed["site_url"] == build.SITE_URL

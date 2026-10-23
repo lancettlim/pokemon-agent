@@ -1,0 +1,110 @@
+{
+  "source_name": "Limitless Online",
+  "source_url": "https://play.limitlesstcg.com/tournaments/upcoming",
+  "refresh_cadence": "with limitless_play (daily)",
+  "records_captured": [
+    "Upcoming online tournaments of the regulation in force (and one registered to start within 30 days): start time, name, organiser, platform, registrations and whether registration is open (docs/upgrade-plan-2027q2.md, list #31)"
+  ],
+  "fields": [
+    {
+      "name": "tournament_id",
+      "type": "string",
+      "required": true,
+      "description": "Limitless' tournament id, from the row's tournament link"
+    },
+    {
+      "name": "tournament_name",
+      "type": "string",
+      "required": true,
+      "description": "The organiser's tournament name"
+    },
+    {
+      "name": "tournament_format",
+      "type": "string",
+      "required": true,
+      "description": "The format label the page was filtered on, the regulation registry's limitless_play_format (\"M-C\")"
+    },
+    {
+      "name": "regulation_code",
+      "type": "string",
+      "required": true,
+      "description": "The registry's regulation_code for that format (\"m-c\")"
+    },
+    {
+      "name": "starts_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "Scheduled start, ISO-8601 UTC (the row's data-date)"
+    },
+    {
+      "name": "platform",
+      "type": "string",
+      "required": false,
+      "description": "Where it is played: SWITCH (the game) or SIM (Pokémon Showdown)"
+    },
+    {
+      "name": "organizer_id",
+      "type": "string",
+      "required": false,
+      "description": "The organiser's Limitless id, from the row's organiser link"
+    },
+    {
+      "name": "organizer_name",
+      "type": "string",
+      "required": false,
+      "description": "The organiser's name"
+    },
+    {
+      "name": "registrations",
+      "type": "integer",
+      "required": false,
+      "description": "Players registered when the page was read"
+    },
+    {
+      "name": "player_cap",
+      "type": "integer",
+      "required": false,
+      "description": "The registration cap, when the organiser set one"
+    },
+    {
+      "name": "registration_open",
+      "type": "boolean",
+      "required": true,
+      "description": "Whether registration was open when the page was read"
+    },
+    {
+      "name": "source_name",
+      "type": "string",
+      "required": true,
+      "description": "Constant: Limitless Online"
+    },
+    {
+      "name": "source_url",
+      "type": "string",
+      "required": true,
+      "description": "The tournament's details page on play.limitlesstcg.com"
+    },
+    {
+      "name": "source_record_id",
+      "type": "string",
+      "required": true,
+      "description": "The tournament id"
+    },
+    {
+      "name": "extracted_at_utc",
+      "type": "string",
+      "required": true,
+      "description": "ISO-8601 UTC extraction timestamp"
+    },
+    {
+      "name": "dataset_version",
+      "type": "string",
+      "required": true,
+      "description": "Dataset version this staging snapshot feeds"
+    }
+  ],
+  "known_risks": [
+    "Read from the upcoming page's HTML (the API lists tournaments only once they start): the data-* attributes and two links are all it relies on, and a page without the table fails the extraction rather than reporting no events",
+    "A snapshot is a day old by the time the site shows it: the dashboard drops tournaments that have already started"
+  ]
+}

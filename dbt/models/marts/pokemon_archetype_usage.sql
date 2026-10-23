@@ -15,7 +15,7 @@ select
   win.record_count,
   row_number() over (
     partition by map.archetype_key
-    order by usage.usage_share desc nulls last
+    order by usage.usage_share desc nulls last, map.pokemon_key
   ) as member_rank
 from {{ ref('archetype_pokemon_map') }} map
 left join (
