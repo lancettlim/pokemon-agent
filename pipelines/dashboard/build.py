@@ -341,17 +341,18 @@ def _write_mart_shards(
     for name in SCOPED_ON_DEMAND_MARTS:
         if name not in marts:
             continue
-        index["on_demand_scoped"][name] = {}
-        for scope in scopes:
+        # The fallback points at the official scope's file rather than
+        # writing a copy: head-to-head is several MB per scope.
+        files: dict[str, str] = {}
+        for scope in sorted(scopes, key=lambda sc: data.scope_population(sc) != data.OFFICIAL):
             rows = [r for r in marts[name] if r.get("regulation_scope") == scope]
-            if not rows and data.scope_population(scope) != data.OFFICIAL:
-                official = data.scope_regulation(scope)
-                rows = [r for r in marts[name] if r.get("regulation_scope") == official]
-                if rows:
-                    index["official_fallback"].setdefault(scope, []).append(name)
-            index["on_demand_scoped"][name][scope] = write(
-                f"{name}-{scope.replace(':', '-')}", {name: rows}
-            )
+            official = data.scope_regulation(scope)
+            if not rows and data.scope_population(scope) != data.OFFICIAL and official in files:
+                files[scope] = files[official]
+                index["official_fallback"].setdefault(scope, []).append(name)
+                continue
+            files[scope] = write(f"{name}-{scope.replace(':', '-')}", {name: rows})
+        index["on_demand_scoped"][name] = files
     return index
 
 

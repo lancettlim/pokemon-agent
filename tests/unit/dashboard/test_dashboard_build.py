@@ -613,3 +613,19 @@ def test_build_can_leave_out_item_icons_and_most_hero_art(tmp_path, monkeypatch)
     assert payload["item_icons"] == {}
     assert payload["hero_art"] == {"raichu": "images/hero/raichu.webp"}
     assert not (tmp_path / "out" / "images" / "hero" / "pikachu.webp").exists()
+
+
+def test_a_population_scope_reuses_the_official_on_demand_file(tmp_path):
+    # Head-to-head is official-only: "m-c:online" has no rows of its own,
+    # so it points at the official file (listed as an official fallback)
+    # instead of writing a multi-MB copy.
+    marts = {
+        "pokemon_head_to_head": [
+            {"pokemon_key": "a", "opponent_pokemon_key": "b", "regulation_scope": "m-c"},
+        ],
+    }
+    index = build._write_mart_shards(marts, {"m-c": {}, "m-c:online": {}}, tmp_path)
+    files = index["on_demand_scoped"]["pokemon_head_to_head"]
+    assert files["m-c:online"] == files["m-c"]
+    assert index["official_fallback"]["m-c:online"] == ["pokemon_head_to_head"]
+    assert not (tmp_path / "data" / "pokemon_head_to_head-m-c-online.json").exists()

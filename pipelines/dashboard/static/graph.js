@@ -773,7 +773,10 @@
       parts.push("Thin data: " + App.shortRegulation(App.regulationScope) + " has " + Number(teams).toLocaleString() +
         " teams on record, so expect fewer edges and wider error.");
     }
-    if (state.layer === "checks" && graph && !graph.checks.length) {
+    if (state.layer === "checks" && graph && !graph.checks.length && !App.isOfficialScope) {
+      parts.push("Checks come from RK9 round-by-round pairings, which exist for official events only. " +
+        "Switch to Official to see them.");
+    } else if (state.layer === "checks" && graph && !graph.checks.length) {
       parts.push("No check edge in this regulation clears " + CHECK_MINS[0] +
         " matches with |z| ≥ 2. Tournament pairings are sparse once split by regulation.");
     } else if (state.layer === "checks" && graph && !hasStrongEdges() && !state.evExplicit) {

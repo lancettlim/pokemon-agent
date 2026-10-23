@@ -5397,8 +5397,32 @@
     if (currentRoute.tab === tabId) dispatchRoute(currentRoute);
   }
 
+  // Views whose script loads only when first opened, so it stays out of
+  // the first view's 500KB budget (tests/browser). The script registers
+  // its tab, and registerTab initialises it if it is still the one open.
+  var LAZY_TAB_SCRIPTS = { graph: "graph.js" };
+  var lazyScriptLoading = {};
+  function loadTabScript(tabId) {
+    var src = LAZY_TAB_SCRIPTS[tabId];
+    if (!src || lazyScriptLoading[tabId]) return;
+    lazyScriptLoading[tabId] = true;
+    var script = document.createElement("script");
+    script.src = src;
+    script.onerror = function () {
+      // Forget the attempt so re-opening the tab retries.
+      lazyScriptLoading[tabId] = false;
+      script.remove();
+      renderDataLoadError(tabId, new Error("could not load " + src));
+    };
+    document.body.appendChild(script);
+  }
+
   function initTab(tabId) {
-    if (initialized[tabId] || !tabInitializers[tabId]) return;
+    if (!tabInitializers[tabId]) {
+      loadTabScript(tabId);
+      return;
+    }
+    if (initialized[tabId]) return;
     initialized[tabId] = true;
     if (!tabNeedsMarts[tabId]) {
       runInitializer(tabId);
