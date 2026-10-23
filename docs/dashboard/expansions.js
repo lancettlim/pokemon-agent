@@ -4,7 +4,9 @@
  * (docs/upgrade-plan-2027q1.md, U1):
  *   #/compare/<a>,<b>          #/cores/<anchor>[/triple]
  * Links from before routing (?tab=compare&a=..&b=..) are rewritten to these
- * by app.js's legacyQueryRoute. */
+ * by app.js's legacyQueryRoute. Compare takes two to four Pokémon
+ * (#/compare/<a>,<b>,<c>,<d>), and the compare tray (docs/upgrade-plan-
+ * 2027q2.md, list #34) collects them from any profile. */
 (function () {
   "use strict";
   var App = window.DashboardApp;
@@ -39,39 +41,45 @@
   function metric(value) {
     return value == null || isNaN(value) ? "—" : Number(value).toLocaleString();
   }
+  var MAX_COMPARE = 4;
+  function compareSelects() {
+    return Array.prototype.slice.call(document.querySelectorAll("[data-compare-select]"));
+  }
+  function compareKeys() {
+    return compareSelects().map(function (select) { return select.value; }).filter(Boolean);
+  }
   function renderComparison() {
-    var a = document.getElementById("compare-a");
-    var b = document.getElementById("compare-b");
     var out = document.getElementById("compare-results");
-    if (!a || !b || !out) return;
+    if (!out) return;
     var rows = profileRows();
-    var left = rows.find(function (r) { return r.pokemon_key === a.value; }) || {};
-    var right = rows.find(function (r) { return r.pokemon_key === b.value; }) || {};
+    var picked = compareKeys().map(function (key) {
+      return rows.find(function (r) { return r.pokemon_key === key; }) || { pokemon_key: key };
+    });
     var metrics = [
-      ["Team share", percent(left.team_share), percent(right.team_share)],
-      ["Win rate", percent(left.win_rate), percent(right.win_rate)],
-      ["Teams with a record", metric(left.record_count), metric(right.record_count)],
-      ["Base speed", metric(left.speed), metric(right.speed)],
-      ["Attack", metric(left.attack), metric(right.attack)],
-      ["Special attack", metric(left.sp_attack), metric(right.sp_attack)],
-      ["Defense", metric(left.defense), metric(right.defense)],
-      ["Special defense", metric(left.sp_defense), metric(right.sp_defense)],
-      ["HP", metric(left.hp), metric(right.hp)]
+      ["Team share", function (r) { return percent(r.team_share); }],
+      ["Win rate", function (r) { return percent(r.win_rate); }],
+      ["Teams with a record", function (r) { return metric(r.record_count); }],
+      ["Base speed", function (r) { return metric(r.speed); }],
+      ["Attack", function (r) { return metric(r.attack); }],
+      ["Special attack", function (r) { return metric(r.sp_attack); }],
+      ["Defense", function (r) { return metric(r.defense); }],
+      ["Special defense", function (r) { return metric(r.sp_defense); }],
+      ["HP", function (r) { return metric(r.hp); }],
     ];
-    out.innerHTML = '<div class="compare-columns">' +
-      '<article class="compare-card"><h3>' + esc(left.pokemon_name || displayName(left.pokemon_key)) +
-      '</h3>' + (left.pokemon_key ? App.pokemonCell(left.pokemon_key, left.pokemon_name) : "") + '</article>' +
-      '<article class="compare-card"><h3>' + esc(right.pokemon_name || displayName(right.pokemon_key)) +
-      '</h3>' + (right.pokemon_key ? App.pokemonCell(right.pokemon_key, right.pokemon_name) : "") + '</article></div>' +
-      '<div class="table-scroll"><table><thead><tr><th>Metric</th><th>' +
-      esc(left.pokemon_name || displayName(left.pokemon_key)) + '</th><th>' +
-      esc(right.pokemon_name || displayName(right.pokemon_key)) +
-      '</th></tr></thead><tbody>' + metrics.map(function (m) {
-        return '<tr><th>' + esc(m[0]) + '</th><td>' + esc(m[1]) +
-          '</td><td>' + esc(m[2]) + '</td></tr>';
-      }).join("") + '</tbody></table></div>' +
+    function name(r) { return r.pokemon_name || displayName(r.pokemon_key); }
+    out.innerHTML = '<div class="compare-columns compare-columns-' + picked.length + '">' + picked.map(function (r) {
+      return '<article class="compare-card"><h3>' + esc(name(r)) + "</h3>" +
+        (r.pokemon_key ? App.pokemonCell(r.pokemon_key, r.pokemon_name) : "") + "</article>";
+    }).join("") + "</div>" +
+      '<div class="table-scroll"><table><thead><tr><th>Metric</th>' + picked.map(function (r) {
+        return "<th>" + esc(name(r)) + "</th>";
+      }).join("") + "</tr></thead><tbody>" + metrics.map(function (m) {
+        return "<tr><th>" + esc(m[0]) + "</th>" + picked.map(function (r) {
+          return "<td>" + esc(m[1](r)) + "</td>";
+        }).join("") + "</tr>";
+      }).join("") + "</tbody></table></div>" +
       '<p class="source-note">Usage and win rate are for ' + esc(App.scopeLabel(App.regulationScope)) +
-      '. Win rate is the combined W-L record of the teams that brought each Pokémon, with its sample size beside it.</p>';
+      ". Win rate is the combined W-L record of the teams that brought each Pokémon, with its sample size beside it.</p>";
   }
   // Pairs and triples on the shared table (docs/upgrade-plan-2027q1.md,
   // U5), one table per core size.
@@ -173,14 +181,58 @@
     if (!rows.length) return;
     var a = document.getElementById("compare-a");
     var b = document.getElementById("compare-b");
+    var extra = document.getElementById("compare-extra");
+    var addButton = document.getElementById("compare-add");
     fillPokemonSelect(a, rows[0].pokemon_key);
     fillPokemonSelect(b, rows[1] ? rows[1].pokemon_key : rows[0].pokemon_key);
     function record() {
       renderComparison();
-      App.setRoute("compare", [a.value + "," + b.value], {}, { push: true });
+      syncAdd();
+      App.setRoute("compare", [compareKeys().join(",")], {}, { push: true });
+    }
+    // A third or fourth column: its own picker and a remove button.
+    function addColumn(key) {
+      if (!extra || compareSelects().length >= MAX_COMPARE) return null;
+      var label = document.createElement("label");
+      label.className = "compare-extra-field";
+      label.textContent = "Pokémon " + "ABCD".charAt(compareSelects().length) + " ";
+      var select = document.createElement("select");
+      select.setAttribute("data-compare-select", "");
+      label.appendChild(select);
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-sm compare-remove";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", function (e) {
+        e.preventDefault();
+        label.remove();
+        relabel();
+        record();
+      });
+      label.appendChild(remove);
+      extra.appendChild(label);
+      fillPokemonSelect(select, key || rows[compareSelects().length - 1] && rows[compareSelects().length - 1].pokemon_key);
+      App.attachPokemonCombobox(select);
+      select.addEventListener("change", record);
+      return select;
+    }
+    function relabel() {
+      Array.prototype.forEach.call(extra.querySelectorAll(".compare-extra-field"), function (label, i) {
+        label.firstChild.textContent = "Pokémon " + "CD".charAt(i) + " ";
+      });
+    }
+    function syncAdd() {
+      if (addButton) addButton.hidden = compareSelects().length >= MAX_COMPARE;
     }
     a.addEventListener("change", record);
     b.addEventListener("change", record);
+    if (addButton) {
+      addButton.addEventListener("click", function () {
+        var used = compareKeys();
+        var next = rows.find(function (r) { return used.indexOf(r.pokemon_key) === -1; });
+        if (addColumn(next && next.pokemon_key)) record();
+      });
+    }
     var copy = document.getElementById("compare-copy");
     if (copy) {
       copy.addEventListener("click", function () {
@@ -195,13 +247,107 @@
       });
     }
     compareRoute = function (route) {
-      var pair = String(route.args[0] || "").split(",");
-      if (knownKey(pair[0])) { a.value = pair[0]; a.dispatchEvent(new Event("pokemon-sync")); }
-      if (knownKey(pair[1])) { b.value = pair[1]; b.dispatchEvent(new Event("pokemon-sync")); }
+      var keys = String(route.args[0] || "").split(",").filter(knownKey).slice(0, MAX_COMPARE);
+      if (keys[0]) { a.value = keys[0]; a.dispatchEvent(new Event("pokemon-sync")); }
+      if (keys[1]) { b.value = keys[1]; b.dispatchEvent(new Event("pokemon-sync")); }
+      if (extra) extra.innerHTML = "";
+      keys.slice(2).forEach(function (key) {
+        var select = addColumn(key);
+        if (select) { select.value = key; select.dispatchEvent(new Event("pokemon-sync")); }
+      });
+      syncAdd();
       renderComparison();
     };
+    syncAdd();
     renderComparison();
   }
+
+  // ---------- compare tray (docs/upgrade-plan-2027q2.md, list #34) ----------
+  // Pin up to four Pokémon from their profiles; the tray follows the
+  // visitor across pages (a bottom sheet over the phone's bottom bar, a
+  // side card from 721px) and opens Compare on them. Kept per browser.
+  var TRAY_KEY = "dashboard-compare-tray";
+  var tray = document.getElementById("compare-tray");
+  function readTray() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(TRAY_KEY) || "[]");
+      return Array.isArray(saved) ? saved.filter(function (k) { return typeof k === "string"; }).slice(0, MAX_COMPARE) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function writeTray(keys) {
+    try {
+      localStorage.setItem(TRAY_KEY, JSON.stringify(keys.slice(0, MAX_COMPARE)));
+    } catch (e) {
+      // Storage blocked: the tray lasts this page only.
+    }
+    trayKeys = keys.slice(0, MAX_COMPARE);
+    renderTray();
+    syncPin();
+  }
+  var trayKeys = readTray();
+  function renderTray() {
+    if (!tray) return;
+    tray.hidden = !trayKeys.length;
+    // The page keeps room for the tray so it never covers the last row.
+    document.documentElement.classList.toggle("has-compare-tray", trayKeys.length > 0);
+    if (!trayKeys.length) return;
+    tray.innerHTML = '<p class="compare-tray-title">Compare <span>' + trayKeys.length + "/" + MAX_COMPARE + "</span></p>" +
+      '<ul class="compare-tray-list">' + trayKeys.map(function (key) {
+        return '<li><a href="' + App.pokemonHref(key) + '" title="' + esc(displayName(key)) + '">' +
+          App.spriteImg(key, App.ICON_SIZES.sm) + '<span class="visually-hidden">' + esc(displayName(key)) + "</span></a>" +
+          '<button type="button" class="compare-tray-remove" data-tray-remove="' + esc(key) + '" aria-label="Unpin ' +
+          esc(displayName(key)) + '">×</button></li>';
+      }).join("") + "</ul>" +
+      '<div class="compare-tray-actions">' +
+      (trayKeys.length >= 2
+        ? '<a class="btn btn-sm btn-primary" href="' + App.routeHash("compare", [trayKeys.join(",")]) + '">Compare</a>'
+        : '<span class="compare-tray-hint">Pin one more</span>') +
+      '<button type="button" class="btn btn-sm" data-tray-clear>Clear</button></div>';
+  }
+  if (tray) {
+    tray.addEventListener("click", function (e) {
+      var remove = e.target.closest && e.target.closest("[data-tray-remove]");
+      if (remove) {
+        writeTray(trayKeys.filter(function (k) { return k !== remove.getAttribute("data-tray-remove"); }));
+      } else if (e.target.closest && e.target.closest("[data-tray-clear]")) {
+        writeTray([]);
+      }
+    });
+  }
+  // The profile's pin button, refreshed on every profile render.
+  var pinnedProfile = null;
+  function syncPin() {
+    var button = document.getElementById("profile-pin");
+    if (!button || !pinnedProfile) return;
+    var pinned = trayKeys.indexOf(pinnedProfile) !== -1;
+    button.setAttribute("aria-pressed", String(pinned));
+    button.textContent = pinned ? "Pinned to compare" : "Pin to compare";
+    button.disabled = !pinned && trayKeys.length >= MAX_COMPARE;
+    button.title = button.disabled ? "The tray holds " + MAX_COMPARE + " Pokémon" : "";
+  }
+  if (App.extendTab) {
+    App.extendTab("profile", function (profile) {
+      pinnedProfile = profile.pokemon_key;
+      var host = document.querySelector(".profile-controls");
+      var button = document.getElementById("profile-pin");
+      if (host && !button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.id = "profile-pin";
+        button.className = "btn btn-sm profile-pin";
+        button.addEventListener("click", function () {
+          if (!pinnedProfile) return;
+          var pinned = trayKeys.indexOf(pinnedProfile) !== -1;
+          writeTray(pinned ? trayKeys.filter(function (k) { return k !== pinnedProfile; }) : trayKeys.concat([pinnedProfile]));
+        });
+        host.appendChild(button);
+      }
+      syncPin();
+    });
+  }
+  renderTray();
 
   var coreRoute = function () {};
   function setupCoreExplorer() {

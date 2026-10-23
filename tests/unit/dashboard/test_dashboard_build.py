@@ -167,14 +167,30 @@ def test_build_writes_sharded_json_feed_and_critical_only_inline_payload(tmp_pat
     # dictionary still describes them.
     build_only = set(files["build_only"])
     assert build_only == set(build.BUILD_ONLY_MARTS) & set(payload["marts"])
+    # Move, item and ability details ride once in core.json (DETAIL_SPLITS),
+    # and joining them back gives each row its details again.
+    joins = files["detail_joins"]
     assert set(reassembled) == (set(payload["marts"]) - build_only) | {
         "data_dictionary",
         "release_tables",
-    }
+    } | {details for _mart, _key, details, _fields in joins}
     assert {entry["table"] for entry in reassembled["data_dictionary"]} == set(payload["marts"])
     for name, rows in payload["marts"].items():
         if name not in build_only:
             assert len(reassembled[name]) == len(rows), name
+    assert {mart for mart, *_ in joins} == {
+        "pokemon_move_usage",
+        "pokemon_item_usage",
+        "pokemon_ability_usage",
+    } & set(n for n, rows in payload["marts"].items() if rows)
+    for mart, key, details, fields in joins:
+        by_key = {d[key]: d for d in reassembled[details]}
+        full_by_key = {row[key]: row for row in payload["marts"][mart]}
+        for slim in reassembled[mart]:
+            assert not set(fields) & set(slim)
+            assert {f: by_key[slim[key]][f] for f in fields} == {
+                f: full_by_key[slim[key]].get(f) for f in fields
+            }
 
     html = (output_dir / "index.html").read_text(encoding="utf-8")
     embedded = _embedded_payload(html)

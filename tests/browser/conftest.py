@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 from dashboard_fixture import (
     ONLINE_SCOPES,
+    write_fixture_archetype_matchups,
     write_fixture_event_phase_marts,
     write_fixture_ladder_marts,
     write_fixture_manifest,
@@ -51,6 +52,7 @@ def _build_site(
     write_fixture_event_phase_marts(marts_dir)
     write_fixture_ladder_marts(marts_dir)
     write_fixture_name_marts(marts_dir)
+    write_fixture_archetype_matchups(marts_dir)
     write_fixture_manifest(root / "manifests")
     output_dir = root / "site"
     write_fixture_share_cards(output_dir)

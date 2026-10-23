@@ -843,6 +843,25 @@ Usage's Rank column reuses the rank-movement badge (▲ green, ▼ red, ±0)
 with a "New" badge for a Pokémon absent before; its tooltip names the
 baseline ("#5 before Louisville → #2 now").
 
+### Speed line, matchup heatmap, compare tray (2027 Q2, list #24, #30, #34)
+
+- **Speed line** (`.speed-line`, 768px and up): a navy axis with Speed
+  ticks and a bold "Moves first" arrow at the end that moves first (it
+  flips under Trick Room). Your team's 40px sprites sit above it with a
+  blue ring, the most-used Pokémon below; a sprite that would overlap one
+  already placed drops a 44px lane. Below 768px, `.speed-line-list`: rank,
+  Pokémon link and Speed, with "Your team" and "Speed tie" chips on a
+  second line.
+- **Matchup heatmap** (`.archetype-heatmap`): rows and columns are
+  archetypes as three 24px sprites; cells are the row's win rate in ink
+  over a diverging tint (`--series-blue` above even, `--series-red` below,
+  none within a couple of points or under 20 matches), the record in the
+  tooltip. Phones get a select and a list. Always labelled team vs team.
+- **Compare tray** (`.compare-tray`): pinned sprites with a small × to
+  unpin, "Compare" (from two) and "Clear"; a full-width sheet over the
+  bottom bar on phones, a 240px card bottom-right from 721px, and the page
+  keeps room for it. The profile's "Pin to compare" is a toggle button.
+
 ### Segmented control (2027 Q2)
 
 `.segmented` holds two to four mutually exclusive `<button

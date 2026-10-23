@@ -904,6 +904,27 @@ models:
         description: "'Day 1', 'Day 2' or 'Top cut'."
       - name: result
         description: "W, L, T or Bye, for this team."
+  - name: archetype_matchups
+    description: >
+      Detected archetype vs detected archetype records from decided official
+      matches (docs/upgrade-plan-2027q2.md, list #30): one row per
+      archetype and opponent archetype, both directions present, mirrors
+      left out. Team vs team: no source says which four Pokémon were
+      brought. Feeds the Archetypes tab's matchup heatmap. Written to
+      data/marts/archetype_matchups.csv.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['archetype_key', 'opponent_archetype_key']
+          config:
+            meta: {category: mart_quality, table_name: archetype_matchups}
+    columns:
+      - name: matches
+        description: "Decided matches between the two archetypes' primary teams."
+      - name: wins
+        description: "Matches archetype_key's team won."
+      - name: win_rate
+        description: "wins / matches."
   - name: pokemon_localised_names
     description: >
       Each Pokémon's name in Japanese, Spanish, French and German

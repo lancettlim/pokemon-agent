@@ -1813,7 +1813,29 @@
       if (files.on_demand && files.on_demand[name]) paths.push(files.on_demand[name]);
     });
     return Promise.all(paths.filter(Boolean).map(fetchShard)).then(function () {
+      restoreDetails();
       return marts;
+    });
+  }
+
+  // Move, item and ability details ship once, in core.json, rather than on
+  // every Pokémon's row (build.py's DETAIL_SPLITS); once both halves are
+  // here, each row gets its details back, so every view keeps reading
+  // row.move_type or row.short_effect.
+  function restoreDetails() {
+    ((DATA.mart_files && DATA.mart_files.detail_joins) || []).forEach(function (join) {
+      var rows = marts[join[0]];
+      var details = marts[join[2]];
+      if (!rows || !details || !rows.length || rows[0][join[3][0]] !== undefined) return;
+      var byKey = {};
+      details.forEach(function (d) { byKey[d[join[1]]] = d; });
+      rows.forEach(function (row) {
+        var d = byKey[row[join[1]]];
+        if (!d) return;
+        join[3].forEach(function (field) {
+          if (row[field] === undefined) row[field] = d[field];
+        });
+      });
     });
   }
 
@@ -4052,6 +4074,84 @@
       showLeader: false,
       typeFn: false,
     });
+    renderArchetypeMatchups(rows);
+  }
+
+  // Archetype matchups (docs/upgrade-plan-2027q2.md, list #30): the top
+  // HEATMAP_ARCHETYPES archetypes against each other, from decided
+  // official matches between their primary teams. Team vs team. A cell
+  // under MATCHUP_FLOOR matches shows its record without a colour.
+  var HEATMAP_ARCHETYPES = 10;
+  var MATCHUP_FLOOR = 20;
+  function archetypeLabel(r) {
+    return [r.pokemon_name_a, r.pokemon_name_b, r.pokemon_name_c].join(" / ");
+  }
+  function matchupFill(rate, matches) {
+    if (matches < MATCHUP_FLOOR || rate == null) return "";
+    var lean = Math.min(Math.abs(rate - 0.5) / 0.15, 1);
+    if (lean < 0.15) return "";
+    var hue = rate > 0.5 ? "var(--series-blue)" : "var(--series-red)";
+    return "background:color-mix(in srgb, " + hue + " " + Math.round(12 + lean * 33) + "%, transparent)";
+  }
+  function renderArchetypeMatchups(archetypes) {
+    var table = document.getElementById("archetype-heatmap");
+    var note = document.getElementById("archetype-matchups-note");
+    var select = document.getElementById("archetype-matchup-select");
+    var list = document.getElementById("archetype-matchup-list");
+    if (!table || !list) return;
+    var records = {};
+    (marts.archetype_matchups || []).forEach(function (r) {
+      records[r.archetype_key + "|" + r.opponent_archetype_key] = r;
+    });
+    var byKey = {};
+    archetypes.forEach(function (a) { byKey[a.archetype_key] = a; });
+    var shown = archetypes.slice(0, HEATMAP_ARCHETYPES);
+    var total = (marts.archetype_matchups || []).reduce(function (sum, r) { return sum + (r.matches || 0); }, 0) / 2;
+    if (note) {
+      note.textContent = total
+        ? "Each cell is the row archetype's win rate against the column's, from " + Math.round(total).toLocaleString() +
+          " decided official matches between the archetypes' teams. Team vs team: no source says which four Pokémon were " +
+          "brought. Cells under " + MATCHUP_FLOOR + " matches are left uncoloured."
+        : "No matches between these archetypes' teams yet.";
+    }
+    function cell(row, col) {
+      if (row.archetype_key === col.archetype_key) return '<td class="is-self">—</td>';
+      var r = records[row.archetype_key + "|" + col.archetype_key];
+      if (!r) return '<td class="is-thin">·</td>';
+      var tip = archetypeLabel(row) + " vs " + archetypeLabel(col) + ": " + r.wins + "–" + r.losses +
+        " (" + formatPercent(r.win_rate) + ", " + r.matches + " matches)";
+      return '<td class="' + (r.matches < MATCHUP_FLOOR ? "is-thin" : "") + '" style="' + matchupFill(r.win_rate, r.matches) +
+        '" data-tip="' + escapeHtml(tip) + '">' + Math.round(r.win_rate * 100) + "</td>";
+    }
+    table.innerHTML = "<caption class=\"visually-hidden\">Archetype vs archetype win rates, row against column</caption>" +
+      "<thead><tr><th scope=\"col\"></th>" + shown.map(function (a) {
+        return '<th scope="col" title="' + escapeHtml(archetypeLabel(a)) + '">' +
+          teamCompositionHtml([a.pokemon_key_a, a.pokemon_key_b, a.pokemon_key_c].join("|"), 24) + "</th>";
+      }).join("") + "</tr></thead><tbody>" + shown.map(function (row) {
+        return '<tr><th scope="row">' + teamCompositionHtml([row.pokemon_key_a, row.pokemon_key_b, row.pokemon_key_c].join("|"), 24) +
+          " " + escapeHtml(row.pokemon_name_a) + "…</th>" + shown.map(function (col) { return cell(row, col); }).join("") + "</tr>";
+      }).join("") + "</tbody>";
+    if (select && !select.options.length) {
+      select.innerHTML = archetypes.map(function (a) {
+        return '<option value="' + escapeHtml(a.archetype_key) + '">' + escapeHtml(archetypeLabel(a)) + "</option>";
+      }).join("");
+      select.addEventListener("change", renderList);
+    }
+    function renderList() {
+      var key = select ? select.value : (archetypes[0] || {}).archetype_key;
+      var rows = (marts.archetype_matchups || []).filter(function (r) {
+        return r.archetype_key === key && byKey[r.opponent_archetype_key];
+      }).sort(function (a, b) { return b.matches - a.matches; });
+      list.innerHTML = rows.length ? rows.map(function (r) {
+        var opp = byKey[r.opponent_archetype_key];
+        return "<li><span>" + teamCompositionHtml([opp.pokemon_key_a, opp.pokemon_key_b, opp.pokemon_key_c].join("|"), 24) +
+          " vs " + escapeHtml(archetypeLabel(opp)) + "</span>" +
+          '<span class="matchup-rate">' + formatPercent(r.win_rate) + "</span>" +
+          '<span class="matchup-n">' + r.wins + "–" + r.losses + " in " + r.matches + " matches" +
+          (r.matches < MATCHUP_FLOOR ? " (small sample)" : "") + "</span></li>";
+      }).join("") : '<li class="empty-state">No matches against the listed archetypes.</li>';
+    }
+    renderList();
   }
 
   // Speed Tiers now reads pokemon_speed_tiers (backlog #16) rather than
@@ -4168,6 +4268,149 @@
     });
     if (scenarioSelect) scenarioSelect.addEventListener("change", draw);
     draw();
+    setupSpeedLine(speedRows);
+  }
+
+  // ---------- speed line (docs/upgrade-plan-2027q2.md, list #24) ----------
+  // Your Builder team over the regulation's SPEED_LINE_TOP most-used
+  // Pokémon, each at its max-investment Speed (the convention the tab
+  // states: sheets publish no Stat Points). Tailwind doubles your side;
+  // Trick Room flips which end moves first. From 768px a number line with
+  // sprites stacked into lanes where they would overlap; below, a list in
+  // move order with speed ties marked.
+  var SPEED_LINE_TOP = 16;
+  var BUILDER_TEAM_KEY = "pokemonChampionsTeamBuilder";
+  function setupSpeedLine(speedRows) {
+    var lineEl = document.getElementById("speed-line");
+    var listEl = document.getElementById("speed-line-list");
+    var noteEl = document.getElementById("speed-line-note");
+    var controls = document.getElementById("speed-line-controls");
+    if (!lineEl || !listEl || !controls) return;
+    var state = { tailwind: "off", trickRoom: "off" };
+    var byKey = {};
+    speedRows.forEach(function (r) { byKey[r.pokemon_key] = r; });
+    var yours = [];
+    try {
+      yours = (JSON.parse(localStorage.getItem(BUILDER_TEAM_KEY) || "[]") || []).map(function (slot) {
+        return typeof slot === "string" ? slot : slot && slot.key;
+      }).filter(function (key) { return key && byKey[key]; });
+    } catch (e) {
+      yours = [];
+    }
+    var top = speedRows.slice().sort(function (a, b) {
+      return (b.team_share || 0) - (a.team_share || 0);
+    }).slice(0, SPEED_LINE_TOP);
+
+    controls.innerHTML = segmentedHtml("Tailwind", "data-speed-tailwind", [
+      { id: "off", label: "No Tailwind" },
+      { id: "on", label: "Tailwind on your side" },
+    ], state.tailwind) + segmentedHtml("Trick Room", "data-speed-trick-room", [
+      { id: "off", label: "Normal" },
+      { id: "on", label: "Trick Room" },
+    ], state.trickRoom);
+    controls.addEventListener("click", function (e) {
+      var button = e.target.closest && e.target.closest("button");
+      if (!button) return;
+      if (button.hasAttribute("data-speed-tailwind")) state.tailwind = button.getAttribute("data-speed-tailwind");
+      else if (button.hasAttribute("data-speed-trick-room")) state.trickRoom = button.getAttribute("data-speed-trick-room");
+      else return;
+      Array.prototype.forEach.call(button.parentNode.querySelectorAll("button"), function (b) {
+        b.setAttribute("aria-pressed", String(b === button));
+      });
+      render();
+    });
+    if (!yours.length) {
+      var twButton = controls.querySelector('[data-speed-tailwind="on"]');
+      if (twButton) twButton.disabled = true;
+    }
+
+    function entries() {
+      var out = top.map(function (r) {
+        return { key: r.pokemon_key, speed: r.max_investment_speed, yours: false };
+      });
+      yours.forEach(function (key) {
+        var speed = byKey[key].max_investment_speed;
+        out.push({ key: key, speed: state.tailwind === "on" ? speed * 2 : speed, yours: true });
+      });
+      var trick = state.trickRoom === "on";
+      return out.sort(function (a, b) {
+        return trick ? a.speed - b.speed : b.speed - a.speed;
+      });
+    }
+
+    function render() {
+      var all = entries();
+      var trick = state.trickRoom === "on";
+      if (noteEl) {
+        noteEl.textContent = (yours.length
+          ? "Your Builder team (outlined) against "
+          : "Add a team in the Builder to see it here against ") +
+          "the " + top.length + " most-used Pokémon in " + shortRegulation(regulationScope) +
+          ", at max Speed investment" + (state.tailwind === "on" ? ", your side doubled by Tailwind" : "") +
+          (trick ? ". Trick Room: the slowest moves first." : ". The fastest moves first.");
+      }
+      // The list, in move order.
+      listEl.innerHTML = all.map(function (entry, i) {
+        var tie = all.some(function (other, j) { return j !== i && other.speed === entry.speed; });
+        return "<li><span class=\"rank\">" + (i + 1) + "</span>" + pokemonCell(entry.key, pokemonNames[entry.key]) +
+          '<span class="speed-value">' + entry.speed + "</span>" +
+          '<span class="speed-line-meta">' + (entry.yours ? '<span class="speed-side-chip">Your team</span>' : "") +
+          (tie ? '<span class="speed-tie">Speed tie</span>' : "") + "</span></li>";
+      }).join("");
+      // The number line.
+      var speeds = all.map(function (e) { return e.speed; });
+      if (!speeds.length) {
+        lineEl.innerHTML = "";
+        return;
+      }
+      var lo = Math.floor((Math.min.apply(null, speeds) - 5) / 10) * 10;
+      var hi = Math.ceil((Math.max.apply(null, speeds) + 5) / 10) * 10;
+      var width = lineEl.clientWidth || 900;
+      function pct(speed) {
+        var t = (speed - lo) / (hi - lo || 1);
+        return (trick ? 1 - t : t) * 100;
+      }
+      // Lanes: a sprite drops a lane where it would overlap one already
+      // placed (40px wide, so 42px apart).
+      function lanes(group) {
+        var placed = [];
+        return group.map(function (entry) {
+          var x = (pct(entry.speed) / 100) * width;
+          var lane = 0;
+          while (placed.some(function (p) { return p.lane === lane && Math.abs(p.x - x) < 42; })) lane++;
+          placed.push({ x: x, lane: lane });
+          return { entry: entry, lane: lane };
+        });
+      }
+      function sideHtml(group, label, above) {
+        var placed = lanes(group);
+        var depth = placed.reduce(function (m, p) { return Math.max(m, p.lane + 1); }, 1);
+        return '<div class="speed-line-side" style="height:' + (depth * 44 + 22) + 'px">' +
+          '<p class="speed-line-label"' + (above ? "" : ' style="position:absolute;bottom:0"') + ">" + escapeHtml(label) + "</p>" +
+          placed.map(function (p) {
+            var offset = 22 + p.lane * 44;
+            return '<a class="speed-line-dot' + (p.entry.yours ? " is-yours" : "") + '" href="' + pokemonHref(p.entry.key) +
+              '" style="left:' + pct(p.entry.speed).toFixed(2) + "%;" + (above ? "bottom:" : "top:") + (above ? p.lane * 44 : offset - 22) + 'px"' +
+              ' data-tip="' + escapeHtml((pokemonNames[p.entry.key] || p.entry.key) + ": " + p.entry.speed) + '">' +
+              spriteImg(p.entry.key, ICON_SIZES.sm) + "</a>";
+          }).join("") + "</div>";
+      }
+      var ticks = [];
+      for (var t = lo; t <= hi; t += hi - lo > 200 ? 50 : 20) ticks.push(t);
+      lineEl.innerHTML =
+        (yours.length ? sideHtml(all.filter(function (e) { return e.yours; }), "Your team", true) : "") +
+        '<div class="speed-line-axis">' + ticks.map(function (tick) {
+          return '<span style="left:' + pct(tick).toFixed(2) + '%">' + tick + "</span>";
+        }).join("") +
+        '<span class="speed-line-first" style="' + (trick ? "left:0" : "right:0") + '">' + (trick ? "← Moves first" : "Moves first →") + "</span></div>" +
+        sideHtml(all.filter(function (e) { return !e.yours; }), "Most used in " + shortRegulation(regulationScope), false);
+    }
+    render();
+    var resizeTimer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(render, 150);
+    });
   }
 
   // Players & Regions (backlog #7's two marts): "which regions favour
@@ -5091,7 +5334,7 @@
       profileRoute(route);
     },
   });
-  registerTab("archetypes", setupDetectedArchetypes);
+  registerTab("archetypes", setupDetectedArchetypes, { extraMarts: ["archetype_matchups"] });
   registerTab("speed-tiers", setupSpeedTiers);
   registerTab("players", setupPlayers, {
     extraMarts: ["player_signature_pokemon", "player_index", "pokemon_usage_by_country"],

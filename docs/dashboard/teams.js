@@ -162,6 +162,120 @@
     };
   }
 
+  // ---------- team sheet image (docs/upgrade-plan-2027q2.md, list #21) ----------
+  // The team as an Open Team Sheet image: each Pokémon with its ability,
+  // held item and moves, the details an open sheet shows (no Stat Points,
+  // no Stat Alignment), drawn on a canvas and saved as a PNG. Names follow
+  // the page's name language; the sprites are the site's own, same-origin,
+  // so the canvas stays exportable.
+  var SHEET_W = 1200;
+  var SHEET_H = 760;
+
+  function loadImage(src) {
+    return new Promise(function (resolve) {
+      if (!src) return resolve(null);
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function fitText(ctx, text, maxWidth) {
+    var out = String(text || "");
+    if (ctx.measureText(out).width <= maxWidth) return out;
+    while (out.length > 1 && ctx.measureText(out + "…").width > maxWidth) out = out.slice(0, -1);
+    return out + "…";
+  }
+
+  function drawTeamSheet(teamSlots) {
+    var canvas = document.createElement("canvas");
+    canvas.width = SHEET_W;
+    canvas.height = SHEET_H;
+    var ctx = canvas.getContext("2d");
+    var css = getComputedStyle(document.documentElement);
+    var red = css.getPropertyValue("--board-field").trim() || "#ea0028";
+    var navy = "#16264d";
+    var display = '"Board Display", "Arial Narrow", sans-serif';
+    var body = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+    var fontsReady = document.fonts && document.fonts.load ? document.fonts.load("700 40px \"Board Display\"") : Promise.resolve();
+    return Promise.all([fontsReady].concat(teamSlots.map(function (slot) {
+      return loadImage((App.DATA.hero_art || {})[slot.key] || App.sprites[slot.key]);
+    }))).then(function (loaded) {
+      var images = loaded.slice(1);
+      ctx.fillStyle = "#f4f6fb";
+      ctx.fillRect(0, 0, SHEET_W, SHEET_H);
+      ctx.fillStyle = red;
+      ctx.fillRect(0, 0, SHEET_W, 96);
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 44px " + display;
+      ctx.textBaseline = "middle";
+      ctx.fillText("OPEN TEAM SHEET", 40, 50);
+      ctx.font = "600 22px " + body;
+      ctx.textAlign = "right";
+      ctx.fillText(App.shortRegulation(App.regulationCode) + " · Pokémon Champions VGC", SHEET_W - 40, 50);
+      ctx.textAlign = "left";
+      var cardW = 360;
+      var cardH = 280;
+      teamSlots.forEach(function (slot, i) {
+        var x = 40 + (i % 3) * (cardW + 20);
+        var y = 120 + Math.floor(i / 3) * (cardH + 20);
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = navy;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y, cardW, cardH, 12);
+        else ctx.rect(x, y, cardW, cardH);
+        ctx.fill();
+        ctx.stroke();
+        if (images[i]) ctx.drawImage(images[i], x + 12, y + 12, 96, 96);
+        ctx.fillStyle = navy;
+        ctx.textBaseline = "alphabetic";
+        // The name shrinks to fit before it is cut ("Mega Charizard Y").
+        var name = App.pokemonNames[slot.key] || slot.key;
+        var size = 26;
+        ctx.font = "800 " + size + "px " + body;
+        while (size > 18 && ctx.measureText(name).width > cardW - 132) {
+          size -= 1;
+          ctx.font = "800 " + size + "px " + body;
+        }
+        ctx.fillText(fitText(ctx, name, cardW - 132), x + 120, y + 52);
+        ctx.font = "600 18px " + body;
+        ctx.fillStyle = "#5b6b8c";
+        ctx.fillText(fitText(ctx, "Ability: " + (slot.ability || "—"), cardW - 132), x + 120, y + 82);
+        ctx.fillText(fitText(ctx, "Item: " + (slot.item || "—"), cardW - 132), x + 120, y + 108);
+        ctx.fillStyle = navy;
+        ctx.font = "600 20px " + body;
+        var moves = (slot.moves || []).filter(Boolean);
+        for (var m = 0; m < 4; m++) {
+          ctx.fillText(fitText(ctx, "• " + (moves[m] || "—"), cardW - 40), x + 20, y + 150 + m * 34);
+        }
+      });
+      ctx.fillStyle = "#5b6b8c";
+      ctx.font = "500 16px " + body;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("Made with Champions Data · unofficial fan project, not affiliated with Nintendo, Game Freak, The Pokémon Company or Play! Pokémon", 40, SHEET_H - 22);
+      return canvas;
+    });
+  }
+
+  function downloadTeamSheet(teamSlots, button) {
+    drawTeamSheet(teamSlots).then(function (canvas) {
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "team-sheet.png";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        if (button) button.textContent = "Team sheet saved";
+      }, "image/png");
+    });
+  }
+
   // A team sheet row (tournament_team_sheets / team_list_sheets) -> a slot.
   function sheetToSlot(row) {
     return {
@@ -275,6 +389,12 @@
     var exportBtn = document.getElementById("team-builder-export");
     var exportOutput = document.getElementById("team-builder-export-output");
     var shareBtnEl = document.getElementById("team-builder-share");
+    var sheetBtnEl = document.getElementById("team-builder-sheet");
+    if (sheetBtnEl) {
+      sheetBtnEl.addEventListener("click", function () {
+        if (team.length) downloadTeamSheet(team, sheetBtnEl);
+      });
+    }
     var analysisSummaryEl = document.getElementById("team-analysis-summary");
     var analysisDefenseTable = document.getElementById("team-analysis-defense-table");
     var analysisThreatTable = document.getElementById("team-analysis-threat-table");
@@ -307,6 +427,19 @@
       }).filter(function (member) {
         return member.profile;
       });
+    }
+
+    // Ladder checks (docs/upgrade-plan-2027q2.md, list #23): the team
+    // members among a threat's twelve strongest checks and counters on the
+    // Showdown ladder, from battle logs (ladder.js's regulation choice).
+    function ladderChecks(threatKey) {
+      var rows = App.marts.ladder_checks_counters || [];
+      var reg = App.ladderRegulation ? App.ladderRegulation(rows) : { code: App.regulationCode };
+      var onTeam = {};
+      team.forEach(function (slot) { onTeam[slot.key] = true; });
+      return rows.filter(function (r) {
+        return r.regulation_code === reg.code && r.pokemon_key === threatKey && onTeam[r.counter_pokemon_key];
+      }).sort(function (a, b) { return a.counter_rank - b.counter_rank; });
     }
 
     function typeLabel(type) {
@@ -358,7 +491,11 @@
         });
       });
 
-      var threatRows = sortByUsageRank(rows).slice(0, 12).map(function (threat) {
+      // The regulation's most-used Pokémon, by team share (profile rows
+      // carry no usage_rank, so sorting on it left the order arbitrary).
+      var threatRows = rows.slice().sort(function (a, b) {
+        return (b.team_share || 0) - (a.team_share || 0);
+      }).slice(0, 12).map(function (threat) {
         var threatTypes = [threat.type_1, threat.type_2].filter(Boolean);
         var threatMoveTypes = (movesByKey[threat.pokemon_key] || []).filter(function (move) {
           return move.category !== "status" && Number(move.power || 0) > 0 && move.move_type;
@@ -373,7 +510,7 @@
             return typeMultiplier(move.move_type, [member.profile.type_1, member.profile.type_2]) > 1;
           });
         }).length;
-        return { threat: threat, answers: answers, exposed: exposed };
+        return { threat: threat, answers: answers, exposed: exposed, checks: ladderChecks(threat.pokemon_key) };
       });
 
       analysisSummaryEl.innerHTML =
@@ -398,13 +535,22 @@
         var threatBody = analysisThreatTable.querySelector("tbody");
         threatBody.innerHTML = threatRows.map(function (row) {
           var cls = row.answers === 0 || row.exposed >= Math.max(2, Math.ceil(members.length / 2)) ? "status-warn" : "status-good";
+          var checks = row.checks.map(function (c) {
+            return App.escapeHtml(App.pokemonNames[c.counter_pokemon_key] || c.counter_pokemon_key);
+          }).join(", ");
+          var checksTip = row.checks.map(function (c) {
+            return (App.pokemonNames[c.counter_pokemon_key] || c.counter_pokemon_key) + ": " +
+              App.formatPercent(c.ko_or_switch_rate) + " KO'd or switched out, n=" + c.encounters.toLocaleString();
+          }).join("; ");
           return '<tr><td>' + App.escapeHtml(row.threat.pokemon_name) + "</td><td class=\"" + cls + "\">" +
-            row.answers + " / " + members.length + "</td><td>" + row.exposed + " / " + members.length + "</td></tr>";
+            row.answers + " / " + members.length + "</td><td>" + row.exposed + " / " + members.length + "</td>" +
+            '<td class="' + (row.checks.length ? "status-good" : "") + '"' +
+            (checksTip ? ' data-tip="' + App.escapeHtml(checksTip) + '"' : "") + ">" + (checks || "—") + "</td></tr>";
         }).join("");
       }
       if (analysisNoteEl) {
         analysisNoteEl.textContent =
-          "Coverage checks selected recorded damaging moves against single defending types. Threat exposure uses the threat Pokémon's recorded damaging move types; it is a screening heuristic, not a full moveset or battle simulation.";
+          "Coverage checks selected recorded damaging moves against single defending types. Threat exposure uses the threat Pokémon's recorded damaging move types; it is a screening heuristic, not a full moveset or battle simulation. Ladder checks are the team members among each threat's strongest checks and counters on the Showdown ladder, from battle logs: ladder data, not tournament results.";
       }
     }
 
@@ -767,6 +913,10 @@
       if (clearBtn) clearBtn.disabled = team.length === 0;
       if (exportBtn) exportBtn.disabled = team.length === 0;
       if (shareBtnEl) shareBtnEl.disabled = team.length === 0;
+      if (sheetBtnEl) {
+        sheetBtnEl.disabled = team.length === 0;
+        sheetBtnEl.textContent = "Download team sheet image";
+      }
     }
 
     function renderSpeedOrder() {
@@ -1333,7 +1483,7 @@
       ensureTeamBuilder();
       setupPokepasteImport();
     },
-    { onRoute: loadFromRoute }
+    { onRoute: loadFromRoute, extraMarts: ["ladder_checks_counters"] }
   );
   App.registerTab("top-teams", setupTopTeams, {
     extraMarts: ["tournament_team_sheets", "team_list_sheets", "team_list_convergence"],

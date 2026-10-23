@@ -1096,6 +1096,33 @@ def write_fixture_name_marts(marts_dir: Path) -> None:
     )
 
 
+# docs/upgrade-plan-2027q2.md, list #30: the fixture's three archetypes
+# against each other. arch-0 beats arch-1 30-10; arch-2 has 8 matches with
+# arch-0, under the 20-match floor; arch-9 isn't listed and is dropped.
+ARCHETYPE_RECORDS = (
+    ("arch-0", "arch-1", 30, 10),
+    ("arch-0", "arch-2", 5, 3),
+    ("arch-1", "arch-9", 12, 12),
+)
+
+
+def write_fixture_archetype_matchups(marts_dir: Path) -> None:
+    rows = []
+    for a, b, wins, losses in ARCHETYPE_RECORDS:
+        for key, opponent, won, lost in ((a, b, wins, losses), (b, a, losses, wins)):
+            rows.append(
+                {
+                    "archetype_key": key,
+                    "opponent_archetype_key": opponent,
+                    "matches": won + lost,
+                    "wins": won,
+                    "losses": lost,
+                    "win_rate": round(won / (won + lost), 4),
+                }
+            )
+    _write(marts_dir / "archetype_matchups.csv", rows)
+
+
 def write_fixture_manifest(manifests_dir: Path) -> None:
     """A 0.4.0-style manifest, distributed as a Release asset (its
     `package` block), for the Data section's table cards (D1/D2)."""

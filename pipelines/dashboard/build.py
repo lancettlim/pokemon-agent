@@ -163,7 +163,25 @@ ON_DEMAND_MARTS = (
     "ladder_pokemon_usage",
     "ladder_checks_counters",
     "ladder_stat_point_spreads",
+    # The Archetypes tab's matchup heatmap (list #30).
+    "archetype_matchups",
 )
+
+# Per-move, per-item and per-ability details (type, power, effect text...)
+# repeat on every Pokémon's row in the usage marts. The shards carry them
+# once, as <details> marts in core.json, and static/app.js joins them back
+# onto the rows ("detail_joins"): about 20KB off every regulation shard,
+# which keeps the first view inside its 500KB budget (tests/browser).
+#   mart -> (key column, details mart, detail columns)
+DETAIL_SPLITS = {
+    "pokemon_move_usage": (
+        "move_name",
+        "move_details",
+        ("move_type", "power", "accuracy", "category", "priority", "pp", "short_effect"),
+    ),
+    "pokemon_item_usage": ("item_name", "item_details", ("short_effect",)),
+    "pokemon_ability_usage": ("ability", "ability_details", ("short_effect",)),
+}
 
 # Marts the build summarises into the inline payload and no view reads raw:
 # kept out of every shard file. pokemon_regulation_movers feeds "What
@@ -222,8 +240,14 @@ def _write_mart_shards(
     def without_names(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [{k: v for k, v in row.items() if k not in name_fields} for row in rows]
 
+    def without_details(mart: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if mart not in DETAIL_SPLITS:
+            return rows
+        drop = DETAIL_SPLITS[mart][2]
+        return [{k: v for k, v in row.items() if k not in drop} for row in rows]
+
     def write(name: str, content: dict[str, Any]) -> str:
-        slim = {mart: without_names(rows) for mart, rows in content.items()}
+        slim = {mart: without_details(mart, without_names(rows)) for mart, rows in content.items()}
         (shard_dir / f"{name}.json").write_text(json.dumps(slim, default=str), encoding="utf-8")
         return f"{SHARD_DIR}/{name}.json"
 
@@ -243,12 +267,22 @@ def _write_mart_shards(
         for name, rows in marts.items()
         if name not in scoped_names and name not in ON_DEMAND_MARTS and name not in BUILD_ONLY_MARTS
     }
+    detail_joins = []
+    for mart, (key, details_mart, fields) in DETAIL_SPLITS.items():
+        details: dict[Any, dict[str, Any]] = {}
+        for row in marts.get(mart, []):
+            if row.get(key) is not None and row[key] not in details:
+                details[row[key]] = {key: row[key], **{f: row.get(f) for f in fields}}
+        if details:
+            core[details_mart] = list(details.values())
+            detail_joins.append([mart, key, details_mart, list(fields)])
     index: dict[str, Any] = {
         "core": write("core", core),
         "scopes": {},
         "on_demand": {},
         "build_only": [name for name in BUILD_ONLY_MARTS if name in marts],
         "name_fields": [list(pair) for pair in data.NAME_JOINS],
+        "detail_joins": detail_joins,
     }
     # A population scope ("m-c:online", docs/upgrade-plan-2027q2.md, S1)
     # whose rows a mart doesn't have (player records are official-only)

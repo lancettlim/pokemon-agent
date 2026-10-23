@@ -27,6 +27,7 @@ ROUTES = [
     "#/pokemon/kingambit/counters",
     "#/pokemon/kingambit/spreads",
     "#/compare/garchomp,kingambit",
+    "#/compare/garchomp,kingambit,incineroar,rillaboom",
     "#/matchup/rillaboom/sneasler",
     "#/matchup/garchomp/meta",
     "#/usage?window=last-1",

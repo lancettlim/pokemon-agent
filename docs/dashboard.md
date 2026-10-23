@@ -281,6 +281,36 @@ statistics (S2, decisions D2 and D3), a population of their own:
   line, badges in the corner) now applies up to 720px. The responsive
   matrix gains a 481px spot check.
 
+**Sprint 16 — Builder and views.**
+
+- **Team sheet image** (list #21): the Builder's "Download team sheet
+  image" draws an Open Team Sheet (each Pokémon's ability, held item and
+  moves; no Stat Points or Stat Alignment, as an open sheet shows) on a
+  1200×760 canvas and saves it as a PNG, names in the page's language,
+  long ones shrunk to fit.
+- **Ladder checks in the threat screen** (list #23): a column naming the
+  team members among each common threat's twelve strongest Showdown ladder
+  checks, with each one's rate and n in the tooltip; the note says it is
+  ladder data. The threat list itself was sorted on a `usage_rank` the
+  profile rows don't carry, so it listed arbitrary Pokémon (Mega Absol Z
+  first); it now takes the 12 highest team shares.
+- **Speed line** (list #24): on Speed Tiers, your Builder team (outlined)
+  above a number line and the 16 most-used Pokémon below, all at max Speed
+  investment, sprites stacked into lanes where they would overlap.
+  "Tailwind on your side" doubles your team; "Trick Room" flips which end
+  moves first. Phones get the same as a list in move order, speed ties
+  marked. Without a saved team the Tailwind toggle is off and the note
+  says why.
+- **Archetype matchups** (list #30, `archetype_matchups`): decided official
+  matches between the primary teams of the listed archetypes, a heatmap of
+  the top ten from 768px (blue where the row wins, red where it loses,
+  uncoloured near even and under 20 matches; the number stays in ink) and
+  a select-and-list below. Team vs team, and labelled so.
+- **Compare tray** (list #34): "Pin to compare" on every profile; up to
+  four pinned Pokémon follow the visitor in a tray (a bottom sheet over the
+  phone's bottom bar, a card from 721px) that opens Compare on them.
+  Compare now takes two to four Pokémon, adding and removing columns.
+
 ## Tabs
 
 **Navigation since the 2026 Q4 upgrade** (`docs/upgrade-plan-2026q4.md`,
@@ -656,6 +686,16 @@ reached 22 MB:
 The default M-C view downloads about 400 KB compressed in total, against
 roughly 2 MB for the old single file.
 
+The profile's move, item and ability tables repeat each move's type,
+power, accuracy and effect text on every Pokémon's row, which once took the
+core payload past its 500 KB budget (`tests/browser/`). `build.py`'s
+`DETAIL_SPLITS` strips those columns from the shards and writes one row
+per move, item or ability into core as `pokemon_move_usage_details`,
+`pokemon_item_usage_details` and `pokemon_ability_usage_details`;
+`mart_files.detail_joins` lists each join, and `ensureData`'s
+`restoreDetails()` puts the columns back as the marts load, so views read
+the marts as before.
+
 `data.json` remains backlog #32's JSON feed. It holds every non-mart key
 plus `mart_files`, the index of the shard paths, and together they are the
 complete payload, still scriptable with `curl`/`jq` or a notebook without
@@ -863,7 +903,7 @@ Forward and pasted links all work (docs/upgrade-plan-2027q1.md, U1):
 | `#/overview`, `#/tiers`, `#/speed` | Meta views |
 | `#/usage[/win-rate\|success\|trends\|megas\|ladder]?window=last-<n>\|since-<event_id>` | Usage and its sub-views, optionally over an event window; `ladder` is Ladder vs tournament |
 | `#/pokemon/<key>[/abilities\|moves\|cores\|teams\|pressure\|counters\|spreads]` | A Pokémon's profile; `counters` and `spreads` are Showdown ladder data |
-| `#/compare/<a>,<b>`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons; `meta` is the calculator's "vs the meta" mode |
+| `#/compare/<a>,<b>[,<c>[,<d>]]`, `#/matchup/<attacker>/<defender\|meta>` | Comparisons of two to four Pokémon; `meta` is the calculator's "vs the meta" mode |
 | `#/teams[/converged]?tier=regional&sort=win-rate` | Top Teams |
 | `#/events`, `#/event/<event_id>` | Event index and event pages |
 | `#/cores/<key>[/triple]`, `#/archetypes` | Cores and archetypes |

@@ -253,6 +253,9 @@ MART_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         (),
     ),
     "tournament_top_cut_paths": (("round_number", "table_number", "opponent_placement"), ()),
+    # docs/upgrade-plan-2027q2.md, list #30: the Archetypes tab's matchup
+    # heatmap, cut to the archetypes the tab lists (build_payload).
+    "archetype_matchups": (("matches", "wins", "losses"), ("win_rate",)),
     # docs/upgrade-plan-2027q2.md, Q4: names in four more languages, folded
     # into the inline payload (localised_names) rather than shipped raw.
     "pokemon_localised_names": ((), ()),
@@ -1765,6 +1768,13 @@ def build_payload(
     pokemon_names = load_pokemon_names(normalized_dir)
     marts = _join_pokemon_names(marts, pokemon_names)
     marts["tournament_top_cut_teams"] = top_cut_teams(marts.get("tournament_team_results", []))
+    # Only pairs among the archetypes the tab lists (_slice_detected_archetypes).
+    listed = {row["archetype_key"] for row in marts.get("detected_archetype_summary", [])}
+    marts["archetype_matchups"] = [
+        row
+        for row in marts.get("archetype_matchups", [])
+        if row.get("archetype_key") in listed and row.get("opponent_archetype_key") in listed
+    ]
     marts["player_index"] = player_index(
         marts.get("tournament_team_results", []), marts.get("tournament_event_summary", [])
     )

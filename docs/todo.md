@@ -1043,6 +1043,23 @@ added as they ship:
   The legal pool was already enforced on add; a saved team that loses
   Pokémon to a regulation change now says so. `form_species` gives the
   species clause each form's species.
+- [x] Open Team Sheet image export from the Builder (list #21)
+  "Download team sheet image": each Pokémon's ability, item and moves on a
+  1200×760 canvas PNG, in the page's name language.
+- [x] Builder threat list with checks and counters (list #23)
+  A "Ladder checks on your team" column: the team members among each
+  threat's strongest Showdown ladder checks. The threats are now really the
+  most-used Pokémon (they had been sorted on a field the rows lack).
+- [x] Speed line with Tailwind and Trick Room toggles (list #24)
+  Your Builder team over the 16 most-used Pokémon on Speed Tiers; a list in
+  move order on phones.
+- [x] Archetype matchup heatmap, team vs team (list #30)
+  `archetype_matchups` from decided official matches between primary
+  archetype teams; a heatmap of the top ten from 768px, one archetype's
+  list below.
+- [x] Compare tray: pin up to four Pokémon (list #34)
+  Pinned from profiles, a bottom sheet on phones and a card from 721px;
+  Compare now takes two to four (`#/compare/<a>,<b>,<c>,<d>`).
 
 ## Release readiness (v1 definition of done)
 

@@ -258,6 +258,8 @@
   }
 
   App.extendTab("usage", setupLadderView);
+  // The Builder's threat screen reads the same regulation choice (#23).
+  App.ladderRegulation = ladderRegulation;
 
   // ---------- profile: checks and counters, Stat Point spreads ----------
 
