@@ -15,24 +15,6 @@ def _first_tile(page) -> str:
     return page.locator("#top-board .board-tile").first.get_attribute("href") or ""
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def test_the_online_rollover_has_no_online_latest_event_card(online_rollover_site_url, open_page):
     page = open_page(clock=DAY_AFTER_MC_ENDS)
     page.goto(online_rollover_site_url)

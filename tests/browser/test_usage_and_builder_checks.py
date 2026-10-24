@@ -31,8 +31,6 @@ def test_an_event_window_compares_ranks_with_the_events_before_it(site_url, open
     assert "before these events" in cell.get_attribute("data-tip")
 
 
-
-
 def _builder(open_page, site_url, slots, init_script=None):
     page = open_page(clock=DURING_MC, storage={TEAM_KEY: json.dumps(slots)})
     if init_script:
