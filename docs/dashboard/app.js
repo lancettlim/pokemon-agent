@@ -562,15 +562,22 @@
 
   // ---------- sprite/icon cell rendering ----------
 
+  // Every Pokémon picture on the site sits in the same bordered tile
+  // (.mon-tile), never bare on the page, and a little larger than the size
+  // asked for so the art reads from across the room.
+  function monTile(src, size, extraClass) {
+    var box = Math.round(size * 1.25);
+    return (
+      '<span class="mon-tile" style="width:' + box + "px;height:" + box + 'px">' +
+      '<img class="mon-tile-art' + (extraClass ? " " + extraClass : "") + '" src="' + src +
+      '" loading="lazy" decoding="async" alt=""></span>'
+    );
+  }
+
   function spriteImg(pokemonKey, sizePx) {
     var src = sprites[pokemonKey];
     if (!src) return "";
-    var size = sizePx || ICON_SIZES.sm;
-    return (
-      '<img class="cell-icon" style="width:' + size + "px;height:" + size + 'px" src="' +
-      src + '" width="' + size + '" height="' + size +
-      '" loading="lazy" decoding="async" alt="">'
-    );
+    return monTile(src, sizePx || ICON_SIZES.sm);
   }
 
   // The hero-slot counterpart to spriteImg: a 256px downscale of the
@@ -583,12 +590,7 @@
   function heroImg(pokemonKey, sizePx) {
     var src = heroArt[pokemonKey];
     if (!src) return spriteImg(pokemonKey, sizePx || ICON_SIZES.lg);
-    var size = sizePx || ICON_SIZES.lg;
-    return (
-      '<img class="cell-icon hero-art" style="width:' + size + "px;height:" + size + 'px" src="' +
-      src + '" width="' + size + '" height="' + size +
-      '" loading="lazy" decoding="async" alt="">'
-    );
+    return monTile(src, sizePx || ICON_SIZES.lg, "hero-art");
   }
 
   // A Pokémon's sprite and name as one link to its profile (U1), so
@@ -641,7 +643,6 @@
           badges += '<span class="strip-item" title="' + escapeHtml(slot.item_name) + '">' +
             (itemSrc ? '<img src="' + itemSrc + '" alt="">' : '<span class="strip-item-dot"></span>') + "</span>";
         }
-        if (isMegaKey(key)) badges += '<span class="strip-mega" title="Mega Evolution">M</span>';
       }
       var title = names[i] + (slot.item_name ? " @ " + slot.item_name : "");
       var hasSet = !opts.compact && (slot.ability || slot.nature || slot.moves || slot.item_name);
@@ -859,20 +860,30 @@
       icons.join("") + "</span>";
   }
 
-  // Square type badge (docs/upgrade-plan-2027q2.md, V6): the type's colour
-  // filled, our own white glyph on it (pipelines/render/type_glyphs.py, in
-  // the payload as type_glyphs), never the official icon. Broadcast
-  // components use it; dense tables keep the round emblems.
-  var typeGlyphs = DATA.type_glyphs || {};
+  // One type logo everywhere: the round in-game emblem. The broadcast
+  // components used to draw a square glyph of our own; two logos for one
+  // type read as two different things, so they now share this one.
   function typeBadgeSquare(typeName, sizePx) {
-    var type = String(typeName || "").toLowerCase();
-    var glyph = typeGlyphs[type];
-    if (!glyph) return typeIconImg(type, sizePx);
-    var size = sizePx || 22;
-    var inner = Math.round(size * 0.72);
-    return '<span class="type-sq" title="' + escapeHtml(type) + '" style="width:' + size + "px;height:" + size +
-      "px;background:" + typeColor(type) + '"><svg viewBox="0 0 24 24" width="' + inner + '" height="' + inner +
-      '" fill="#fff" fill-rule="evenodd" aria-hidden="true">' + glyph + "</svg></span>";
+    return typeIconImg(String(typeName || "").toLowerCase(), sizePx || 22);
+  }
+
+  // White text on a dark type colour, navy on a light one (electric, rock,
+  // fairy, ...), so a pill's label always reads.
+  function typeInk(typeName) {
+    var hex = typeColors[String(typeName || "").toLowerCase()] || "";
+    var m = /^#([0-9a-f]{6})$/i.exec(hex);
+    if (!m) return "#fff";
+    var n = parseInt(m[1], 16);
+    var lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    return lum > 0.68 ? "#16264d" : "#fff";
+  }
+
+  // A type as a coloured pill: the emblem and the name, the colour the
+  // emblem's own. The one way a type is written out.
+  function typePillHtml(typeName) {
+    var t = String(typeName || "");
+    return '<span class="type-pill-lg" style="--pill-type-color:' + typeColor(t) + ";--pill-ink:" + typeInk(t) + '">' +
+      typeIconImg(t.toLowerCase(), 22) + "<span>" + escapeHtml(t) + "</span></span>";
   }
 
   // Renders a Pokémon's type_1/type_2 into `container` as a type-badge row
@@ -893,12 +904,7 @@
       // earlier 64px ringed emblems competed with the Pokémon's own art on
       // the Profile header, and the bare icons needed a hover to read.
       container.className = "type-badge-row type-badge-lg";
-      container.innerHTML = types
-        .map(function (t) {
-          return '<span class="type-pill-lg" style="--pill-type-color:' + typeColor(t) + '">' +
-            typeIconImg(t, 20) + "<span>" + escapeHtml(t) + "</span></span>";
-        })
-        .join("");
+      container.innerHTML = types.map(typePillHtml).join("");
     } else {
       container.className = "type-badge-row";
       container.innerHTML = types
@@ -940,6 +946,64 @@
     var src = itemIcons[itemName];
     var icon = src ? '<img class="cell-icon" src="' + src + '" alt="">' : "";
     return '<div class="cell-with-icon">' + icon + "<span>" + escapeHtml(itemName) + "</span></div>";
+  }
+
+  // ---------- stat cards ----------
+  // Items, abilities and Mega Stones are few, each has a picture and a
+  // sentence of explanation, and the question they answer is "which one do
+  // people pick?" A card per choice answers it at a glance: the picture, the
+  // name, how many teams chose it as a bar, and what it does, in words. The
+  // long ranked tables stay for moves and anything with many numbers per row.
+  //
+  // cfg: {caption, empty, limit, iconFn(row), nameFn(row), shareFn(row),
+  //       teamsFn(row), descFn(row), hrefFn(row)}. Returns {setRows}.
+  function createCardGrid(container, cfg) {
+    var expanded = false;
+    var rows = [];
+    function draw() {
+      if (!rows.length) {
+        container.innerHTML = '<p class="empty-state">' + escapeHtml(cfg.empty || "Nothing recorded.") + "</p>";
+        return;
+      }
+      var limit = cfg.limit || rows.length;
+      var shown = expanded ? rows : rows.slice(0, limit);
+      var top = Math.max.apply(null, rows.map(function (r) { return cfg.shareFn(r) || 0; })) || 1;
+      var cards = shown.map(function (r, i) {
+        var share = cfg.shareFn(r) || 0;
+        var teams = cfg.teamsFn ? cfg.teamsFn(r) : "";
+        var desc = cfg.descFn ? cfg.descFn(r) : "";
+        var href = cfg.hrefFn ? cfg.hrefFn(r) : "";
+        var name = escapeHtml(cfg.nameFn(r));
+        return '<li class="stat-card' + (i === 0 ? " is-top" : "") + '">' +
+          '<div class="stat-card-head">' + (cfg.iconFn ? cfg.iconFn(r) : "") +
+          '<div class="stat-card-name">' + (href ? '<a href="' + href + '">' + name + "</a>" : "<strong>" + name + "</strong>") +
+          (teams ? '<span class="stat-card-teams">' + escapeHtml(teams) + "</span>" : "") + "</div>" +
+          '<span class="stat-card-share"' + (cfg.tipFn && cfg.tipFn(r) ? ' data-tip="' + escapeHtml(cfg.tipFn(r)) + '" tabindex="0"' : "") + ">" +
+          formatPercent(share) + "</span></div>" +
+          '<div class="stat-card-bar" aria-hidden="true"><span style="width:' + Math.max(2, (share / top) * 100).toFixed(1) + '%"></span></div>' +
+          (desc ? '<p class="stat-card-desc">' + escapeHtml(desc) + "</p>" : "") + "</li>";
+      }).join("");
+      var more = rows.length > limit
+        ? '<button type="button" class="btn btn-sm stat-cards-more">' +
+          (expanded ? "Show fewer" : "Show all " + rows.length) + "</button>"
+        : "";
+      container.innerHTML = '<ul class="stat-cards" aria-label="' + escapeHtml(cfg.caption || "") + '">' + cards + "</ul>" + more;
+      var btn = container.querySelector(".stat-cards-more");
+      if (btn) btn.addEventListener("click", function () { expanded = !expanded; draw(); });
+    }
+    return {
+      setRows: function (next) { rows = (next || []).slice(); expanded = false; draw(); },
+    };
+  }
+
+  // A picture tile for something that is not a Pokémon (an item, an
+  // ability): the same bordered square as a Pokémon's, so a card's picture
+  // slot is one shape throughout the site.
+  var ABILITY_GLYPH = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg>';
+  function thingTile(src, glyphHtml, size) {
+    var box = size || 52;
+    return '<span class="mon-tile thing-tile" style="width:' + box + "px;height:" + box + 'px">' +
+      (src ? '<img class="mon-tile-art" src="' + src + '" alt="" loading="lazy" decoding="async">' : (glyphHtml || "")) + "</span>";
   }
 
   // ---------- tooltips ----------
@@ -2384,12 +2448,12 @@
       .filter(Boolean).join(" · ");
     var label = (index + 1) + ". " + tile.pokemon_name + ", on " + formatPercent(tile.team_share) + " of teams" +
       (teams ? " (" + teams + ")" : "");
-    return '<a class="board-tile" href="' + pokemonHref(tile.pokemon_key) + '" aria-label="' + escapeHtml(label) +
+    return '<a class="board-tile" style="--tile-type:' + typeColor(tile.type_1) + '" href="' + pokemonHref(tile.pokemon_key) + '" aria-label="' + escapeHtml(label) +
       '" title="' + escapeHtml(detail) + '">' +
       '<span class="board-rank" aria-hidden="true">' + (index + 1) + "</span>" + img +
       '<span class="board-foot" aria-hidden="true"><span class="board-value-row">' +
       '<span class="board-value">' + formatPercent(tile.team_share) + "</span>" +
-      '<span class="board-types">' + typeIconsHtml(tile.type_1, tile.type_2, 22, true) + "</span></span>" +
+      '<span class="board-types">' + typeIconsHtml(tile.type_1, tile.type_2, 26) + "</span></span>" +
       '<span class="board-name">' + boardNameHtml(tile.pokemon_name) + "</span></span></a>";
   }
 
@@ -3134,28 +3198,19 @@
     }
     if (els.table) {
       if (!els.table.megaTable) {
-        els.table.megaTable = createDataTable(els.table, {
+        els.table.megaTable = createCardGrid(els.table, {
           caption: "Mega Stones carried",
-          sort: { key: "team_share", dir: "desc" },
           limit: 12,
-          rowHref: pokemonRowHref,
           empty: "No Mega Stones recorded.",
-          columns: [
-            { key: "usage_rank", label: "#", type: "rank", main: true },
-            { key: "pokemon_name", label: "Mega", type: "pokemon", main: true, sortable: true },
-            { key: "item_name", label: "Stone", sortable: true, render: function (r) { return itemCell(r.item_name); } },
-            {
-              key: "team_share",
-              label: "Teams",
-              term: "usage",
-              type: "share",
-              main: true,
-              title: function (r) { return r.team_count.toLocaleString() + " of " + r.scope_team_count.toLocaleString() + " teams"; },
-            },
-          ],
+          iconFn: function (r) { return spriteImg(r.pokemon_key, 44); },
+          nameFn: function (r) { return r.pokemon_name; },
+          hrefFn: function (r) { return pokemonHref(r.pokemon_key); },
+          shareFn: function (r) { return r.team_share; },
+          teamsFn: function (r) { return r.team_count.toLocaleString() + " of " + r.scope_team_count.toLocaleString() + " teams"; },
+          descFn: function (r) { return "Holds " + r.item_name; },
         });
       }
-      els.table.megaTable.setRows(stones);
+      els.table.megaTable.setRows(stones.slice().sort(function (a, b) { return b.team_share - a.team_share; }));
     }
   }
 
@@ -3397,43 +3452,26 @@
     function shareOfTitle(r) {
       return r.total ? r.usage_count.toLocaleString() + " of " + r.total.toLocaleString() + " team sheets" : "";
     }
-    var itemTable = createDataTable(document.getElementById("profile-item-table"), {
+    var itemTable = createCardGrid(document.getElementById("profile-item-table"), {
       caption: "Held items",
-      sort: { key: "usage_rank", dir: "asc" },
-      limit: 10,
       empty: "No recorded held items.",
-      columns: [
-        { key: "usage_rank", label: "#", type: "rank", main: true },
-        {
-          key: "item_name",
-          label: "Item",
-          main: true,
-          sortable: true,
-          render: function (r) {
-            var src = itemIcons[r.item_name];
-            return nameWithTip(r.item_name, r.short_effect, src ? '<img class="cell-icon" src="' + src + '" alt="">' : "");
-          },
-        },
-        { key: "item_share", label: "Share", type: "share", main: true, title: shareOfTitle },
-        { key: "usage_count", label: "Teams", type: "int" },
-      ],
+      limit: 12,
+      iconFn: function (r) { return thingTile(itemIcons[r.item_name], "", 56); },
+      nameFn: function (r) { return r.item_name; },
+      shareFn: function (r) { return r.item_share; },
+      teamsFn: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " teams" : ""; },
+      descFn: function (r) { return r.short_effect; },
+      tipFn: shareOfTitle,
     });
-    var abilityTable = createDataTable(document.getElementById("profile-ability-table"), {
+    var abilityTable = createCardGrid(document.getElementById("profile-ability-table"), {
       caption: "Abilities",
-      sort: { key: "usage_rank", dir: "asc" },
       empty: "No recorded abilities.",
-      columns: [
-        { key: "usage_rank", label: "#", type: "rank", main: true },
-        {
-          key: "ability",
-          label: "Ability",
-          main: true,
-          sortable: true,
-          render: function (r) { return nameWithTip(r.ability, r.short_effect); },
-        },
-        { key: "ability_share", label: "Share", type: "share", main: true, title: shareOfTitle },
-        { key: "usage_count", label: "Teams", type: "int" },
-      ],
+      iconFn: function () { return thingTile("", ABILITY_GLYPH, 56); },
+      nameFn: function (r) { return r.ability; },
+      shareFn: function (r) { return r.ability_share; },
+      teamsFn: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " teams" : ""; },
+      descFn: function (r) { return r.short_effect; },
+      tipFn: shareOfTitle,
     });
     var moveTable = createDataTable(document.getElementById("profile-move-table"), {
       caption: "Moves",
@@ -3447,7 +3485,11 @@
           label: "Move",
           main: true,
           sortable: true,
-          render: function (r) { return nameWithTip(r.move_name, r.short_effect, typeIconImg(r.move_type, 18)); },
+          render: function (r) {
+            return '<span class="cell-with-icon">' + typeIconImg(r.move_type, 22) + '<span class="move-cell"><strong>' +
+              escapeHtml(r.move_name) + "</strong>" +
+              (r.short_effect ? '<span class="move-desc">' + escapeHtml(r.short_effect) + "</span>" : "") + "</span></span>";
+          },
         },
         {
           key: "move_share",
@@ -3789,13 +3831,11 @@
     // choice to make -- so that case is labelled separately.
     function concentrationLabel(hhi, count) {
       if (hhi === null || hhi === undefined || !count) return "";
-      if (count === 1) return '<span class="badge badge-rank">Only one recorded</span>';
-      var label = hhi >= 0.5 ? termHtml("locked", "Locked in") : hhi >= 0.25 ? "Semi-contested" : "Contested";
+      if (count === 1) return '<span class="badge badge-rank">Only one seen</span>';
+      var label = hhi >= 0.5 ? "Almost everyone picks the same" : hhi >= 0.25 ? "A few popular picks" : "Lots of variety";
       var cls = hhi >= 0.5 ? "badge-new" : hhi >= 0.25 ? "badge-rank" : "badge-positive";
-      return (
-        '<span class="badge ' + cls + '">' + label + "</span> " +
-        '<span class="ranked-value">' + termHtml("hhi", "HHI") + " " + hhi.toFixed(2) + " across " + count + " recorded</span>"
-      );
+      return '<span class="badge ' + cls + '">' + label + "</span> " +
+        '<span class="ranked-value">' + count + " different picks seen</span>";
     }
 
     // Base stats as bars against the legal pool's median for each stat
@@ -3829,7 +3869,7 @@
           '<span class="stat-track"><span class="stat-fill' + cls + '" style="width:' + width + '%"></span>' +
           (medianLeft != null ? '<span class="stat-median" style="left:' + medianLeft + '%" title="Format median ' + median + '"></span>' : "") +
           "</span></div>";
-      }).join("") + '<p class="stat-legend">Tick marks the median across the legal pool.</p></div>';
+      }).join("") + '<p class="stat-legend"><span class="legend-dot is-high"></span>Strong <span class="legend-dot is-low"></span>Weak. The tick marks a typical Pokémon here.</p></div>';
     }
 
     function topRow(rows, key) {
@@ -3939,8 +3979,8 @@
         '<div class="set-body" role="tabpanel">' + setBodyHtml(profile, set) + "</div>" +
         '<p class="stat-legend">' + (setState.level === "full"
           ? "Each set appeared exactly like this on real team sheets."
-          : "Core sets group by item, ability and the three most common moves; the fourth move varies.") +
-        " No Stat Points: team sheets don't publish them.</p></div>";
+          : "Core sets share the item, ability and top three moves; the fourth move changes.") +
+        " Team sheets don't show stat spreads.</p></div>";
     }
 
     var setEl = document.getElementById("pokemon-profile-set");
@@ -5497,6 +5537,8 @@
     phaseChipHtml: phaseChipHtml,
     placementPhase: placementPhase,
     typeBadgeSquare: typeBadgeSquare,
+    typePillHtml: typePillHtml,
+    typeInk: typeInk,
     closeStripPop: closeStripPop,
     typeColor: typeColor,
     typeIconsHtml: typeIconsHtml,
@@ -5514,6 +5556,8 @@
     renderGrid6xn: renderGrid6xn,
     makeSortableTable: makeSortableTable,
     createDataTable: createDataTable,
+    createCardGrid: createCardGrid,
+    thingTile: thingTile,
     pokemonRowHref: pokemonRowHref,
     registerTab: registerTab,
     extendTab: extendTab,
