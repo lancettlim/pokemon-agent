@@ -869,20 +869,6 @@ https://lancettlim.github.io/pokemon-agent/dashboard/.
 `https://<owner>.github.io/<repo>/` itself to `dashboard/` — the site root
 would otherwise 404, since nothing else lives at `docs/`'s top level.
 
-**claude.ai artifact mirror**: the dashboard is also mirrored to a private
-claude.ai artifact (https://claude.ai/artifact/Lfb9NxbaAwRkshcGCQ11wR),
-which Claude Code sessions republish whenever they change dashboard code,
-before pushing it. An artifact version holds at most 511 files and the
-full site has about a thousand, most of them images, so `python -m
-pipelines.cli build-artifact-site --output-dir <fresh dir>`
-(`pipelines/dashboard/artifact.py`) builds a lighter copy: every sprite,
-type icon, script and data shard, hero art only for the Pokémon on a Top
-12 board (the rest fall back to their sprite), no item icons (items show
-as names) and no share cards (the share and download buttons don't
-appear). It also writes `<dir>.plan.json`, the page plus the files in
-publish-sized batches (255 files and 64MB each). The rules for keeping it
-current are in `CLAUDE.md`'s "Dashboard artifact".
-
 ## Regulation rollover playbook
 
 A new regulation set (M-D after M-C ends on 2026-12-02) needs one change:
