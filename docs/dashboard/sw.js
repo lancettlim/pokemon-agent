@@ -15,7 +15,7 @@
  * A new build's worker takes over at once and deletes older caches. */
 "use strict";
 
-var BUILD = "42aa6380eaeb";
+var BUILD = "d6a5af52e64e";
 var PREFIX = "champions-data-";
 var CACHE = PREFIX + BUILD;
 var PRECACHE = ["./", "index.html", "app.js", "matchup.js", "teams.js", "expansions.js", "events.js", "players.js", "ladder.js", "search.js", "graph.js", "fonts/oswald-latin-wght.woff2", "data/core.json", "data/scope-m-c.json"];
