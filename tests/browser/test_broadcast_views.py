@@ -32,10 +32,9 @@ def test_overview_opens_on_the_top_12_board(site_url, open_page):
     band = page.locator("#top-board .board-band")
     assert "Top 12 Pokémon" in band.text_content()
     assert "Reg M-C" in band.text_content() and "710 teams" in band.text_content()
-    # Beside the fixture's Online board, the official one says "Official"
-    # (docs/upgrade-plan-2027q2.md, S1): it covers official events only.
-    assert band.locator(".phase-chip").inner_text().lower() == "official"
-    assert page.locator('[data-board-scope="all"]').inner_text().lower() == "official"
+    # The dashboard shows official events only, so there is no Online board.
+    assert band.locator(".phase-chip").inner_text().lower() == "all players"
+    assert page.locator('[data-board-scope="online"]').count() == 0
     # Desktop: tiles 1-6 above the band, the rest below it.
     band_box = _boxes(page, "#top-board .board-band")[0]
     tile_boxes = _boxes(page, "#top-board .board-tile")
@@ -179,13 +178,12 @@ def test_player_lines_and_phase_chips_say_who_and_what(site_url, open_page):
     assert "page-band" in header.get_attribute("class")
 
 
-def test_board_tiles_use_square_type_badges(site_url, open_page):
-    """V6: the broadcast board draws our own square badges."""
+def test_board_tiles_use_the_type_emblem(site_url, open_page):
+    """One type logo everywhere: the board draws the in-game emblem."""
     page = open_page()
     page.goto(site_url)
     page.wait_for_load_state("networkidle")
-    badge = page.locator("#top-board .board-tile").first.locator(".type-sq").first
-    assert badge.locator("svg path").count() >= 1
+    badge = page.locator("#top-board .board-tile").first.locator("img.type-icon").first
     assert badge.get_attribute("title") == "grass"
 
 
@@ -194,7 +192,7 @@ def test_mega_panel_on_events_and_the_usage_megas_view(site_url, open_page):
     page = open_page()
     page.goto(site_url + "#/event/EVT-LOU")
     page.wait_for_load_state("networkidle")
-    rows = page.locator("#event-mega-table tbody tr")
+    rows = page.locator("#event-mega-table .stat-card")
     assert rows.count() == 2
     assert "Garchompite" in rows.first.inner_text()
     assert "50.0%" in rows.first.inner_text()  # 180 of 360 teams
@@ -204,6 +202,6 @@ def test_mega_panel_on_events_and_the_usage_megas_view(site_url, open_page):
     page.goto("about:blank")
     page.goto(site_url + "#/usage/megas")
     page.wait_for_load_state("networkidle")
-    assert page.locator("#usage-mega-table tbody tr").count() == 2
+    assert page.locator("#usage-mega-table .stat-card").count() == 2
     assert "100 teams" in page.locator("#usage-mega-note").inner_text()
     assert not page.errors

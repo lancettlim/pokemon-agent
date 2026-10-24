@@ -1502,8 +1502,8 @@
   /* A compact strip sizes to its sprites, inline in a row or a cell. */
   .team-strip-host.is-compact { container-type: normal; display: inline-block; width: auto; }
   .grid-6xn-tile .team-strip-host { text-align: center; }
-  .team-strip { --strip-n: 6; display: grid; grid-template-columns: repeat(var(--strip-n), minmax(0, 92px)); gap: 6px; }
-  @container (max-width: 347px) {
+  .team-strip { --strip-n: 6; display: grid; grid-template-columns: repeat(var(--strip-n), minmax(0, 92px)); gap: 4px; }
+  @container (max-width: 287px) {
     .team-strip:not(.is-compact) { grid-template-columns: repeat(3, minmax(0, 92px)); }
   }
   .team-strip-slot {

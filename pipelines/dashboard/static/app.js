@@ -978,7 +978,8 @@
           '<div class="stat-card-head">' + (cfg.iconFn ? cfg.iconFn(r) : "") +
           '<div class="stat-card-name">' + (href ? '<a href="' + href + '">' + name + "</a>" : "<strong>" + name + "</strong>") +
           (teams ? '<span class="stat-card-teams">' + escapeHtml(teams) + "</span>" : "") + "</div>" +
-          '<span class="stat-card-share">' + formatPercent(share) + "</span></div>" +
+          '<span class="stat-card-share"' + (cfg.tipFn && cfg.tipFn(r) ? ' data-tip="' + escapeHtml(cfg.tipFn(r)) + '" tabindex="0"' : "") + ">" +
+          formatPercent(share) + "</span></div>" +
           '<div class="stat-card-bar" aria-hidden="true"><span style="width:' + Math.max(2, (share / top) * 100).toFixed(1) + '%"></span></div>' +
           (desc ? '<p class="stat-card-desc">' + escapeHtml(desc) + "</p>" : "") + "</li>";
       }).join("");
@@ -3460,6 +3461,7 @@
       shareFn: function (r) { return r.item_share; },
       teamsFn: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " teams" : ""; },
       descFn: function (r) { return r.short_effect; },
+      tipFn: shareOfTitle,
     });
     var abilityTable = createCardGrid(document.getElementById("profile-ability-table"), {
       caption: "Abilities",
@@ -3469,6 +3471,7 @@
       shareFn: function (r) { return r.ability_share; },
       teamsFn: function (r) { return r.usage_count != null ? r.usage_count.toLocaleString() + " teams" : ""; },
       descFn: function (r) { return r.short_effect; },
+      tipFn: shareOfTitle,
     });
     var moveTable = createDataTable(document.getElementById("profile-move-table"), {
       caption: "Moves",
