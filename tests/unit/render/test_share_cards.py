@@ -91,15 +91,15 @@ def test_newest_event_top_cut_orders_by_placement():
     assert [t["team_id"] for t in teams] == ["n1", "n2"]
 
 
-def test_square_badge_draws_our_glyph_on_the_type_colour():
-    """docs/upgrade-plan-2027q2.md, V6: one definition for site and cards."""
+def test_type_badge_is_the_in_game_emblem():
+    """One logo per type for the site and its cards (design-system.md)."""
     from pipelines.render import type_glyphs
     from pipelines.render.template import TYPE_COLORS
 
-    assert set(type_glyphs.GLYPHS) == {name for name in TYPE_COLORS if name}
+    for name in (n for n in TYPE_COLORS if n):
+        assert (type_glyphs.ICON_DIR / f"{name}.png").exists()
     html = str(type_glyphs.square_badge_html("Fire", 20))
-    assert TYPE_COLORS["fire"] in html and 'aria-label="Fire type"' in html
-    assert "<svg" in html and 'fill="#fff"' in html
+    assert "data:image/png;base64," in html and 'aria-label="Fire type"' in html
     assert str(type_glyphs.square_badge_html("unknown")) == ""
 
 
@@ -231,6 +231,6 @@ def test_top12_context_formats_shares_and_square_badges():
     tile = context["tiles"][0]
     assert (tile["share"], tile["art"]) == ("51.9%", "art:a")
     # Two square badges, story-sized.
-    assert str(tile["types"]).count('class="type-sq"') == 2
+    assert str(tile["types"]).count('class="type-emblem"') == 2
     assert "width:40px" in str(tile["types"])
     assert context["site"] == "lancettlim.github.io/pokemon-agent/dashboard"

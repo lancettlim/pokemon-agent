@@ -678,89 +678,65 @@ cards. It replaced `teamCompositionHtml`, which drew sprites only and is
 now a thin entry point onto the strip for cores and table cells.
 
 - **Six square tiles**, the held item in a white circle at each tile's
-  top-right corner and a Mega badge (a four-colour circle with an "M", our
-  own mark) under it on the Mega holder: the item is the team, as in the
-  game's battle UI and the broadcast (R2).
+  top-right corner: the item is the team, as in the game's battle UI and
+  the broadcast (R2). There is no Mega badge; a Mega holder's name and
+  sprite already say so.
 - **A tile whose set is known opens it** on tap or click: a popover with
   the item, ability, Stat Alignment and moves, and a link to the profile.
   Without a set, the tile is a plain link to the profile.
-- **One row of six**, 64px tiles on desktop, 56px on tablets and about 45px
-  on a 360px phone (team card grids bleed into the panel's padding there).
-  A container query wraps the strip to 3 × 2 wherever a tile would fall
-  under the 44px tap minimum.
+- **One row of six**, up to 92px tiles on desktop, 76px on tablets and about
+  45px on a 360px phone (team card grids bleed into the panel's padding
+  there). A container query wraps the strip to 3 × 2 wherever a tile would
+  fall under the 44px tap minimum.
 - **Compact strips** (`opts.compact`, or `teamCompositionHtml` at 32px or
-  less) draw small inline sprites for table cells and saved-team rows,
-  where the row is the tap target; they carry no badges.
+  less) draw 40-44px bordered tiles for table cells and saved-team rows,
+  where the row is the tap target; they carry no badges. Every strip tile
+  is bordered, compact or not.
 
-### Square type badge (2027 Q2, V6)
+### Type logo
 
-`typeBadgeSquare(type, size)` (and `typeIconsHtml(t1, t2, size, true)`)
-draws the type's colour as a rounded square with a white glyph on it.
-The 18 glyphs are our own simple shapes, defined once in
-`pipelines/render/type_glyphs.py`: `build.py` ships them to the page as
-`type_glyphs` and the share-card templates call `square_badge_html`, so the
-site and its PNG cards draw the same badge. Never the official icons.
-Broadcast components (the board, team cards' PNGs) use square badges;
-dense tables keep the round emblems.
+A type is drawn one way everywhere: the round in-game emblem from
+`static/icons/types/`, via `typeIconImg(type, size)` (`typeBadgeSquare` and
+`typeIconsHtml(..., true)` now return the same emblem). The share-card and
+team-card templates inline the same files through
+`pipelines/render/type_glyphs.py`'s `square_badge_html`, so the site and its
+PNG cards show one logo per type. The old square glyph badge is retired:
+two logos for one type read as two different things.
 
-### Player line and scoreboard row (2027 Q2, V4)
+Where a type is written out, use `typePillHtml(type)`: a pill in the type's
+colour with the emblem (white ring) and the name, its text navy on a light
+colour (electric, rock, fairy...) and white on a dark one. `TYPE_COLORS` is
+sampled from the emblems themselves, so a pill, a tinted tile and a logo
+are the same colour.
 
-`playerLineHtml(player)` reads "NAME [CC] [W–L]": the name in caps (a
-link to the player page), then the country and record as chips, in that
-order (rule 5). A team card's line drops the record chip, since its
-headline is the record. `scoreboardRowHtml(match)` sets two player lines
-against each other with each side's score, the winner bold and red-scored,
-as one line on wider screens and two stacked lines on a phone. Match views
-built on it are labelled team vs team.
+### Pokémon tile
 
-### Mega usage panel (2027 Q2, E3)
+A Pokémon's picture is never bare: `spriteImg()`, `heroImg()` and every
+`pokemonCell()` draw it in a `.mon-tile`, a bordered rounded square on the
+page's light fill, 25% larger than the size asked for so the art reads from
+across the room. Items and abilities use the same shape (`thingTile()`),
+so a picture slot is one shape throughout.
 
-`renderMegaPanel(els, where, label)` shows which Mega Stones teams carry:
-a stacked bar and list of the share of teams with zero, one, two or more
-Mega forms, then a data table of each Mega with its stone and team share.
-It reads `mega_stone_usage` and `team_mega_count` (on demand) and serves
-the Usage tab's Megas view (`#/usage/megas`, the regulation) and every
-event page (the event's teams). Below 1024px the two halves stack.
+### Stat cards
 
-### Phase chip (2027 Q2, V5)
+`createCardGrid(container, cfg)` draws a grid of cards for a short list of
+choices that each have a picture and a sentence of explanation: a Pokémon's
+held items and abilities, and Mega Stones. A card holds the picture tile, the
+name, the share as a big number and a bar, "N teams", and the description
+in words. The most-picked card is outlined in gold; long lists show twelve
+with a "Show all" button. Moves stay a table (several numbers per row), with
+each move's description under its name.
 
-`.phase-chip` is a small black italic all-caps chip saying what a view
-covers: "ALL PLAYERS", "DAY 2", "TOP 8", "SWISS R9", "ONLINE" (blue,
-`.is-online`), "OFFICIAL + ONLINE" (`.is-combined`), "LADDER" (green,
-`.is-ladder`). Every event-scoped view
-and card carries one: a team card says the phase its finish reached
-(`placementPhase`: Champion, Top 8, Top 16 or Swiss; a converged list,
-Day 2), and event sections say "All players" where they cover the whole
-field. On phones they wrap; they never truncate.
+### Population switch and banner (2027 Q2, S1) — retired from the dashboard
 
-### Population switch and banner (2027 Q2, S1)
-
-The header carries two selects: the regulation ("M-C", "All") and the
-events it covers, **Official / Online / All**. Official is always the
-default; a regulation without online data greys out the other two. Both
-reload the page with `?reg=<scope>` (`m-c`, `m-c:online`,
-`m-c:combined`). At phone width the bar packs tighter (8px gaps, 4px
-select padding) so both fit beside the brand from 360px.
-
-Whenever the page shows online events, `#population-banner` says so under
-the header: a blue `ONLINE` chip (or the half-black, half-blue
-`.is-combined` "OFFICIAL + ONLINE" chip), the sample ("13,418 teams from
-234 Limitless online tournaments in Reg M-C"), and a link back to official
-events when the regulation has any. It is blue, the Online chip's colour, not the warning amber: it
-describes the data rather than warning about it. During a rollover that
-opened on online events, the rollover banner says why instead, and this
-one stays hidden.
-
-A view built on official events only (event pages, players, Top Teams,
-head-to-head, archetypes, "What changed") shows `.official-only-note` on a
-population scope: an `OFFICIAL` phase chip and one sentence. Templates
-mark the spot with `<div data-official-only="…" hidden>`; scripts call
-`App.officialOnlyNoteHtml(sentence)`, which is empty on an official scope.
-A data table passes `officialOnly: true` instead: it gets the note (unless
-its panel already has one) and its "Copy with citation" names the
-official sample. The event window's choices sit under an "Official
-events" heading. On the official scope, the Top 12 board's switch reads
-"Official | Online", not "All players", once an Online board exists.
+The dashboard shows official events only. `data.load_mart` drops every
+mart row whose `regulation_scope` carries a population suffix
+(`:online`, `:combined`) and returns nothing for `online_event_summary` and
+`online_upcoming_events`, so the header's Official/Online/All select, the
+population banner, the board's Online switch and the online event lists
+never appear (the markup stays dormant, shown only when such data exists).
+The marts and the release dataset still carry the Limitless online
+tournaments; only the dashboard leaves them out.
 
 ### Top-cut bracket and path (2027 Q2, E2)
 

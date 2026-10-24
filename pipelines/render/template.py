@@ -27,24 +27,26 @@ DEFAULT_ICON_CACHE_DIR = REPO_ROOT / "data" / "assets" / "pokeapi_sprites"
 # type's traditional in-game color, dimmed slightly for contrast/legibility
 # as light-on-dark pill backgrounds).
 TYPE_COLORS = {
-    "normal": "#9CA3AF",
-    "fighting": "#C0392B",
-    "flying": "#93A9D6",
-    "poison": "#9B59B6",
-    "ground": "#C9A227",
-    "rock": "#A08245",
-    "bug": "#8CA61A",
-    "ghost": "#5C4E8C",
-    "steel": "#8E99A8",
-    "fire": "#E8622C",
-    "water": "#3B82C4",
-    "grass": "#4C9A4C",
-    "electric": "#D9B92C",
-    "psychic": "#DB5A88",
-    "ice": "#5FBFC0",
-    "dragon": "#5B4FCF",
-    "dark": "#4B4046",
-    "fairy": "#E38AAE",
+    # Sampled from the emblems in pipelines/dashboard/static/icons/types/,
+    # so a type's pill, tile and logo are one colour.
+    "normal": "#9099A1",
+    "fighting": "#CE4069",
+    "flying": "#8FA8DD",
+    "poison": "#AB6AC8",
+    "ground": "#D97746",
+    "rock": "#C7B78B",
+    "bug": "#90C12C",
+    "ghost": "#5269AC",
+    "steel": "#5A8EA1",
+    "fire": "#FF9C54",
+    "water": "#4D90D5",
+    "grass": "#63BB5B",
+    "electric": "#F3D23B",
+    "psychic": "#F97176",
+    "ice": "#74CEC0",
+    "dragon": "#0A6DC4",
+    "dark": "#5A5366",
+    "fairy": "#EC8FE6",
     None: "#6B7280",
 }
 
@@ -68,9 +70,7 @@ def _make_environment() -> Environment:
     )
     env.filters["data_uri"] = _data_uri
     env.filters["type_color"] = _type_color
-    # V6's square type badge (docs/upgrade-plan-2027q2.md), our own glyphs.
-    # Imported here, not at module top: type_glyphs reads TYPE_COLORS from
-    # this module.
+    # The type emblem, one logo for the site and its PNG cards.
     from pipelines.render.type_glyphs import square_badge_html
 
     env.globals["square_badge"] = square_badge_html

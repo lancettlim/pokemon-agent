@@ -1,6 +1,6 @@
 {
   "description": "Phase 1 ingestion check: source availability and row-level parsing success for each staging extractor. Distinct from validation_report.json, which gates normalized-table release readiness.",
-  "generated_at_utc": "2026-10-23T16:41:45Z",
+  "generated_at_utc": "2026-10-24T13:14:18Z",
   "dataset_version": "0.3.0",
   "sources": [
     {
@@ -45,18 +45,18 @@
       "request_success_rate": 1.0,
       "rows_written": 6954,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-23T16:41:45Z"
+      "checked_at_utc": "2026-10-24T13:14:18Z"
     },
     {
       "source_name": "MunchStats",
       "endpoint": "https://raw.githubusercontent.com/PizzaTimeJoshua/munchstats/main/stats/tournaments/",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 38,
-      "requests_succeeded": 38,
+      "requests_attempted": 75,
+      "requests_succeeded": 75,
       "request_success_rate": 1.0,
       "rows_written": 131122,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-23T16:40:44Z"
+      "checked_at_utc": "2026-10-24T13:11:09Z"
     },
     {
       "source_name": "OP.GG Pok\u00e9mon Champions",
@@ -139,12 +139,12 @@
       "source_name": "RK9.gg",
       "endpoint": "https://rk9.gg/pairings/{event_id}?pod={pod}&rnd={round}",
       "availability": "reachable, HTTP 200 for all requests",
-      "requests_attempted": 1,
-      "requests_succeeded": 1,
+      "requests_attempted": 326,
+      "requests_succeeded": 326,
       "request_success_rate": 1.0,
       "rows_written": 31912,
       "required_field_null_rate": 0.0,
-      "checked_at_utc": "2026-10-23T16:40:46Z"
+      "checked_at_utc": "2026-10-24T13:13:17Z"
     },
     {
       "source_name": "Smogon usage statistics",
