@@ -143,8 +143,8 @@ competitive graphics and work on every screen. What changed, by sprint:
 - **Player lines and scoreboard rows** (V4): "NAME [CC] [W–L]" chips on
   team cards, event headers and player pages.
 - **Phase chips** (V5) on every team card and event section.
-- **Square type badges** (V6) from our own glyphs
-  (`pipelines/render/type_glyphs.py`), on the board and the PNG cards.
+- **Type logo**: the in-game round emblem everywhere (the V6 square glyph badge is retired),
+  on the board, in pills and on the PNG cards (`pipelines/render/type_glyphs.py`).
 - **Mega usage panel** (E3): `mega_stone_usage` and `team_mega_count`
   (on-demand shards) behind the Usage tab's Megas view and a section on
   every event page. In M-C, 81.6% of teams carry two Mega Stones.

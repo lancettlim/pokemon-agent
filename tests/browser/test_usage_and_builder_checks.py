@@ -31,13 +31,6 @@ def test_an_event_window_compares_ranks_with_the_events_before_it(site_url, open
     assert "before these events" in cell.get_attribute("data-tip")
 
 
-def test_online_scopes_show_no_rank_change(site_url, open_page):
-    page = open_page(clock=DURING_MC)
-    page.goto(site_url + "?reg=m-c:online#/usage")
-    page.wait_for_selector("#usage-table tbody tr")
-    headers = [h.strip() for h in page.locator("#usage-table thead th").all_text_contents()]
-    cell = page.locator("#usage-table tbody tr").first.locator("td").nth(headers.index("Rank"))
-    assert cell.text_content().strip() == "—"
 
 
 def _builder(open_page, site_url, slots, init_script=None):

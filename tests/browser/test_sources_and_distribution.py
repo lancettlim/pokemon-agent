@@ -26,36 +26,8 @@ def test_a_final_with_a_video_links_to_it(site_url, open_page):
     assert not page.errors
 
 
-def test_upcoming_online_tournaments_show_in_the_visitors_time_zone(site_url, open_page):
-    # 12:00 UTC on 20 October is 21:00 in Tokyo, so both tournaments ahead
-    # (18:00 UTC that day, 09:30 UTC the next) fall on Tokyo's tomorrow.
-    page = open_page(clock=DURING_MC, timezone_id="Asia/Tokyo", locale="en-GB")
-    page.goto(site_url + "#/events")
-    page.wait_for_selector("#upcoming-events-list .upcoming-item")
-    items = page.locator("#upcoming-events-list .upcoming-item")
-    # Started, past the horizon and other-regulation tournaments are left out.
-    assert items.count() == 2
-    assert page.locator("#upcoming-events-list .upcoming-day").all_text_contents() == ["Tomorrow"]
-    assert items.locator(".upcoming-time").all_text_contents() == ["03:00", "18:30"]
-    first = items.first
-    assert first.locator("a").get_attribute("href").endswith("/tournament/up-today/details")
-    assert first.locator("a").get_attribute("target") == "_blank"
-    assert "22 / 32 registered" in first.text_content()
-    assert "Registration open" in first.text_content()
-    assert "Not open yet" in items.nth(1).text_content()
-    assert "Showdown" in items.nth(1).text_content()
-    assert "Asia/Tokyo" in page.locator("#upcoming-events-note").text_content()
-    assert not page.errors
 
 
-def test_upcoming_tournaments_fit_a_phone(site_url, open_page):
-    page = open_page(width=360, height=740, clock=DURING_MC, timezone_id="UTC", locale="en-GB")
-    page.goto(site_url + "#/events")
-    page.wait_for_selector("#upcoming-events-list .upcoming-item")
-    days = page.locator("#upcoming-events-list .upcoming-day").all_text_contents()
-    assert days[0] == "Today"
-    assert page.evaluate("document.documentElement.scrollWidth") <= 360
-    assert not page.errors
 
 
 SITE = "https://lancettlim.github.io/pokemon-agent/dashboard/"
@@ -89,15 +61,6 @@ def test_the_embed_shows_the_regulations_top_12_with_its_citation(site_url, open
     assert not page.errors
 
 
-def test_the_embed_takes_the_online_board_a_list_and_a_theme(site_url, open_page):
-    page = _open_embed(open_page, site_url, "?reg=m-c&board=online&view=list&theme=dark")
-    assert page.locator(".embed-list li").count() >= 1
-    assert "online" in page.locator(".embed-cite").text_content().lower()
-    assert (
-        page.locator(".embed-cite a").get_attribute("href") == SITE + "?reg=m-c%3Aonline#/overview"
-    )
-    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
-    assert not page.errors
 
 
 def test_the_embed_fits_a_narrow_column(site_url, open_page):

@@ -389,10 +389,6 @@ def test_glossary_terms_explain_themselves_where_they_appear(site_url, open_page
 
     page.goto(site_url + "#/pokemon/garchomp")
     page.wait_for_load_state("networkidle")
-    hhi = page.locator('#profile-item-concentration .term:has-text("HHI")').first
-    hhi.focus()
-    assert "Herfindahl" in page.locator("#tip-bubble").inner_text()
-
     page.goto(site_url)
     page.wait_for_load_state("networkidle")
     assert page.locator('#movers-panel .term:has-text("pts")').count() == 1
@@ -404,15 +400,12 @@ def test_a_tap_shows_a_shares_denominator(site_url, open_page):
     page = open_page(390, 844, touch=True)
     page.goto(site_url + "#/pokemon/garchomp")
     page.wait_for_load_state("networkidle")
-    cell = page.locator("#profile-item-table td[data-tip]").first
+    cell = page.locator("#profile-item-table .stat-card-share[data-tip]").first
     cell.tap()
     bubble = page.locator("#tip-bubble")
     assert bubble.is_visible() and " of " in bubble.inner_text()
-    # A glossary term opens on tap too, and a second tap closes it.
-    term = page.locator('#profile-item-concentration .term:has-text("HHI")')
-    term.tap()
-    assert bubble.is_visible() and "Herfindahl" in bubble.inner_text()
-    term.tap()
+    # A second tap closes it.
+    cell.tap()
     assert bubble.is_hidden()
     cell.tap()
     # Changing view closes it.
@@ -430,7 +423,7 @@ def test_pokemon_cards_show_type_icons_not_a_colour_bar(site_url, open_page):
     assert tiles.count() == 8
     for i in range(tiles.count()):
         # The board's broadcast tiles carry V6's square badges.
-        assert tiles.nth(i).locator(".board-types .type-icons .type-sq").count() in (1, 2)
+        assert tiles.nth(i).locator(".board-types .type-icons .type-icon").count() in (1, 2)
     first = tiles.first.locator(".type-icons")
     assert first.get_attribute("role") == "img"
     assert first.get_attribute("aria-label") == "grass type"  # Rillaboom: one type

@@ -63,12 +63,14 @@
     --blue: #2b5cad;
     --light-blue: #eaf1fb;
     --border: #16264d;
+    --tile-border: #b9c8e6;
     --muted: #5b6b8c;
     --bg: #f4f6fb;
     --surface: #fff;
     --positive: #1f8a4c;
     --positive-bg: #e8f7ee;
     --warning: #a8710a;
+    --stat-low: #e0702e;
     --warning-bg: #fbf1e0;
     --danger: #b23434;
     --danger-bg: #fbe9e9;
@@ -173,12 +175,14 @@
       --blue: #6c9bef;
       --light-blue: #1f2a40;
       --border: #3a4560;
+      --tile-border: #3a4560;
       --muted: #9aa6c2;
       --bg: #0f1218;
       --surface: #181c25;
       --positive: #4fc27f;
       --positive-bg: #12301f;
       --warning: #e0a94a;
+      --stat-low: #f0905a;
       --warning-bg: #33280f;
       --danger: #ef6b6b;
       --danger-bg: #3a1717;
@@ -207,6 +211,7 @@
     --blue: #6c9bef;
     --light-blue: #1f2a40;
     --border: #3a4560;
+    --tile-border: #3a4560;
     --muted: #9aa6c2;
     --bg: #0f1218;
     --surface: #181c25;
@@ -214,6 +219,7 @@
     --positive-bg: #12301f;
     --warning: #e0a94a;
     --warning-bg: #33280f;
+    --stat-low: #f0905a;
     --danger: #ef6b6b;
     --danger-bg: #3a1717;
     --panel-dark: #07080c;
@@ -278,7 +284,13 @@
      768px. */
   .search-btn { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: var(--radius-md); background: transparent; color: #fff; cursor: pointer; }
   .search-btn:hover, .search-btn:focus-visible { border-color: #fff; }
+  .github-btn { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: var(--radius-md); color: #fff; text-decoration: none; }
+  .github-btn:hover, .github-btn:focus-visible { border-color: #fff; }
+  .github-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+  .more-menu-panel a.github-link { gap: var(--space-2); }
   @media (min-width: 1024px) {
+    .github-btn { display: inline-flex; }
+    .more-menu-panel .github-link { display: none; }
     .search-btn { display: inline-flex; }
     .more-menu-panel .menu-search { display: none; }
   }
@@ -623,7 +635,10 @@
   .stat-track { position: relative; height: 10px; background: var(--light-blue); border-radius: 999px; }
   .stat-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--blue); }
   .stat-fill.is-high { background: var(--positive); }
-  .stat-fill.is-low { background: var(--warning); }
+  .stat-fill.is-low { background: var(--stat-low); }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 0; border-radius: 50%; background: var(--blue); }
+  .legend-dot.is-high { background: var(--positive); }
+  .legend-dot.is-low { background: var(--stat-low); margin-left: 8px; }
   .stat-median { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--navy); }
   .stat-legend { font-size: 0.8rem; color: var(--muted); margin: var(--space-2) 0 0; }
   .common-set { border: 2px solid var(--border); border-radius: 10px; padding: var(--space-4); background: var(--surface); }
@@ -892,6 +907,10 @@
 
   /* Sprite/icon cells populated by app.js's pokemonCell()/iconCell() helpers */
   .cell-with-icon { display: flex; align-items: center; gap: 8px; }
+  /* The one Pokémon picture: a bordered tile, never a bare sprite. */
+  .mon-tile { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; box-sizing: border-box; border: 2px solid var(--mon-border, var(--tile-border)); border-radius: var(--radius-sm); background: var(--light-blue); overflow: hidden; }
+  .mon-tile-art { width: 90%; height: 90%; object-fit: contain; }
+  .data-table .mon-tile { }
   .cell-icon { width: var(--icon-sm); height: var(--icon-sm); object-fit: contain; flex: 0 0 auto; }
 
   /* Small muted annotation next to a value (Win rate leaders table's
@@ -1040,9 +1059,10 @@
     font-size: 0.85rem;
     font-weight: 700;
     text-transform: capitalize;
-    color: #fff;
+    color: var(--pill-ink, #fff);
     background: var(--pill-type-color, var(--type-unknown));
   }
+  .type-pill-lg .type-icon { border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
 
   /* static/icons/types/*.png are square, text-free round emblems, so a
      type icon is just an <img> at the requested size (typeIconImg() in
@@ -1475,9 +1495,6 @@
   .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-gold-bg); color: var(--navy); font-size: var(--font-sm); }
   .notice[hidden] { display: none; }
 
-  /* Square type badge (V6): the type's colour with our own white glyph. */
-  .type-sq { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14); vertical-align: middle; }
-  .type-sq svg { filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)); }
   /* Team strip (V3): six square tiles, the held item in a white circle at
      each tile's top-right and a Mega badge under it. One row of six;
      3 x 2 where a tile would fall under 44px (6 x 44 + 5 gaps = 284px). */
@@ -1485,9 +1502,9 @@
   /* A compact strip sizes to its sprites, inline in a row or a cell. */
   .team-strip-host.is-compact { container-type: normal; display: inline-block; width: auto; }
   .grid-6xn-tile .team-strip-host { text-align: center; }
-  .team-strip { --strip-n: 6; display: grid; grid-template-columns: repeat(var(--strip-n), minmax(0, 64px)); gap: 4px; }
+  .team-strip { --strip-n: 6; display: grid; grid-template-columns: repeat(var(--strip-n), minmax(0, 92px)); gap: 4px; }
   @container (max-width: 287px) {
-    .team-strip:not(.is-compact) { grid-template-columns: repeat(3, minmax(0, 64px)); }
+    .team-strip:not(.is-compact) { grid-template-columns: repeat(3, minmax(0, 92px)); }
   }
   .team-strip-slot {
     position: relative;
@@ -1497,7 +1514,7 @@
     aspect-ratio: 1;
     min-width: 0;
     padding: 0;
-    border: 1px solid var(--light-blue);
+    border: 2px solid var(--tile-border);
     border-radius: var(--radius-sm);
     background: var(--light-blue);
     color: inherit;
@@ -1511,11 +1528,32 @@
   .strip-item { position: absolute; top: -5px; right: -5px; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
   .strip-item img { width: 16px; height: 16px; object-fit: contain; }
   .strip-item-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .strip-mega { position: absolute; top: 17px; right: -5px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--series-red), var(--series-yellow), var(--series-green), var(--series-blue), var(--series-red)); color: #fff; font-size: 0.62rem; font-weight: 900; text-shadow: 0 0 2px rgba(0, 0, 0, 0.7); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
   .team-strip.is-compact { display: inline-flex; flex-wrap: nowrap; gap: 0; }
-  .team-strip.is-compact .team-strip-slot { width: 32px; border: 0; background: none; }
-  .data-table .team-strip.is-compact .team-strip-slot { width: 26px; }
-  @media (max-width: 1023px) { .team-strip { grid-template-columns: repeat(var(--strip-n), minmax(0, 56px)); } }
+
+  /* Stat cards: items, abilities and Mega Stones as a grid of picture,
+     name, how many teams chose it (a bar) and what it does. */
+  .stat-cards { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
+  .stat-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 2px solid var(--tile-border); border-radius: var(--radius-md); background: var(--surface); min-width: 0; }
+  .stat-card.is-top { border-color: var(--accent-gold); box-shadow: 0 0 0 1px var(--accent-gold); }
+  .stat-card-head { display: flex; align-items: center; gap: var(--space-3); }
+  .stat-card-name { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; font-weight: 800; color: var(--navy); }
+  .stat-card-name a { color: var(--navy); text-decoration: none; }
+  .stat-card-name a:hover { text-decoration: underline; }
+  .stat-card-teams { font-size: var(--font-xs); font-weight: 600; color: var(--muted); }
+  .stat-card-share { font-family: var(--font-display); font-size: 1.7rem; font-weight: 700; line-height: 1; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .stat-card-bar { height: 8px; border-radius: 999px; background: var(--light-blue); overflow: hidden; }
+  .stat-card-bar span { display: block; height: 100%; border-radius: 999px; background: var(--blue); }
+  .stat-card.is-top .stat-card-bar span { background: var(--accent-gold); }
+  .stat-card-desc { margin: 0; font-size: var(--font-sm); color: var(--muted); line-height: 1.4; }
+  .stat-cards-more { margin-top: var(--space-3); }
+  .thing-tile { color: var(--blue); }
+  .thing-tile .mon-tile-art { width: 80%; height: 80%; }
+  .move-cell { display: flex; flex-direction: column; min-width: 0; }
+  .move-desc { font-size: var(--font-xs); font-weight: 400; color: var(--muted); max-width: 46ch; }
+  .team-strip.is-compact { gap: 3px; }
+  .team-strip.is-compact .team-strip-slot { width: 44px; }
+  .data-table .team-strip.is-compact .team-strip-slot { width: 40px; }
+  @media (max-width: 1023px) { .team-strip { grid-template-columns: repeat(var(--strip-n), minmax(0, 76px)); } }
   .strip-pop { position: absolute; z-index: 70; padding: var(--space-3); border-radius: var(--radius-md); border: 2px solid var(--border); background: var(--surface); color: var(--navy); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: var(--font-sm); }
   .strip-pop[hidden] { display: none; }
   .strip-pop-name { margin: 0 0 var(--space-2); font-weight: 800; }
@@ -1762,15 +1800,16 @@
     min-height: 172px;
     border-radius: var(--radius-md);
     background: var(--board-tile);
+    background: color-mix(in srgb, var(--tile-type, #7f2629) 58%, #14090c);
     color: #fff;
     text-decoration: none;
   }
   .board-tile:hover, .board-tile:focus-visible { box-shadow: 0 0 0 3px var(--board-gold); }
   /* Hero art breaks the tile's top edge, as on the official card. */
-  .board-art { width: 112px; height: 112px; margin-top: -34px; object-fit: contain; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35)); }
+  .board-art { width: 128px; height: 128px; margin-top: -40px; object-fit: contain; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35)); }
   .board-art-blank { display: block; width: 112px; height: 78px; }
   .board-rank { position: absolute; top: 6px; left: 8px; font-size: 0.68rem; font-weight: 700; opacity: 0.6; }
-  .board-foot { align-self: stretch; margin-top: auto; padding: 6px 8px 8px; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--board-scrim); text-align: center; }
+  .board-foot { align-self: stretch; margin-top: auto; padding: 6px 8px 8px; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--board-scrim); background: color-mix(in srgb, var(--tile-type, #572931) 28%, #0e0709); text-align: center; }
   .board-value-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
   .board-value { font-family: var(--font-display); font-size: 2.1rem; font-weight: 700; line-height: 1; color: var(--board-gold); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
   .board-types { display: inline-flex; gap: 2px; }
@@ -1930,6 +1969,7 @@
     <button type="button" class="search-btn" data-search-open aria-label="Search Pokémon, players and events" aria-keyshortcuts="/ Control+K Meta+K">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
     </button>
+    <a class="github-btn" href="https://github.com/lancettlim/pokemon-agent" target="_blank" rel="noopener" aria-label="View this project on GitHub" title="View on GitHub"><svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
     <div class="more-menu">
       <button type="button" class="more-menu-btn" id="more-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-panel" aria-label="More options">&#8943;</button>
       <div class="more-menu-panel" id="more-menu-panel" hidden>
@@ -1940,6 +1980,7 @@
         <label class="name-language">Pokémon names
           <select id="name-language"><option value="en">English</option></select>
         </label>
+        <a class="github-link" href="https://github.com/lancettlim/pokemon-agent" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> View on GitHub</a>
         <a href="#/data/how-to-read">How to read this page</a>
         <a href="#/data">Data &amp; sources</a>
       </div>
@@ -1998,7 +2039,7 @@
     {# A one-time note on the change of unit (docs/upgrade-plan-2027q2.md,
        V1 and its risks), until the reader dismisses it. #}
     <p class="notice" id="team-share-notice" role="status" hidden>
-      <span>Usage now counts the <strong>share of teams</strong> that brought a Pokémon, the unit the official usage card and other sites use. Every figure reads about six times the old share of roster slots, which is still in each tooltip.</span>
+      <span>Usage now means the <strong>share of teams</strong> that brought a Pokémon, so every number looks about six times bigger than before.</span>
       <button type="button" class="btn btn-sm" id="team-share-notice-dismiss">Got it</button>
     </p>
     {# The Top 12 board (V2), the Overview's hero; app.js renders it from
@@ -2996,6 +3037,7 @@
   {% if payload.provenance.validation_available %}<span>{% if payload.provenance.release_blocking_findings %}{{ payload.provenance.release_blocking_findings | length }} gate failure(s){% else %}all release gates passing{% endif %}</span>{% endif %}
   <span>built {{ payload.generated_at_utc[:10] }}</span>
   <a href="#/data">Data &amp; sources</a>
+  <a class="github-link" href="https://github.com/lancettlim/pokemon-agent" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> GitHub</a>
   {# The site borrows the official broadcast grammar, never its marks
      (docs/upgrade-plan-2027q2.md): it must never be mistaken for an
      official product. #}

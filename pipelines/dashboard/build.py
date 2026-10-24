@@ -51,7 +51,6 @@ from pipelines.regulations import Regulation
 from pipelines.render import assets as render_assets
 from pipelines.render import bulbagarden_items
 from pipelines.render import template as render_template
-from pipelines.render import type_glyphs
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -103,7 +102,6 @@ _CRITICAL_PAYLOAD_KEYS = (
     "mart_files",
     "share_cards",
     "site",
-    "type_glyphs",
 )
 
 # The marts are split into shards so the page downloads only what the view
@@ -721,9 +719,6 @@ def build(
     )
     payload["type_icons"] = _copy_type_icons(output_dir)
     payload["type_colors"] = _type_colors()
-    # Our own white glyphs for the square type badge (V6), shared with the
-    # share-card templates.
-    payload["type_glyphs"] = type_glyphs.GLYPHS
     payload["item_icons"] = (
         _resolve_item_icons(
             payload["marts"],

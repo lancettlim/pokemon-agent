@@ -801,13 +801,23 @@ def _coerce(
     return coerced
 
 
+# The Limitless online tournaments the marts still carry for the release
+# dataset; the dashboard leaves them out (official events only).
+ONLINE_ONLY_MARTS = frozenset({"online_event_summary", "online_upcoming_events"})
+
+
 def load_mart(marts_dir: Path, mart_name: str, *, sliced: bool = True) -> list[dict[str, Any]]:
     """Returns [] (not an error) if the mart's CSV doesn't exist yet.
     Marts listed in MART_SLICERS are cut down to the dashboard-relevant
     slice after coercion — see that dict's comment for why — unless
     `sliced` is False (the graph builder reads full synergy)."""
     int_fields, float_fields = MART_FIELDS[mart_name]
+    if mart_name in ONLINE_ONLY_MARTS:
+        return []
     rows = _read_csv_rows(marts_dir / f"{mart_name}.csv")
+    # The dashboard shows official events only: a scope with a population
+    # suffix ("m-c:online", "m-c:combined") is Limitless online data.
+    rows = [row for row in rows if ":" not in (row.get("regulation_scope") or "")]
     coerced = [_coerce(row, int_fields=int_fields, float_fields=float_fields) for row in rows]
     slicer = MART_SLICERS.get(mart_name) if sliced else None
     return slicer(coerced) if slicer else coerced
