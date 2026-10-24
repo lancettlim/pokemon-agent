@@ -26,10 +26,6 @@ def test_a_final_with_a_video_links_to_it(site_url, open_page):
     assert not page.errors
 
 
-
-
-
-
 SITE = "https://lancettlim.github.io/pokemon-agent/dashboard/"
 
 
@@ -59,8 +55,6 @@ def test_the_embed_shows_the_regulations_top_12_with_its_citation(site_url, open
     assert first.get_attribute("href").startswith(SITE + "?reg=m-c#/pokemon/")
     assert first.get_attribute("target") == "_blank"
     assert not page.errors
-
-
 
 
 def test_the_embed_fits_a_narrow_column(site_url, open_page):

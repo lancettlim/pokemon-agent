@@ -222,28 +222,13 @@ spreads". Don't reintroduce the retired "MunchStats nature coverage is
 ~17%" claim — that number was the Champions share of a format-mixed corpus,
 not a coverage gap (nature is 100% within Champions).
 
-## Dashboard artifact
+## Dashboard link
 
-The dashboard is mirrored to a private claude.ai artifact,
-https://claude.ai/artifact/Lfb9NxbaAwRkshcGCQ11wR (`docs/dashboard.md`,
-"claude.ai artifact mirror"). Whenever you change anything under
-`pipelines/dashboard/`, republish it once the change is implemented and
-before you push:
-
-1. `python -m pipelines.cli build-artifact-site --output-dir <fresh dir>`
-   (in the scratchpad). It builds from `data/marts/`, so run `make
-   dbt-build` first if they're missing, and writes `<dir>.plan.json`.
-2. Publish with the Artifact tool, `url` set to the artifact: the plan's
-   `page` as `file_path`, its `root`, and `batches[0]` as `files`; then
-   each further batch the same way, one publish at a time.
-3. Files left out of a publish are kept, so list the artifact's files
-   (`scope: "files"`) and remove any the new site no longer has by mapping
-   them to `null`. A version holds at most 511 files.
-
-`.claude/hooks/artifact_republish.py` enforces this: a `git push` that
-carries `pipelines/dashboard/` changes is refused until the current code
-has been published to that artifact (it records each publish in the
-gitignored `.claude/state/`).
+The dashboard is published on GitHub Pages:
+https://lancettlim.github.io/pokemon-agent/dashboard/. There is no claude.ai
+artifact mirror. Whenever you change anything under `pipelines/dashboard/`,
+regenerate `docs/dashboard/` (`make dashboard`) and, when you report back,
+give that link. Don't republish anything to an artifact.
 
 ## Development workflow
 

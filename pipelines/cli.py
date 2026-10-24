@@ -6,7 +6,6 @@ Subcommands:
     release            Publish a versioned release package (gated on validate)
     render-card        Render a team card PNG, from a team_id or an ad-hoc build spec
     build-dashboard    Build the static analytics dashboard site from data/marts/*.csv
-    build-artifact-site  Build the lighter copy of the dashboard for its claude.ai artifact
 
 Staging snapshots (see `_run_extract` below) are written date-partitioned,
 one CSV per source per UTC calendar day, under a per-source subdirectory of
@@ -30,7 +29,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pipelines import versioning
-from pipelines.dashboard import artifact as dashboard_artifact
 from pipelines.dashboard import build as dashboard_build
 from pipelines.extract import (
     bulbagarden,
@@ -628,22 +626,6 @@ def _run_build_dashboard(
     return 0
 
 
-def _run_build_artifact_site(output_dir: Path) -> int:
-    """The dashboard's claude.ai artifact copy and its publish plan
-    (pipelines/dashboard/artifact.py), beside the site as <dir>.plan.json."""
-    if output_dir.exists() and any(output_dir.iterdir()):
-        print(f"{output_dir} is not empty: build into a fresh directory", file=sys.stderr)
-        return 1
-    dashboard_artifact.build_artifact_site(output_dir)
-    plan_path = output_dir.with_name(output_dir.name + ".plan.json")
-    plan = dashboard_artifact.write_plan(output_dir, plan_path)
-    print(
-        f"Artifact site: {plan['file_count']} files in {len(plan['batches'])} batches; "
-        f"plan written to {plan_path}"
-    )
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pokemon-champions-cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -718,13 +700,6 @@ def main(argv: list[str] | None = None) -> int:
         "move-type icons are always local, offline copies)",
     )
 
-    artifact_parser = subparsers.add_parser(
-        "build-artifact-site",
-        help="Build the lighter copy of the dashboard for its claude.ai artifact, and a "
-        "publish plan beside it",
-    )
-    artifact_parser.add_argument("--output-dir", dest="output_dir", type=Path, required=True)
-
     share_parser = subparsers.add_parser(
         "render-share-cards",
         help="Render the dashboard's share images (newest event's top 8, What changed cards, "
@@ -754,8 +729,6 @@ def main(argv: list[str] | None = None) -> int:
         return _run_build_dashboard(
             args.marts_dir, args.normalized_dir, args.output_dir, args.fetch_icons
         )
-    if args.command == "build-artifact-site":
-        return _run_build_artifact_site(args.output_dir)
     if args.command == "render-share-cards":
         return _run_render_share_cards(args.output_dir)
     parser.error(f"Unknown command: {args.command}")
