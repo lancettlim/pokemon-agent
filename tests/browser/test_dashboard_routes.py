@@ -106,6 +106,25 @@ def test_every_route_renders_without_errors(site_url, open_page, width, height):
     assert not failures, "\n".join(failures)
 
 
+# Phone, small and large tablet portrait, tablet landscape. The 2026-10-21
+# review found every route 39px too wide at 768, a range no test covered.
+OVERFLOW_WIDTHS = [360, 390, 744, 768, 1024]
+
+
+@pytest.mark.parametrize("width", OVERFLOW_WIDTHS)
+def test_no_route_scrolls_sideways(site_url, open_page, width):
+    page = open_page(width, 900)
+    failures = []
+    for route in ROUTES:
+        page.goto("about:blank")
+        page.goto(site_url + route)
+        page.wait_for_load_state("networkidle")
+        scroll_width = page.evaluate("document.documentElement.scrollWidth")
+        if scroll_width > width:
+            failures.append(f"{route or '/'}: scrollWidth {scroll_width} > {width}")
+    assert not failures, "\n".join(failures)
+
+
 def test_back_returns_to_the_deep_link_with_the_same_pokemon(site_url, open_page):
     page = open_page()
     page.goto(site_url + "#/pokemon/garchomp")

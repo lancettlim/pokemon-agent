@@ -1,19 +1,56 @@
 # pokemon-agent
 
-This repository contains planning and specification documents for the Pokémon
-Champions competitive data platform and its first dataset artifact.
-
-## Current focus
-
-`dataset_version 0.3.0` is the current published release — the core ingestion
-→ normalization → release pipeline, Phase 4 team-card renderer, and M6
-analytics dashboard are all built. Current development is focused on Team
-Analyst workflows, refresh/history observability, and accumulating enough
-snapshot history to support honest release-to-release comparisons. See
-`docs/roadmap.md` for the active next-development plan and `docs/todo.md` for
-repository status.
+**Pokémon Champions Competitive Data Platform** — a versioned, open dataset
+and a free analytics dashboard for competitive Pokémon Champions play.
 
 **Live dashboard:** https://lancettlim.github.io/pokemon-agent/dashboard/
+
+## What you get
+
+- **A dashboard for prep and following events.** Usage by share of teams,
+  win rates, Top 12 boards, sets, teammates and cores, a damage calculator,
+  speed tiers, a team builder, event and player pages, and a meta graph. It
+  is a static site with no account and no backend, and it works offline.
+- **A dataset.** One CSV per core entity (Pokémon, canonical and Champions
+  stats, legality by regulation, tournament events, teams, rosters, matches,
+  shared team lists, sprite assets), with a manifest and changelog per
+  version. Every row carries its source, source URL, record ID, extraction
+  time and dataset version.
+- **Team-card images.** `python -m pipelines.cli render-card` renders a
+  shareable PNG for any tournament team or custom build.
+
+## What the data does and doesn't say
+
+- Official-event figures are the default. Online tournaments and the
+  Showdown ladder are separate populations, always labelled and never
+  blended into official numbers.
+- Match results are team vs team. No source names which four of six
+  Pokémon were brought to an official game.
+- Official team sheets carry no EVs or Stat Points, so tournament data has
+  none. Ladder spreads appear only where labelled as ladder data.
+
+## Quick start
+
+```bash
+make setup      # uv sync + install Chromium
+make refresh    # extract all sources, build tables, run the release gates
+make dashboard  # build the static site into docs/dashboard/
+make check      # lint, unit tests, dbt build/test, validation report
+```
+
+## Current status
+
+`dataset_version 0.3.0` is the latest published release. From 0.4.0 a
+release is a GitHub Release asset (a zip plus its sha256) rather than files
+in the repo. See `docs/todo.md` for status and `docs/roadmap.md` for what is
+next.
+
+Code is MIT (`LICENSE`); the dataset is CC BY 4.0 except artwork (`DATA_TERMS.md`).
+See `CONTRIBUTING.md` to help.
+
+*Unofficial fan project, not affiliated with or endorsed by Nintendo, Game
+Freak, The Pokémon Company or Play! Pokémon. Pokémon names and artwork
+belong to their owners; sprites are sourced from Bulbagarden Archives.*
 
 ## Repository documents
 
@@ -34,6 +71,8 @@ See `docs/` for the full document set:
   graphics research, candidate data sources and a ranked list of UI
   features, sequenced into sprints (`docs/upgrade-plan-2027q1.md`, the
   previous cycle, has shipped)
+- `docs/launch-plan.md` — the phased plan to public launch: blockers, UI
+  cleanup, tech-debt removal and ops
 - `docs/backlog.md` — post-v1 feature wish list, sized and dependency-tagged
   (not a commitment; items graduate into `docs/todo.md` once accepted)
 
