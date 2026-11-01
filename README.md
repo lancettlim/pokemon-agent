@@ -68,6 +68,8 @@ See `docs/` for the full document set:
   graphics research, candidate data sources and a ranked list of UI
   features, sequenced into sprints (`docs/upgrade-plan-2027q1.md`, the
   previous cycle, has shipped)
+- `docs/launch-plan.md` — the phased plan to public launch: blockers, UI
+  cleanup, tech-debt removal and ops
 - `docs/backlog.md` — post-v1 feature wish list, sized and dependency-tagged
   (not a commitment; items graduate into `docs/todo.md` once accepted)
 
