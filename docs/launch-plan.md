@@ -79,8 +79,9 @@ over about 2,000 lines.
 
 ## Phase 4: Reliability and ops
 
-- [ ] Failure alerts on the scheduled-extraction, refresh-dashboard and
-  event-weekend workflows.
+- [x] Failure alerts on the scheduled-extraction, refresh-dashboard and
+  event-weekend workflows (a `notify-failure` job opens or updates one issue;
+  untested until a scheduled run actually fails).
 - [ ] A visible "last updated" and freshness badge fed by the freshness gate.
 - [ ] A rollback note for a bad Pages deploy.
 

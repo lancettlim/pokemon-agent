@@ -113,3 +113,31 @@ jobs:
       - id: deployment
         if: steps.live.outputs.live == 'true'
         uses: actions/deploy-pages@v4
+
+  # Alert on a failed scheduled run: open one tracking issue, and comment on
+  # it (instead of opening another) while it stays open. Without this a
+  # broken source goes stale silently; the dashboard only shows its age.
+  notify-failure:
+    needs: refresh
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "Scheduled workflow failed: Event weekend refresh"
+        run: |
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --search "$TITLE in:title" --json number,title \
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+          body="The scheduled run failed: $RUN_URL"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" \
+              --body "$body. Fix the cause, then close this issue; later failures are added here as comments while it stays open."
+          fi
