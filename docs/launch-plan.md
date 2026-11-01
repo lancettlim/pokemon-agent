@@ -34,12 +34,13 @@ Defaults below apply until the owner says otherwise.
 
 ## Phase 1: Launch blockers
 
-- [ ] Add `LICENSE` and a data-terms note.
-- [ ] Add the M-D row to `champions_regulations.csv`; rehearse the
-  "Regulation rollover playbook" in `docs/dashboard.md`.
+- [x] Add `LICENSE` (MIT) and `DATA_TERMS.md` (CC BY 4.0 tables, sprites not relicensed).
+- [ ] Add the M-D row to `champions_regulations.csv`. Blocked: the official
+  M-D end date is not announced and must not be guessed (the playbook's
+  2027-03-03 is a fixture). The playbook dry run already passed 2026-10-19.
 - [ ] Cut 0.4.0 via `cut-release.yml`; verify the zip and the manifest's
   sha256.
-- [ ] Add `CONTRIBUTING.md`, issue templates and a data-correction path.
+- [x] Add `CONTRIBUTING.md`, issue templates and a data-correction path.
 - [ ] Merge the README rewrite (PR 72).
 
 Exit: `make check` is green on a clean checkout and the release asset
@@ -47,8 +48,9 @@ downloads and verifies.
 
 ## Phase 2: UI cleanup
 
-- [ ] Add 360, 744, 768 and 1024px to the browser route matrix with a
-  `scrollWidth <= viewport` assertion on every route; fix what it catches.
+- [x] Add 360, 744, 768 and 1024px to the browser route matrix with a
+  `scrollWidth <= viewport` assertion on every route; fix what it catches. (Done: all
+  five widths already passed, so it is a regression guard.)
 - [ ] Finish the per-tier layout checklist (`todo.md`, "Every new component
   built to its M3 per-tier layout") by testing each component.
 - [ ] Accessibility pass: contrast, keyboard paths, touch targets, focus

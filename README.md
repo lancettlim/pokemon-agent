@@ -45,6 +45,9 @@ release is a GitHub Release asset (a zip plus its sha256) rather than files
 in the repo. See `docs/todo.md` for status and `docs/roadmap.md` for what is
 next.
 
+Code is MIT (`LICENSE`); the dataset is CC BY 4.0 except artwork (`DATA_TERMS.md`).
+See `CONTRIBUTING.md` to help.
+
 *Unofficial fan project, not affiliated with or endorsed by Nintendo, Game
 Freak, The Pokémon Company or Play! Pokémon. Pokémon names and artwork
 belong to their owners; sprites are sourced from Bulbagarden Archives.*
